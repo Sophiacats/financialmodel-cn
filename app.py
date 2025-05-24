@@ -157,7 +157,8 @@ if selected_tab == "📈 估值计算":
         st.session_state.target_company['ebit'] = st.number_input(f"EBIT ({unit_text})", value=float(st.session_state.target_company['ebit']), step=1000.0)
         st.session_state.target_company['cash'] = st.number_input(f"现金 ({unit_text})", value=float(st.session_state.target_company['cash']), step=1000.0, min_value=0.0)
         st.session_state.target_company['debt'] = st.number_input(f"有息负债 ({unit_text})", value=float(st.session_state.target_company['debt']), step=1000.0, min_value=0.0)
-        st.session_state.target_company['growth_rate'] = st.number_input("净利润增长率 (%)", value=float(st.session_state.target_company['growth_rate']), step=0.1)
+    
+    st.session_state.target_company['growth_rate'] = st.number_input("净利润增长率 (%)", value=float(st.session_state.target_company['growth_rate']), step=0.1)
 
     # 计算目标公司指标
     target_metrics = calculate_metrics(st.session_state.target_company)
@@ -168,6 +169,298 @@ if selected_tab == "📈 估值计算":
         comparable_metrics.append(calculate_metrics(comp))
     
     # 计算行业平均值
+    if comparable_metrics:
+        valid_pe = [m['pe'] for m in comparable_metrics if m['pe'] > 0]
+        valid_pb = [m['pb'] for m in comparable_metrics if m['pb'] > 0]
+        valid_ev_ebitda = [m['ev_ebitda'] for m in comparable_metrics if m['ev_ebitda'] > 0]
+        valid_ev_ebit = [m['ev_ebit'] for m in comparable_metrics if m['ev_ebit'] > 0]
+        valid_peg = [m['peg'] for m in comparable_metrics if m['peg'] > 0]
+        
+        industry_avg = {
+            'pe': round(np.mean(valid_pe), 2) if valid_pe else 0,
+            'pb': round(np.mean(valid_pb), 2) if valid_pb else 0,
+            'ev_ebitda': round(np.mean(valid_ev_ebitda), 2) if valid_ev_ebitda else 0,
+            'ev_ebit': round(np.mean(valid_ev_ebit), 2) if valid_ev_ebit else 0,
+            'peg': round(np.mean(valid_peg), 2) if valid_peg else 0
+        }
+    else:
+        industry_avg = {'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
+
+    # 显示核心估值指标
+    st.header("🧮 核心估值指标")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #3b82f6; font-size: 2rem; margin: 0;">{target_metrics['pe']}</h3>
+            <p style="margin: 0; color: #6b7280;">PE 市盈率</p>
+            <small style="color: #9ca3af;">市值 ÷ 净利润</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #10b981; font-size: 2rem; margin: 0;">{target_metrics['pb']}</h3>
+            <p style="margin: 0; color: #6b7280;">PB 市净率</p>
+            <small style="color: #9ca3af;">市值 ÷ 净资产</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #8b5cf6; font-size: 2rem; margin: 0;">{target_metrics['ev_ebitda']}</h3>
+            <p style="margin: 0; color: #6b7280;">EV/EBITDA</p>
+            <small style="color: #9ca3af;">企业价值 ÷ EBITDA</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #f59e0b; font-size: 2rem; margin: 0;">{target_metrics['ev_ebit']}</h3>
+            <p style="margin: 0; color: #6b7280;">EV/EBIT</p>
+            <small style="color: #9ca3af;">企业价值 ÷ EBIT</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col5:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #ef4444; font-size: 2rem; margin: 0;">{target_metrics['peg']}</h3>
+            <p style="margin: 0; color: #6b7280;">PEG</p>
+            <small style="color: #9ca3af;">PE ÷ 增长率</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # 基础财务数据
+    st.header("📊 基础财务数据")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("市值", f"{currency_symbol}{target_metrics['market_cap']} 亿")
+        st.metric("企业价值", f"{currency_symbol}{target_metrics['enterprise_value']} 亿")
+        
+    with col2:
+        if st.session_state.target_company['net_assets'] > 0:
+            roe = (st.session_state.target_company['net_profit'] / st.session_state.target_company['net_assets']) * 100
+            st.metric("净资产收益率", f"{roe:.2f}%")
+        
+        total_assets = st.session_state.target_company['net_assets'] + st.session_state.target_company['debt']
+        if total_assets > 0:
+            roa = (st.session_state.target_company['net_profit'] / total_assets) * 100
+            st.metric("总资产收益率", f"{roa:.2f}%")
+
+elif selected_tab == "📊 对比分析":
+    
+    st.header("🔍 同行业对比分析")
+    
+    # 计算所有公司的指标
+    target_metrics = calculate_metrics(st.session_state.target_company)
+    comparable_metrics = [calculate_metrics(comp) for comp in st.session_state.comparable_companies]
+    
+    # 对比表格
+    comparison_data = []
+    
+    # 添加目标公司数据
+    comparison_data.append({
+        '公司': f"🎯 {st.session_state.target_company['name']}",
+        'PE': f"{target_metrics['pe']:.2f}",
+        'PB': f"{target_metrics['pb']:.2f}",
+        'EV/EBITDA': f"{target_metrics['ev_ebitda']:.2f}",
+        'EV/EBIT': f"{target_metrics['ev_ebit']:.2f}",
+        'PEG': f"{target_metrics['peg']:.2f}",
+        f'市值({currency_symbol}亿)': f"{target_metrics['market_cap']:.2f}"
+    })
+    
+    # 添加可比公司数据
+    for i, comp in enumerate(st.session_state.comparable_companies):
+        metrics = comparable_metrics[i]
+        comparison_data.append({
+            '公司': comp['name'],
+            'PE': f"{metrics['pe']:.2f}",
+            'PB': f"{metrics['pb']:.2f}",
+            'EV/EBITDA': f"{metrics['ev_ebitda']:.2f}",
+            'EV/EBIT': f"{metrics['ev_ebit']:.2f}",
+            'PEG': f"{metrics['peg']:.2f}",
+            f'市值({currency_symbol}亿)': f"{metrics['market_cap']:.2f}"
+        })
+    
+    # 计算并添加行业平均值
+    if comparable_metrics:
+        valid_pe = [m['pe'] for m in comparable_metrics if m['pe'] > 0]
+        valid_pb = [m['pb'] for m in comparable_metrics if m['pb'] > 0]
+        valid_ev_ebitda = [m['ev_ebitda'] for m in comparable_metrics if m['ev_ebitda'] > 0]
+        valid_ev_ebit = [m['ev_ebit'] for m in comparable_metrics if m['ev_ebit'] > 0]
+        valid_peg = [m['peg'] for m in comparable_metrics if m['peg'] > 0]
+        valid_market_cap = [m['market_cap'] for m in comparable_metrics if m['market_cap'] > 0]
+        
+        industry_avg = {
+            'pe': np.mean(valid_pe) if valid_pe else 0,
+            'pb': np.mean(valid_pb) if valid_pb else 0,
+            'ev_ebitda': np.mean(valid_ev_ebitda) if valid_ev_ebitda else 0,
+            'ev_ebit': np.mean(valid_ev_ebit) if valid_ev_ebit else 0,
+            'peg': np.mean(valid_peg) if valid_peg else 0,
+            'market_cap': np.mean(valid_market_cap) if valid_market_cap else 0
+        }
+        
+        comparison_data.append({
+            '公司': '🏭 行业均值',
+            'PE': f"{industry_avg['pe']:.2f}",
+            'PB': f"{industry_avg['pb']:.2f}",
+            'EV/EBITDA': f"{industry_avg['ev_ebitda']:.2f}",
+            'EV/EBIT': f"{industry_avg['ev_ebit']:.2f}",
+            'PEG': f"{industry_avg['peg']:.2f}",
+            f'市值({currency_symbol}亿)': f"{industry_avg['market_cap']:.2f}"
+        })
+    
+    # 显示对比表格
+    comparison_df = pd.DataFrame(comparison_data)
+    st.dataframe(comparison_df, use_container_width=True)
+    
+    # 估值对比图表
+    st.header("📈 估值对比图表")
+    
+    if comparable_metrics:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 雷达图
+            categories = ['PE', 'PB', 'EV/EBITDA', 'EV/EBIT', 'PEG']
+            target_values = [target_metrics['pe'], target_metrics['pb'], target_metrics['ev_ebitda'], target_metrics['ev_ebit'], target_metrics['peg']]
+            industry_values = [industry_avg['pe'], industry_avg['pb'], industry_avg['ev_ebitda'], industry_avg['ev_ebit'], industry_avg['peg']]
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatterpolar(
+                r=target_values,
+                theta=categories,
+                fill='toself',
+                name='目标公司',
+                line_color='#3b82f6'
+            ))
+            
+            fig.add_trace(go.Scatterpolar(
+                r=industry_values,
+                theta=categories,
+                fill='toself',
+                name='行业均值',
+                line_color='#10b981'
+            ))
+            
+            max_value = max(max([v for v in target_values if v > 0], default=1), 
+                           max([v for v in industry_values if v > 0], default=1))
+            
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, max_value * 1.2]
+                    )),
+                showlegend=True,
+                title="估值雷达图"
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # 柱状图
+            metrics_data = pd.DataFrame({
+                '指标': ['PE', 'PB', 'EV/EBITDA', 'EV/EBIT', 'PEG'],
+                '目标公司': target_values,
+                '行业均值': industry_values
+            })
+            
+            fig = px.bar(metrics_data, x='指标', y=['目标公司', '行业均值'], 
+                         title="估值指标对比", barmode='group',
+                         color_discrete_map={'目标公司': '#3b82f6', '行业均值': '#10b981'})
+            
+            st.plotly_chart(fig, use_container_width=True)
+
+elif selected_tab == "📋 数据管理":
+    
+    st.header("📝 可比公司数据管理")
+    
+    # 添加新公司
+    with st.expander("➕ 添加新的可比公司"):
+        with st.form("add_company"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                new_name = st.text_input("公司名称", value=f"同行{chr(65 + len(st.session_state.comparable_companies))}")
+                new_price = st.number_input("股价", value=40.0, step=0.01, min_value=0.0)
+                new_shares = st.number_input("总股本(亿股)", value=10.0, step=0.1, min_value=0.0)
+                
+            with col2:
+                new_profit = st.number_input("净利润(万元)", value=30000.0, step=1000.0)
+                new_assets = st.number_input("净资产(万元)", value=150000.0, step=1000.0, min_value=0.0)
+                new_ebitda = st.number_input("EBITDA(万元)", value=50000.0, step=1000.0)
+                
+            with col3:
+                new_ebit = st.number_input("EBIT(万元)", value=40000.0, step=1000.0)
+                new_cash = st.number_input("现金(万元)", value=20000.0, step=1000.0, min_value=0.0)
+                new_debt = st.number_input("有息负债(万元)", value=70000.0, step=1000.0, min_value=0.0)
+            
+            new_growth = st.number_input("增长率(%)", value=10.0, step=0.1)
+            
+            if st.form_submit_button("添加公司"):
+                new_company = {
+                    'name': new_name,
+                    'stock_price': new_price,
+                    'total_shares': new_shares,
+                    'net_profit': new_profit,
+                    'net_assets': new_assets,
+                    'ebitda': new_ebitda,
+                    'ebit': new_ebit,
+                    'cash': new_cash,
+                    'debt': new_debt,
+                    'growth_rate': new_growth
+                }
+                st.session_state.comparable_companies.append(new_company)
+                st.success(f"已添加 {new_name}！")
+                st.rerun()
+    
+    # 编辑现有公司
+    st.subheader("📊 当前可比公司列表")
+    
+    for i, comp in enumerate(st.session_state.comparable_companies):
+        with st.expander(f"编辑 {comp['name']}"):
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                comp['name'] = st.text_input(f"公司名称_{i}", value=comp['name'], key=f"name_{i}")
+                comp['stock_price'] = st.number_input(f"股价_{i}", value=float(comp['stock_price']), step=0.01, min_value=0.0, key=f"price_{i}")
+                comp['total_shares'] = st.number_input(f"总股本_{i}", value=float(comp['total_shares']), step=0.1, min_value=0.0, key=f"shares_{i}")
+                
+            with col2:
+                comp['net_profit'] = st.number_input(f"净利润_{i}", value=float(comp['net_profit']), step=1000.0, key=f"profit_{i}")
+                comp['net_assets'] = st.number_input(f"净资产_{i}", value=float(comp['net_assets']), step=1000.0, min_value=0.0, key=f"assets_{i}")
+                comp['ebitda'] = st.number_input(f"EBITDA_{i}", value=float(comp['ebitda']), step=1000.0, key=f"ebitda_{i}")
+                
+            with col3:
+                comp['ebit'] = st.number_input(f"EBIT_{i}", value=float(comp['ebit']), step=1000.0, key=f"ebit_{i}")
+                comp['cash'] = st.number_input(f"现金_{i}", value=float(comp['cash']), step=1000.0, min_value=0.0, key=f"cash_{i}")
+                comp['debt'] = st.number_input(f"有息负债_{i}", value=float(comp['debt']), step=1000.0, min_value=0.0, key=f"debt_{i}")
+                
+            with col4:
+                comp['growth_rate'] = st.number_input(f"增长率_{i}", value=float(comp['growth_rate']), step=0.1, key=f"growth_{i}")
+                
+                if st.button(f"🗑️ 删除 {comp['name']}", key=f"delete_{i}"):
+                    st.session_state.comparable_companies.pop(i)
+                    st.success(f"已删除 {comp['name']}！")
+                    st.rerun()
+
+elif selected_tab == "💡 投资建议":
+    
+    st.header("🧠 智能投资建议")
+    
+    # 计算指标
+    target_metrics = calculate_metrics(st.session_state.target_company)
+    comparable_metrics = [calculate_metrics(comp) for comp in st.session_state.comparable_companies]
+    
     if comparable_metrics:
         valid_pe = [m['pe'] for m in comparable_metrics if m['pe'] > 0]
         valid_pb = [m['pb'] for m in comparable_metrics if m['pb'] > 0]
@@ -416,295 +709,4 @@ st.markdown("""
     <p>© 2024 <strong>FinancialModel.cn</strong> | 专业金融估值工具平台</p>
     <p>🚀 让复杂的金融模型变得简单易用 | 💡 为投资决策提供专业支持</p>
 </div>
-""", unsafe_allow_html=True) > 0]
-        valid_ev_ebit = [m['ev_ebit'] for m in comparable_metrics if m['ev_ebit'] > 0]
-        valid_peg = [m['peg'] for m in comparable_metrics if m['peg'] > 0]
-        
-        industry_avg = {
-            'pe': round(np.mean(valid_pe), 2) if valid_pe else 0,
-            'pb': round(np.mean(valid_pb), 2) if valid_pb else 0,
-            'ev_ebitda': round(np.mean(valid_ev_ebitda), 2) if valid_ev_ebitda else 0,
-            'ev_ebit': round(np.mean(valid_ev_ebit), 2) if valid_ev_ebit else 0,
-            'peg': round(np.mean(valid_peg), 2) if valid_peg else 0
-        }
-    else:
-        industry_avg = {'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
-
-    # 显示核心估值指标
-    st.header("🧮 核心估值指标")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3 style="color: #3b82f6; font-size: 2rem; margin: 0;">{target_metrics['pe']}</h3>
-            <p style="margin: 0; color: #6b7280;">PE 市盈率</p>
-            <small style="color: #9ca3af;">市值 ÷ 净利润</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3 style="color: #10b981; font-size: 2rem; margin: 0;">{target_metrics['pb']}</h3>
-            <p style="margin: 0; color: #6b7280;">PB 市净率</p>
-            <small style="color: #9ca3af;">市值 ÷ 净资产</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3 style="color: #8b5cf6; font-size: 2rem; margin: 0;">{target_metrics['ev_ebitda']}</h3>
-            <p style="margin: 0; color: #6b7280;">EV/EBITDA</p>
-            <small style="color: #9ca3af;">企业价值 ÷ EBITDA</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3 style="color: #f59e0b; font-size: 2rem; margin: 0;">{target_metrics['ev_ebit']}</h3>
-            <p style="margin: 0; color: #6b7280;">EV/EBIT</p>
-            <small style="color: #9ca3af;">企业价值 ÷ EBIT</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col5:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3 style="color: #ef4444; font-size: 2rem; margin: 0;">{target_metrics['peg']}</h3>
-            <p style="margin: 0; color: #6b7280;">PEG</p>
-            <small style="color: #9ca3af;">PE ÷ 增长率</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # 基础财务数据
-    st.header("📊 基础财务数据")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("市值", f"{currency_symbol}{target_metrics['market_cap']} 亿")
-        st.metric("企业价值", f"{currency_symbol}{target_metrics['enterprise_value']} 亿")
-        
-    with col2:
-        if st.session_state.target_company['net_assets'] > 0:
-            roe = (st.session_state.target_company['net_profit'] / st.session_state.target_company['net_assets']) * 100
-            st.metric("净资产收益率", f"{roe:.2f}%")
-        
-        total_assets = st.session_state.target_company['net_assets'] + st.session_state.target_company['debt']
-        if total_assets > 0:
-            roa = (st.session_state.target_company['net_profit'] / total_assets) * 100
-            st.metric("总资产收益率", f"{roa:.2f}%")
-
-elif selected_tab == "📊 对比分析":
-    
-    st.header("🔍 同行业对比分析")
-    
-    # 计算所有公司的指标
-    target_metrics = calculate_metrics(st.session_state.target_company)
-    comparable_metrics = [calculate_metrics(comp) for comp in st.session_state.comparable_companies]
-    
-    # 对比表格
-    comparison_data = []
-    
-    # 添加目标公司数据
-    comparison_data.append({
-        '公司': f"🎯 {st.session_state.target_company['name']}",
-        'PE': f"{target_metrics['pe']:.2f}",
-        'PB': f"{target_metrics['pb']:.2f}",
-        'EV/EBITDA': f"{target_metrics['ev_ebitda']:.2f}",
-        'EV/EBIT': f"{target_metrics['ev_ebit']:.2f}",
-        'PEG': f"{target_metrics['peg']:.2f}",
-        f'市值({currency_symbol}亿)': f"{target_metrics['market_cap']:.2f}"
-    })
-    
-    # 添加可比公司数据
-    for i, comp in enumerate(st.session_state.comparable_companies):
-        metrics = comparable_metrics[i]
-        comparison_data.append({
-            '公司': comp['name'],
-            'PE': f"{metrics['pe']:.2f}",
-            'PB': f"{metrics['pb']:.2f}",
-            'EV/EBITDA': f"{metrics['ev_ebitda']:.2f}",
-            'EV/EBIT': f"{metrics['ev_ebit']:.2f}",
-            'PEG': f"{metrics['peg']:.2f}",
-            f'市值({currency_symbol}亿)': f"{metrics['market_cap']:.2f}"
-        })
-    
-    # 计算并添加行业平均值
-    if comparable_metrics:
-        valid_pe = [m['pe'] for m in comparable_metrics if m['pe'] > 0]
-        valid_pb = [m['pb'] for m in comparable_metrics if m['pb'] > 0]
-        valid_ev_ebitda = [m['ev_ebitda'] for m in comparable_metrics if m['ev_ebitda'] > 0]
-        valid_ev_ebit = [m['ev_ebit'] for m in comparable_metrics if m['ev_ebit'] > 0]
-        valid_peg = [m['peg'] for m in comparable_metrics if m['peg'] > 0]
-        valid_market_cap = [m['market_cap'] for m in comparable_metrics if m['market_cap'] > 0]
-        
-        industry_avg = {
-            'pe': np.mean(valid_pe) if valid_pe else 0,
-            'pb': np.mean(valid_pb) if valid_pb else 0,
-            'ev_ebitda': np.mean(valid_ev_ebitda) if valid_ev_ebitda else 0,
-            'ev_ebit': np.mean(valid_ev_ebit) if valid_ev_ebit else 0,
-            'peg': np.mean(valid_peg) if valid_peg else 0,
-            'market_cap': np.mean(valid_market_cap) if valid_market_cap else 0
-        }
-        
-        comparison_data.append({
-            '公司': '🏭 行业均值',
-            'PE': f"{industry_avg['pe']:.2f}",
-            'PB': f"{industry_avg['pb']:.2f}",
-            'EV/EBITDA': f"{industry_avg['ev_ebitda']:.2f}",
-            'EV/EBIT': f"{industry_avg['ev_ebit']:.2f}",
-            'PEG': f"{industry_avg['peg']:.2f}",
-            f'市值({currency_symbol}亿)': f"{industry_avg['market_cap']:.2f}"
-        })
-    
-    # 显示对比表格
-    comparison_df = pd.DataFrame(comparison_data)
-    st.dataframe(comparison_df, use_container_width=True)
-    
-    # 估值对比图表
-    st.header("📈 估值对比图表")
-    
-    if comparable_metrics:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # 雷达图
-            categories = ['PE', 'PB', 'EV/EBITDA', 'EV/EBIT', 'PEG']
-            target_values = [target_metrics['pe'], target_metrics['pb'], target_metrics['ev_ebitda'], target_metrics['ev_ebit'], target_metrics['peg']]
-            industry_values = [industry_avg['pe'], industry_avg['pb'], industry_avg['ev_ebitda'], industry_avg['ev_ebit'], industry_avg['peg']]
-            
-            fig = go.Figure()
-            
-            fig.add_trace(go.Scatterpolar(
-                r=target_values,
-                theta=categories,
-                fill='toself',
-                name='目标公司',
-                line_color='#3b82f6'
-            ))
-            
-            fig.add_trace(go.Scatterpolar(
-                r=industry_values,
-                theta=categories,
-                fill='toself',
-                name='行业均值',
-                line_color='#10b981'
-            ))
-            
-            max_value = max(max([v for v in target_values if v > 0], default=1), 
-                           max([v for v in industry_values if v > 0], default=1))
-            
-            fig.update_layout(
-                polar=dict(
-                    radialaxis=dict(
-                        visible=True,
-                        range=[0, max_value * 1.2]
-                    )),
-                showlegend=True,
-                title="估值雷达图"
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            # 柱状图
-            metrics_data = pd.DataFrame({
-                '指标': ['PE', 'PB', 'EV/EBITDA', 'EV/EBIT', 'PEG'],
-                '目标公司': target_values,
-                '行业均值': industry_values
-            })
-            
-            fig = px.bar(metrics_data, x='指标', y=['目标公司', '行业均值'], 
-                         title="估值指标对比", barmode='group',
-                         color_discrete_map={'目标公司': '#3b82f6', '行业均值': '#10b981'})
-            
-            st.plotly_chart(fig, use_container_width=True)
-
-elif selected_tab == "📋 数据管理":
-    
-    st.header("📝 可比公司数据管理")
-    
-    # 添加新公司
-    with st.expander("➕ 添加新的可比公司"):
-        with st.form("add_company"):
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                new_name = st.text_input("公司名称", value=f"同行{chr(65 + len(st.session_state.comparable_companies))}")
-                new_price = st.number_input("股价", value=40.0, step=0.01, min_value=0.0)
-                new_shares = st.number_input("总股本(亿股)", value=10.0, step=0.1, min_value=0.0)
-                
-            with col2:
-                new_profit = st.number_input("净利润(万元)", value=30000.0, step=1000.0)
-                new_assets = st.number_input("净资产(万元)", value=150000.0, step=1000.0, min_value=0.0)
-                new_ebitda = st.number_input("EBITDA(万元)", value=50000.0, step=1000.0)
-                
-            with col3:
-                new_ebit = st.number_input("EBIT(万元)", value=40000.0, step=1000.0)
-                new_cash = st.number_input("现金(万元)", value=20000.0, step=1000.0, min_value=0.0)
-                new_debt = st.number_input("有息负债(万元)", value=70000.0, step=1000.0, min_value=0.0)
-                new_growth = st.number_input("增长率(%)", value=10.0, step=0.1)
-            
-            if st.form_submit_button("添加公司"):
-                new_company = {
-                    'name': new_name,
-                    'stock_price': new_price,
-                    'total_shares': new_shares,
-                    'net_profit': new_profit,
-                    'net_assets': new_assets,
-                    'ebitda': new_ebitda,
-                    'ebit': new_ebit,
-                    'cash': new_cash,
-                    'debt': new_debt,
-                    'growth_rate': new_growth
-                }
-                st.session_state.comparable_companies.append(new_company)
-                st.success(f"已添加 {new_name}！")
-                st.rerun()
-    
-    # 编辑现有公司
-    st.subheader("📊 当前可比公司列表")
-    
-    for i, comp in enumerate(st.session_state.comparable_companies):
-        with st.expander(f"编辑 {comp['name']}"):
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                comp['name'] = st.text_input(f"公司名称_{i}", value=comp['name'], key=f"name_{i}")
-                comp['stock_price'] = st.number_input(f"股价_{i}", value=float(comp['stock_price']), step=0.01, min_value=0.0, key=f"price_{i}")
-                comp['total_shares'] = st.number_input(f"总股本_{i}", value=float(comp['total_shares']), step=0.1, min_value=0.0, key=f"shares_{i}")
-                
-            with col2:
-                comp['net_profit'] = st.number_input(f"净利润_{i}", value=float(comp['net_profit']), step=1000.0, key=f"profit_{i}")
-                comp['net_assets'] = st.number_input(f"净资产_{i}", value=float(comp['net_assets']), step=1000.0, min_value=0.0, key=f"assets_{i}")
-                comp['ebitda'] = st.number_input(f"EBITDA_{i}", value=float(comp['ebitda']), step=1000.0, key=f"ebitda_{i}")
-                
-            with col3:
-                comp['ebit'] = st.number_input(f"EBIT_{i}", value=float(comp['ebit']), step=1000.0, key=f"ebit_{i}")
-                comp['cash'] = st.number_input(f"现金_{i}", value=float(comp['cash']), step=1000.0, min_value=0.0, key=f"cash_{i}")
-                comp['debt'] = st.number_input(f"有息负债_{i}", value=float(comp['debt']), step=1000.0, min_value=0.0, key=f"debt_{i}")
-                
-            with col4:
-                comp['growth_rate'] = st.number_input(f"增长率_{i}", value=float(comp['growth_rate']), step=0.1, key=f"growth_{i}")
-                
-                if st.button(f"🗑️ 删除 {comp['name']}", key=f"delete_{i}"):
-                    st.session_state.comparable_companies.pop(i)
-                    st.success(f"已删除 {comp['name']}！")
-                    st.rerun()
-
-elif selected_tab == "💡 投资建议":
-    
-    st.header("🧠 智能投资建议")
-    
-    # 计算指标
-    target_metrics = calculate_metrics(st.session_state.target_company)
-    comparable_metrics = [calculate_metrics(comp) for comp in st.session_state.comparable_companies]
-    
-    if comparable_metrics:
-        valid_pe = [m['pe'] for m in comparable_metrics if m['pe'] > 0]
-        valid_pb = [m['pb'] for m in comparable_metrics if m['pb'] > 0]
-        valid_ev_ebitda = [m['ev_ebitda'] for m in comparable_metrics if m['ev_ebitda']
+""", unsafe_allow_html=True)
