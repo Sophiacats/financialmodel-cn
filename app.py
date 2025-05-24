@@ -149,8 +149,6 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
         from reportlab.lib.pagesizes import letter, A4
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
         from reportlab.lib.units import inch
         
         # 创建PDF缓冲区
@@ -162,7 +160,7 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
         # 获取样式
         styles = getSampleStyleSheet()
         
-        # 自定义样式
+        # 自定义样式 - 使用英文内容避免字体问题
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
@@ -180,32 +178,33 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
         
         story = []
         
-        # 标题
-        current_time = datetime.now().strftime('%Y年%m月%d日')
-        title = Paragraph(f"{target_company['name']} 专业估值分析报告", title_style)
-        subtitle = Paragraph(f"报告日期：{current_time} | FinancialModel.cn", styles['Normal'])
+        # 标题 - 使用英文避免字体问题
+        current_time = datetime.now().strftime('%Y-%m-%d')
+        company_name_en = target_company['name'] if target_company['name'].isascii() else "Target Company"
+        title = Paragraph(f"{company_name_en} Valuation Analysis Report", title_style)
+        subtitle = Paragraph(f"Report Date: {current_time} | FinancialModel.cn", styles['Normal'])
         
         story.append(title)
         story.append(subtitle)
         story.append(Spacer(1, 20))
         
         # 执行摘要
-        story.append(Paragraph("执行摘要", heading_style))
-        summary_text = f"本报告基于相对估值法，对{target_company['name']}进行全面的估值分析。通过与{len(comparable_companies)}家同行业公司的对比，评估目标公司的投资价值。"
+        story.append(Paragraph("Executive Summary", heading_style))
+        summary_text = f"This report provides a comprehensive valuation analysis of {company_name_en} using relative valuation methods, comparing with {len(comparable_companies)} peer companies."
         story.append(Paragraph(summary_text, styles['Normal']))
         story.append(Spacer(1, 12))
         
         # 核心估值指标
-        story.append(Paragraph("一、核心估值指标", heading_style))
+        story.append(Paragraph("1. Core Valuation Metrics", heading_style))
         
         # 创建估值指标表格
         data = [
-            ['指标', '数值', '含义'],
-            ['PE (市盈率)', f'{target_metrics["pe"]:.2f}', f'投资回收期为{target_metrics["pe"]:.1f}年'],
-            ['PB (市净率)', f'{target_metrics["pb"]:.2f}', f'市价为净资产的{target_metrics["pb"]:.1f}倍'],
-            ['EV/EBITDA', f'{target_metrics["ev_ebitda"]:.2f}', f'企业价值为EBITDA的{target_metrics["ev_ebitda"]:.1f}倍'],
-            ['EV/EBIT', f'{target_metrics["ev_ebit"]:.2f}', f'企业价值为EBIT的{target_metrics["ev_ebit"]:.1f}倍'],
-            ['PEG', f'{target_metrics["peg"]:.2f}', '成长性调整后的估值倍数']
+            ['Metric', 'Value', 'Description'],
+            ['PE Ratio', f'{target_metrics["pe"]:.2f}', f'Payback period: {target_metrics["pe"]:.1f} years'],
+            ['PB Ratio', f'{target_metrics["pb"]:.2f}', f'Market-to-book ratio: {target_metrics["pb"]:.1f}x'],
+            ['EV/EBITDA', f'{target_metrics["ev_ebitda"]:.2f}', f'Enterprise multiple: {target_metrics["ev_ebitda"]:.1f}x'],
+            ['EV/EBIT', f'{target_metrics["ev_ebit"]:.2f}', f'EBIT multiple: {target_metrics["ev_ebit"]:.1f}x'],
+            ['PEG Ratio', f'{target_metrics["peg"]:.2f}', 'Growth-adjusted PE ratio']
         ]
         
         table = Table(data)
@@ -214,9 +213,11 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
         
@@ -224,15 +225,15 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
         story.append(Spacer(1, 12))
         
         # 基础财务数据
-        story.append(Paragraph("二、基础财务数据", heading_style))
+        story.append(Paragraph("2. Financial Overview", heading_style))
         
         financial_data = [
-            ['项目', '金额'],
-            ['市值', f'{currency_symbol}{target_metrics["market_cap"]:.2f} 亿元'],
-            ['企业价值', f'{currency_symbol}{target_metrics["enterprise_value"]:.2f} 亿元'],
-            ['净利润', f'{currency_symbol}{target_company["net_profit"]/10000:.2f} 亿元'],
-            ['净资产', f'{currency_symbol}{target_company["net_assets"]/10000:.2f} 亿元'],
-            ['净利润增长率', f'{target_company["growth_rate"]:.1f}%']
+            ['Item', 'Amount'],
+            ['Market Cap', f'{currency_symbol}{target_metrics["market_cap"]:.2f}B'],
+            ['Enterprise Value', f'{currency_symbol}{target_metrics["enterprise_value"]:.2f}B'],
+            ['Net Income', f'{currency_symbol}{target_company["net_profit"]/10000:.2f}B'],
+            ['Net Assets', f'{currency_symbol}{target_company["net_assets"]/10000:.2f}B'],
+            ['Growth Rate', f'{target_company["growth_rate"]:.1f}%']
         ]
         
         financial_table = Table(financial_data)
@@ -241,7 +242,9 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.white),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
@@ -252,14 +255,14 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
         
         # 同行业对比
         if comparable_metrics:
-            story.append(Paragraph("三、同行业对比分析", heading_style))
+            story.append(Paragraph("3. Peer Comparison Analysis", heading_style))
             
             # 创建对比表格
-            comparison_data = [['公司名称', 'PE', 'PB', 'EV/EBITDA', 'PEG', f'市值({currency_symbol}亿)']]
+            comparison_data = [['Company', 'PE', 'PB', 'EV/EBITDA', 'PEG', f'Market Cap({currency_symbol}B)']]
             
             # 添加目标公司
             comparison_data.append([
-                f"{target_company['name']} (目标)",
+                f"{company_name_en} (Target)",
                 f"{target_metrics['pe']:.2f}",
                 f"{target_metrics['pb']:.2f}",
                 f"{target_metrics['ev_ebitda']:.2f}",
@@ -270,8 +273,9 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
             # 添加可比公司
             for i, comp in enumerate(comparable_companies):
                 metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
+                comp_name = comp['name'] if comp['name'].isascii() else f"Peer {i+1}"
                 comparison_data.append([
-                    comp['name'],
+                    comp_name,
                     f"{metrics['pe']:.2f}",
                     f"{metrics['pb']:.2f}",
                     f"{metrics['ev_ebitda']:.2f}",
@@ -283,10 +287,11 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
             comparison_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('BACKGROUND', (0, 1), (5, 1), colors.lightgreen),  # 目标公司行
+                ('BACKGROUND', (0, 1), (-1, 1), colors.lightgreen),  # 目标公司行
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                 ('BACKGROUND', (0, 2), (-1, -1), colors.white),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black)
@@ -296,22 +301,23 @@ def generate_pdf_report(target_metrics, target_company, comparable_metrics, comp
             story.append(Spacer(1, 12))
         
         # 投资建议
-        story.append(Paragraph("四、投资建议", heading_style))
+        story.append(Paragraph("4. Investment Recommendation", heading_style))
         investment_advice = """
-基于本次估值分析，建议投资者综合考虑以下因素：
+Based on this valuation analysis, investors should consider the following factors:
 
-1. 估值水平：对比同行业公司进行相对估值判断
-2. 成长性：关注公司的盈利增长可持续性  
-3. 财务质量：分析公司的资产负债结构
-4. 行业趋势：考虑所处行业的发展前景
+1. Valuation Level: Compare with industry peers for relative valuation assessment
+2. Growth Potential: Focus on sustainable earnings growth capability
+3. Financial Quality: Analyze balance sheet structure and asset quality
+4. Industry Trends: Consider sector development prospects and cycles
 
-风险提示：本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。
+Risk Disclaimer: This report is for reference only and does not constitute investment advice. 
+Investment involves risks and decisions should be made prudently.
         """
         story.append(Paragraph(investment_advice, styles['Normal']))
         story.append(Spacer(1, 20))
         
         # 页脚
-        footer_text = f"报告生成：FinancialModel.cn 专业估值分析系统 | © 2024 FinancialModel.cn"
+        footer_text = "Generated by FinancialModel.cn Professional Valuation System | © 2024 FinancialModel.cn"
         story.append(Paragraph(footer_text, styles['Normal']))
         
         # 构建PDF
