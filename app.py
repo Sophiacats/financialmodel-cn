@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -81,10 +82,10 @@ if template_level == "入门版":
     available_tabs = ["📈 估值计算", "📊 对比分析"]
     template_info = "🟡 入门版：基础PE/PB估值功能"
 elif template_level == "进阶版":
-    available_tabs = ["📈 估值计算", "📊 对比分析", "📋 数据管理", "💡 投资建议"]
+    available_tabs = ["📈 估值计算", "📋 数据管理", "📊 对比分析", "💡 投资建议"]
     template_info = "🔵 进阶版：完整估值分析 + 投资建议"
 else:  # 专业版
-    available_tabs = ["📈 估值计算", "📊 对比分析", "📋 数据管理", "💡 投资建议", "📄 报告导出"]
+    available_tabs = ["📈 估值计算", "📋 数据管理", "📊 对比分析", "💡 投资建议", "📄 报告导出"]
     template_info = "🟢 专业版：全功能 + 报告导出"
 
 # 显示模板信息
@@ -785,19 +786,61 @@ elif selected_tab == "📄 报告导出":
         st.info(f"📈 报告包含 {len(report_content.split())} 字")
         
         current_time_file = datetime.now().strftime('%Y%m%d_%H%M%S')
-        report_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.md"
+        
+        # Word文档格式报告（.docx）
+        word_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.docx"
+        
+        # 创建HTML格式的报告内容
+        html_report = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{st.session_state.target_company['name']} 专业估值分析报告</title>
+    <style>
+        body {{ font-family: "Microsoft YaHei", Arial, sans-serif; margin: 40px; line-height: 1.6; }}
+        h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
+        h2 {{ color: #34495e; margin-top: 30px; }}
+        h3 {{ color: #2c3e50; }}
+        table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+        th {{ background-color: #f2f2f2; font-weight: bold; }}
+        .summary {{ background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }}
+        .highlight {{ background-color: #f39c12; color: white; padding: 2px 8px; border-radius: 3px; }}
+        .footer {{ margin-top: 50px; padding-top: 20px; border-top: 1px solid #bdc3c7; color: #7f8c8d; text-align: center; }}
+    </style>
+</head>
+<body>
+    {report_content.replace('#', '<h1>').replace('##', '</h1><h2>').replace('###', '</h2><h3>').replace('**', '<strong>').replace('**', '</strong>')}
+</body>
+</html>
+"""
+        
+        # HTML版本下载
+        html_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.html"
         
         st.download_button(
-            label="📄 下载专业分析报告",
+            label="📄 下载HTML专业报告",
+            data=html_report.encode('utf-8'),
+            file_name=html_filename,
+            mime="text/html",
+            help="HTML格式，可在浏览器中打开并打印为PDF"
+        )
+        
+        # 原始Markdown版本
+        report_filename = f"{st.session_state.target_company['name']}_数据报告_{current_time_file}.md"
+        
+        st.download_button(
+            label="📝 下载Markdown数据报告",
             data=report_content.encode('utf-8'),
             file_name=report_filename,
             mime="text/markdown",
-            help="Markdown格式，可用任何文本编辑器打开"
+            help="Markdown格式的数据报告"
         )
         
         # 转换为纯文本版本
         text_content = report_content.replace('#', '').replace('*', '').replace('|', ' ').replace('-', ' ')
-        text_filename = f"{st.session_state.target_company['name']}_估值报告_{current_time_file}.txt"
+        text_filename = f"{st.session_state.target_company['name']}_文本报告_{current_time_file}.txt"
         
         st.download_button(
             label="📝 下载纯文本版本",
@@ -806,6 +849,21 @@ elif selected_tab == "📄 报告导出":
             mime="text/plain",
             help="纯文本格式，兼容性最佳"
         )
+        
+        # PDF生成说明
+        st.markdown("---")
+        st.markdown("### 💡 如何生成PDF报告")
+        st.info("""
+        **方法1（推荐）**: 下载HTML专业报告，用浏览器打开后按 Ctrl+P 打印为PDF
+        
+        **方法2**: 下载Markdown数据报告，用支持Markdown的编辑器（如Typora）导出为PDF
+        
+        **方法3**: 下载纯文本版本，复制到Word中格式化后导出PDF
+        """)
+        
+        # 添加预览HTML报告的选项
+        if st.button("🔍 预览HTML报告"):
+            st.components.v1.html(html_report, height=600, scrolling=True)
 
 # 页脚
 st.markdown("---")
