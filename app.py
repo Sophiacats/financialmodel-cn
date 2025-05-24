@@ -142,6 +142,190 @@ def calculate_metrics(company_data):
     except:
         return {'market_cap': 0, 'enterprise_value': 0, 'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
 
+# PDF生成函数
+def generate_pdf_report(target_metrics, target_company, comparable_metrics, comparable_companies, currency_symbol):
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.units import inch
+        
+        # 创建PDF缓冲区
+        buffer = io.BytesIO()
+        
+        # 创建PDF文档
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        
+        # 获取样式
+        styles = getSampleStyleSheet()
+        
+        # 自定义样式
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=1,  # 居中
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+        )
+        
+        story = []
+        
+        # 标题
+        current_time = datetime.now().strftime('%Y年%m月%d日')
+        title = Paragraph(f"{target_company['name']} 专业估值分析报告", title_style)
+        subtitle = Paragraph(f"报告日期：{current_time} | FinancialModel.cn", styles['Normal'])
+        
+        story.append(title)
+        story.append(subtitle)
+        story.append(Spacer(1, 20))
+        
+        # 执行摘要
+        story.append(Paragraph("执行摘要", heading_style))
+        summary_text = f"本报告基于相对估值法，对{target_company['name']}进行全面的估值分析。通过与{len(comparable_companies)}家同行业公司的对比，评估目标公司的投资价值。"
+        story.append(Paragraph(summary_text, styles['Normal']))
+        story.append(Spacer(1, 12))
+        
+        # 核心估值指标
+        story.append(Paragraph("一、核心估值指标", heading_style))
+        
+        # 创建估值指标表格
+        data = [
+            ['指标', '数值', '含义'],
+            ['PE (市盈率)', f'{target_metrics["pe"]:.2f}', f'投资回收期为{target_metrics["pe"]:.1f}年'],
+            ['PB (市净率)', f'{target_metrics["pb"]:.2f}', f'市价为净资产的{target_metrics["pb"]:.1f}倍'],
+            ['EV/EBITDA', f'{target_metrics["ev_ebitda"]:.2f}', f'企业价值为EBITDA的{target_metrics["ev_ebitda"]:.1f}倍'],
+            ['EV/EBIT', f'{target_metrics["ev_ebit"]:.2f}', f'企业价值为EBIT的{target_metrics["ev_ebit"]:.1f}倍'],
+            ['PEG', f'{target_metrics["peg"]:.2f}', '成长性调整后的估值倍数']
+        ]
+        
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(table)
+        story.append(Spacer(1, 12))
+        
+        # 基础财务数据
+        story.append(Paragraph("二、基础财务数据", heading_style))
+        
+        financial_data = [
+            ['项目', '金额'],
+            ['市值', f'{currency_symbol}{target_metrics["market_cap"]:.2f} 亿元'],
+            ['企业价值', f'{currency_symbol}{target_metrics["enterprise_value"]:.2f} 亿元'],
+            ['净利润', f'{currency_symbol}{target_company["net_profit"]/10000:.2f} 亿元'],
+            ['净资产', f'{currency_symbol}{target_company["net_assets"]/10000:.2f} 亿元'],
+            ['净利润增长率', f'{target_company["growth_rate"]:.1f}%']
+        ]
+        
+        financial_table = Table(financial_data)
+        financial_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(financial_table)
+        story.append(Spacer(1, 12))
+        
+        # 同行业对比
+        if comparable_metrics:
+            story.append(Paragraph("三、同行业对比分析", heading_style))
+            
+            # 创建对比表格
+            comparison_data = [['公司名称', 'PE', 'PB', 'EV/EBITDA', 'PEG', f'市值({currency_symbol}亿)']]
+            
+            # 添加目标公司
+            comparison_data.append([
+                f"{target_company['name']} (目标)",
+                f"{target_metrics['pe']:.2f}",
+                f"{target_metrics['pb']:.2f}",
+                f"{target_metrics['ev_ebitda']:.2f}",
+                f"{target_metrics['peg']:.2f}",
+                f"{target_metrics['market_cap']:.2f}"
+            ])
+            
+            # 添加可比公司
+            for i, comp in enumerate(comparable_companies):
+                metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
+                comparison_data.append([
+                    comp['name'],
+                    f"{metrics['pe']:.2f}",
+                    f"{metrics['pb']:.2f}",
+                    f"{metrics['ev_ebitda']:.2f}",
+                    f"{metrics['peg']:.2f}",
+                    f"{metrics['market_cap']:.2f}"
+                ])
+            
+            comparison_table = Table(comparison_data)
+            comparison_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('BACKGROUND', (0, 1), (5, 1), colors.lightgreen),  # 目标公司行
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 2), (-1, -1), colors.white),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            story.append(comparison_table)
+            story.append(Spacer(1, 12))
+        
+        # 投资建议
+        story.append(Paragraph("四、投资建议", heading_style))
+        investment_advice = """
+基于本次估值分析，建议投资者综合考虑以下因素：
+
+1. 估值水平：对比同行业公司进行相对估值判断
+2. 成长性：关注公司的盈利增长可持续性  
+3. 财务质量：分析公司的资产负债结构
+4. 行业趋势：考虑所处行业的发展前景
+
+风险提示：本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。
+        """
+        story.append(Paragraph(investment_advice, styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # 页脚
+        footer_text = f"报告生成：FinancialModel.cn 专业估值分析系统 | © 2024 FinancialModel.cn"
+        story.append(Paragraph(footer_text, styles['Normal']))
+        
+        # 构建PDF
+        doc.build(story)
+        
+        # 获取PDF数据
+        pdf_data = buffer.getvalue()
+        buffer.close()
+        
+        return pdf_data
+        
+    except ImportError:
+        return None
+
 # 根据选择的标签页显示内容
 if selected_tab == "📈 估值计算":
     
@@ -787,10 +971,27 @@ elif selected_tab == "📄 报告导出":
         
         current_time_file = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Word文档格式报告（.docx）
-        word_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.docx"
+        # 直接生成PDF报告
+        try:
+            pdf_data = generate_pdf_report(target_metrics, st.session_state.target_company, comparable_metrics, st.session_state.comparable_companies, currency_symbol)
+            
+            if pdf_data:
+                pdf_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.pdf"
+                
+                st.download_button(
+                    label="📄 下载PDF专业报告 ⭐",
+                    data=pdf_data,
+                    file_name=pdf_filename,
+                    mime="application/pdf",
+                    help="专业格式的PDF报告，可直接打印使用",
+                    type="primary"
+                )
+            else:
+                st.warning("PDF功能暂时不可用，请使用HTML版本")
+        except Exception as e:
+            st.warning("PDF生成功能正在加载依赖包，请稍后再试或使用HTML版本")
         
-        # 创建HTML格式的报告内容
+        # HTML版本作为备选
         html_report = f"""
 <!DOCTYPE html>
 <html>
@@ -811,34 +1012,22 @@ elif selected_tab == "📄 报告导出":
     </style>
 </head>
 <body>
-    {report_content.replace('#', '<h1>').replace('##', '</h1><h2>').replace('###', '</h2><h3>').replace('**', '<strong>').replace('**', '</strong>')}
+    {report_content.replace('# ', '<h1>').replace('## ', '<h2>').replace('### ', '<h3>').replace('**', '<strong>').replace('</strong>', '</strong>')}
 </body>
 </html>
 """
         
-        # HTML版本下载
-        html_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.html"
+        html_filename = f"{st.session_state.target_company['name']}_HTML报告_{current_time_file}.html"
         
         st.download_button(
-            label="📄 下载HTML专业报告",
+            label="🌐 下载HTML报告（备选）",
             data=html_report.encode('utf-8'),
             file_name=html_filename,
             mime="text/html",
             help="HTML格式，可在浏览器中打开并打印为PDF"
         )
         
-        # 原始Markdown版本
-        report_filename = f"{st.session_state.target_company['name']}_数据报告_{current_time_file}.md"
-        
-        st.download_button(
-            label="📝 下载Markdown数据报告",
-            data=report_content.encode('utf-8'),
-            file_name=report_filename,
-            mime="text/markdown",
-            help="Markdown格式的数据报告"
-        )
-        
-        # 转换为纯文本版本
+        # 纯文本版本
         text_content = report_content.replace('#', '').replace('*', '').replace('|', ' ').replace('-', ' ')
         text_filename = f"{st.session_state.target_company['name']}_文本报告_{current_time_file}.txt"
         
@@ -850,20 +1039,16 @@ elif selected_tab == "📄 报告导出":
             help="纯文本格式，兼容性最佳"
         )
         
-        # PDF生成说明
+        # 使用说明
         st.markdown("---")
-        st.markdown("### 💡 如何生成PDF报告")
-        st.info("""
-        **方法1（推荐）**: 下载HTML专业报告，用浏览器打开后按 Ctrl+P 打印为PDF
+        st.markdown("### 💡 报告格式说明")
+        st.success("""
+        ⭐ **PDF专业报告**：推荐使用，包含完整格式和表格，可直接打印
         
-        **方法2**: 下载Markdown数据报告，用支持Markdown的编辑器（如Typora）导出为PDF
+        🌐 **HTML报告**：备选方案，如PDF不可用时使用
         
-        **方法3**: 下载纯文本版本，复制到Word中格式化后导出PDF
+        📝 **纯文本版本**：最佳兼容性，可复制到任何文档中
         """)
-        
-        # 添加预览HTML报告的选项
-        if st.button("🔍 预览HTML报告"):
-            st.components.v1.html(html_report, height=600, scrolling=True)
 
 # 页脚
 st.markdown("---")
