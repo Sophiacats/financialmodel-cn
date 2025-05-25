@@ -142,259 +142,434 @@ def calculate_metrics(company_data):
     except:
         return {'market_cap': 0, 'enterprise_value': 0, 'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
 
-# PDF生成函数 - 使用HTML转PDF方式
-def generate_pdf_report(target_metrics, target_company, comparable_metrics, comparable_companies, currency_symbol):
-    try:
-        import weasyprint
-        
-        # 创建HTML内容
-        current_time = datetime.now().strftime('%Y-%m-%d')
-        
-        html_content = f"""
+# 生成完美的PDF打印版HTML
+def generate_print_ready_html(target_metrics, target_company, comparable_metrics, comparable_companies, currency_symbol):
+    current_time = datetime.now().strftime('%Y年%m月%d日')
+    
+    html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Valuation Analysis Report</title>
+    <title>{target_company['name']} 专业估值分析报告</title>
     <style>
-        @page {{
-            size: A4;
-            margin: 2cm;
+        @media print {{
+            @page {{
+                size: A4;
+                margin: 1.5cm;
+            }}
+            body {{
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }}
         }}
+        
         body {{
-            font-family: Arial, sans-serif;
-            font-size: 11pt;
-            line-height: 1.4;
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.6;
             color: #333;
+            max-width: 21cm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
         }}
+        
         .header {{
             text-align: center;
-            border-bottom: 2px solid #0066cc;
-            padding-bottom: 15px;
-            margin-bottom: 25px;
+            border-bottom: 3px solid #2E86C1;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
         }}
+        
         .company-name {{
-            font-size: 20pt;
+            font-size: 24px;
             font-weight: bold;
-            color: #0066cc;
-            margin-bottom: 5px;
+            color: #2E86C1;
+            margin-bottom: 8px;
         }}
+        
         .report-title {{
-            font-size: 16pt;
-            margin-bottom: 10px;
+            font-size: 18px;
+            color: #34495E;
+            margin-bottom: 8px;
         }}
-        .report-date {{
-            font-size: 10pt;
-            color: #666;
+        
+        .report-info {{
+            font-size: 11px;
+            color: #7F8C8D;
         }}
+        
         h2 {{
-            color: #0066cc;
-            font-size: 14pt;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 5px;
-            margin-top: 25px;
+            color: #2E86C1;
+            font-size: 16px;
+            border-bottom: 2px solid #E8F4FD;
+            padding-bottom: 8px;
+            margin-top: 30px;
             margin-bottom: 15px;
         }}
+        
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }}
+        
+        .metric-card {{
+            background: linear-gradient(135deg, #E8F4FD 0%, #D5E8F3 100%);
+            border: 1px solid #2E86C1;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }}
+        
+        .metric-value {{
+            font-size: 20px;
+            font-weight: bold;
+            color: #2E86C1;
+            margin-bottom: 5px;
+        }}
+        
+        .metric-label {{
+            font-size: 10px;
+            color: #34495E;
+            font-weight: bold;
+        }}
+        
+        .metric-desc {{
+            font-size: 9px;
+            color: #7F8C8D;
+            margin-top: 3px;
+        }}
+        
         table {{
             width: 100%;
             border-collapse: collapse;
             margin: 15px 0;
-            font-size: 9pt;
+            font-size: 11px;
         }}
+        
         th {{
-            background-color: #0066cc;
+            background: linear-gradient(135deg, #2E86C1 0%, #1B4F72 100%);
             color: white;
-            padding: 8px;
+            padding: 12px 8px;
             text-align: center;
             font-weight: bold;
+            font-size: 11px;
         }}
+        
         td {{
-            padding: 6px 8px;
+            padding: 10px 8px;
             text-align: center;
-            border: 1px solid #ddd;
+            border: 1px solid #D5DBDB;
         }}
+        
         tr:nth-child(even) {{
-            background-color: #f9f9f9;
+            background-color: #F8F9FA;
         }}
+        
         .target-row {{
-            background-color: #e6f3ff !important;
+            background: linear-gradient(135deg, #D5F4E6 0%, #ABEBC6 100%) !important;
             font-weight: bold;
         }}
-        .summary {{
-            background-color: #f0f8ff;
+        
+        .financial-table td:first-child {{
+            text-align: left;
+            font-weight: bold;
+            background-color: #EBF5FB;
+        }}
+        
+        .summary-box {{
+            background: linear-gradient(135deg, #FEF9E7 0%, #FCF3CF 100%);
+            border-left: 5px solid #F39C12;
             padding: 15px;
-            border-left: 4px solid #0066cc;
-            margin: 15px 0;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
         }}
+        
+        .recommendation {{
+            background: linear-gradient(135deg, #E8F8F5 0%, #D1F2EB 100%);
+            border-left: 5px solid #27AE60;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }}
+        
+        .risk-warning {{
+            background: linear-gradient(135deg, #FADBD8 0%, #F1948A 100%);
+            border-left: 5px solid #E74C3C;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+            color: #922B21;
+        }}
+        
         .footer {{
-            margin-top: 30px;
-            padding-top: 15px;
-            border-top: 1px solid #ccc;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #E8F4FD;
             text-align: center;
-            font-size: 9pt;
-            color: #666;
+            font-size: 10px;
+            color: #7F8C8D;
         }}
-        .metric-box {{
-            display: inline-block;
-            width: 18%;
-            margin: 1%;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+        
+        ul {{
+            padding-left: 20px;
+        }}
+        
+        li {{
+            margin-bottom: 8px;
+        }}
+        
+        .print-instruction {{
+            background: #E3F2FD;
+            border: 2px dashed #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
             text-align: center;
-        }}
-        .metric-value {{
-            font-size: 16pt;
+            color: #1976D2;
             font-weight: bold;
-            color: #0066cc;
         }}
-        .metric-label {{
-            font-size: 8pt;
-            color: #666;
-            margin-top: 5px;
+        
+        @media print {{
+            .print-instruction {{
+                display: none;
+            }}
         }}
     </style>
 </head>
 <body>
+    <div class="print-instruction">
+        📄 PDF转换说明：按 Ctrl+P (Windows) 或 Cmd+P (Mac)，选择"另存为PDF"即可获得专业PDF报告
+    </div>
+
     <div class="header">
         <div class="company-name">{target_company['name']}</div>
-        <div class="report-title">Professional Valuation Analysis Report</div>
-        <div class="report-date">Report Date: {current_time} | FinancialModel.cn</div>
+        <div class="report-title">专业估值分析报告</div>
+        <div class="report-info">报告日期：{current_time} | 货币单位：{currency_symbol} | FinancialModel.cn</div>
     </div>
 
-    <div class="summary">
-        <strong>Executive Summary:</strong> This report provides a comprehensive valuation analysis using relative valuation methods, 
-        comparing with {len(comparable_companies)} peer companies to assess the investment value.
+    <div class="summary-box">
+        <strong>📋 执行摘要</strong><br>
+        本报告基于相对估值法，对 {target_company['name']} 进行全面的估值分析。通过与 {len(comparable_companies)} 家同行业公司的对比，
+        从PE、PB、EV/EBITDA、EV/EBIT、PEG等多个维度评估目标公司的投资价值，为投资决策提供专业参考。
     </div>
 
-    <h2>1. Core Valuation Metrics</h2>
-    <div style="text-align: center;">
-        <div class="metric-box">
+    <h2>📊 一、核心估值指标</h2>
+    <div class="metrics-grid">
+        <div class="metric-card">
             <div class="metric-value">{target_metrics['pe']:.2f}</div>
-            <div class="metric-label">PE Ratio</div>
+            <div class="metric-label">PE 市盈率</div>
+            <div class="metric-desc">市值 ÷ 净利润</div>
         </div>
-        <div class="metric-box">
+        <div class="metric-card">
             <div class="metric-value">{target_metrics['pb']:.2f}</div>
-            <div class="metric-label">PB Ratio</div>
+            <div class="metric-label">PB 市净率</div>
+            <div class="metric-desc">市值 ÷ 净资产</div>
         </div>
-        <div class="metric-box">
+        <div class="metric-card">
             <div class="metric-value">{target_metrics['ev_ebitda']:.2f}</div>
             <div class="metric-label">EV/EBITDA</div>
+            <div class="metric-desc">企业价值 ÷ EBITDA</div>
         </div>
-        <div class="metric-box">
+        <div class="metric-card">
             <div class="metric-value">{target_metrics['ev_ebit']:.2f}</div>
             <div class="metric-label">EV/EBIT</div>
+            <div class="metric-desc">企业价值 ÷ EBIT</div>
         </div>
-        <div class="metric-box">
+        <div class="metric-card">
             <div class="metric-value">{target_metrics['peg']:.2f}</div>
-            <div class="metric-label">PEG Ratio</div>
+            <div class="metric-label">PEG</div>
+            <div class="metric-desc">PE ÷ 增长率</div>
         </div>
     </div>
 
-    <h2>2. Financial Overview</h2>
-    <table>
+    <h2>💰 二、基础财务数据</h2>
+    <table class="financial-table">
         <tr>
-            <th>Financial Item</th>
-            <th>Amount</th>
+            <th style="width: 40%;">财务项目</th>
+            <th style="width: 60%;">金额</th>
         </tr>
         <tr>
-            <td>Market Capitalization</td>
-            <td>{currency_symbol}{target_metrics['market_cap']:.2f} Billion</td>
+            <td>市值</td>
+            <td><strong>{currency_symbol}{target_metrics['market_cap']:.2f} 亿</strong></td>
         </tr>
         <tr>
-            <td>Enterprise Value</td>
-            <td>{currency_symbol}{target_metrics['enterprise_value']:.2f} Billion</td>
+            <td>企业价值</td>
+            <td><strong>{currency_symbol}{target_metrics['enterprise_value']:.2f} 亿</strong></td>
         </tr>
         <tr>
-            <td>Net Income</td>
-            <td>{currency_symbol}{target_company['net_profit']/10000:.2f} Billion</td>
+            <td>净利润</td>
+            <td>{currency_symbol}{target_company['net_profit']/10000:.2f} 亿</td>
         </tr>
         <tr>
-            <td>Net Assets</td>
-            <td>{currency_symbol}{target_company['net_assets']/10000:.2f} Billion</td>
+            <td>净资产</td>
+            <td>{currency_symbol}{target_company['net_assets']/10000:.2f} 亿</td>
         </tr>
         <tr>
-            <td>Growth Rate</td>
-            <td>{target_company['growth_rate']:.1f}%</td>
+            <td>EBITDA</td>
+            <td>{currency_symbol}{target_company['ebitda']/10000:.2f} 亿</td>
+        </tr>
+        <tr>
+            <td>现金</td>
+            <td>{currency_symbol}{target_company['cash']/10000:.2f} 亿</td>
+        </tr>
+        <tr>
+            <td>有息负债</td>
+            <td>{currency_symbol}{target_company['debt']/10000:.2f} 亿</td>
+        </tr>
+        <tr>
+            <td>净利润增长率</td>
+            <td><strong>{target_company['growth_rate']:.1f}%</strong></td>
         </tr>
     </table>
 """
 
-        # 添加同行对比表格
-        if comparable_metrics:
-            html_content += """
-    <h2>3. Peer Comparison Analysis</h2>
+    # 添加同行对比分析
+    if comparable_metrics:
+        html_content += """
+    <h2>🏭 三、同行业对比分析</h2>
     <table>
         <tr>
-            <th>Company</th>
-            <th>PE</th>
-            <th>PB</th>
-            <th>EV/EBITDA</th>
-            <th>PEG</th>
-            <th>Market Cap</th>
+            <th style="width: 20%;">公司名称</th>
+            <th style="width: 12%;">PE</th>
+            <th style="width: 12%;">PB</th>
+            <th style="width: 14%;">EV/EBITDA</th>
+            <th style="width: 12%;">EV/EBIT</th>
+            <th style="width: 10%;">PEG</th>
+            <th style="width: 20%;">市值(亿)</th>
         </tr>
 """
-            
-            # 目标公司行
-            html_content += f"""
+        
+        # 目标公司行
+        html_content += f"""
         <tr class="target-row">
-            <td>{target_company['name']} (Target)</td>
-            <td>{target_metrics['pe']:.2f}</td>
-            <td>{target_metrics['pb']:.2f}</td>
-            <td>{target_metrics['ev_ebitda']:.2f}</td>
-            <td>{target_metrics['peg']:.2f}</td>
-            <td>{currency_symbol}{target_metrics['market_cap']:.2f}B</td>
+            <td><strong>🎯 {target_company['name']}</strong></td>
+            <td><strong>{target_metrics['pe']:.2f}</strong></td>
+            <td><strong>{target_metrics['pb']:.2f}</strong></td>
+            <td><strong>{target_metrics['ev_ebitda']:.2f}</strong></td>
+            <td><strong>{target_metrics['ev_ebit']:.2f}</strong></td>
+            <td><strong>{target_metrics['peg']:.2f}</strong></td>
+            <td><strong>{currency_symbol}{target_metrics['market_cap']:.2f}</strong></td>
         </tr>
 """
-            
-            # 可比公司行
-            for i, comp in enumerate(comparable_companies):
-                metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
-                html_content += f"""
+        
+        # 可比公司行
+        for i, comp in enumerate(comparable_companies):
+            metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
+            html_content += f"""
         <tr>
             <td>{comp['name']}</td>
             <td>{metrics['pe']:.2f}</td>
             <td>{metrics['pb']:.2f}</td>
             <td>{metrics['ev_ebitda']:.2f}</td>
+            <td>{metrics['ev_ebit']:.2f}</td>
             <td>{metrics['peg']:.2f}</td>
-            <td>{currency_symbol}{metrics['market_cap']:.2f}B</td>
+            <td>{currency_symbol}{metrics['market_cap']:.2f}</td>
         </tr>
 """
-            
-            html_content += "    </table>"
+        
+        # 行业平均值
+        valid_pe = [m['pe'] for m in comparable_metrics if m['pe'] > 0]
+        valid_pb = [m['pb'] for m in comparable_metrics if m['pb'] > 0]
+        valid_ev_ebitda = [m['ev_ebitda'] for m in comparable_metrics if m['ev_ebitda'] > 0]
+        valid_ev_ebit = [m['ev_ebit'] for m in comparable_metrics if m['ev_ebit'] > 0]
+        valid_peg = [m['peg'] for m in comparable_metrics if m['peg'] > 0]
+        valid_market_cap = [m['market_cap'] for m in comparable_metrics if m['market_cap'] > 0]
+        
+        html_content += f"""
+        <tr style="background: linear-gradient(135deg, #F4F6F7 0%, #E5E8E8 100%); font-weight: bold;">
+            <td>🏭 行业均值</td>
+            <td>{np.mean(valid_pe):.2f if valid_pe else 'N/A'}</td>
+            <td>{np.mean(valid_pb):.2f if valid_pb else 'N/A'}</td>
+            <td>{np.mean(valid_ev_ebitda):.2f if valid_ev_ebitda else 'N/A'}</td>
+            <td>{np.mean(valid_ev_ebit):.2f if valid_ev_ebit else 'N/A'}</td>
+            <td>{np.mean(valid_peg):.2f if valid_peg else 'N/A'}</td>
+            <td>{currency_symbol}{np.mean(valid_market_cap):.2f if valid_market_cap else 'N/A'}</td>
+        </tr>
+    </table>
+"""
 
-        # 投资建议部分
-        html_content += """
-    <h2>4. Investment Recommendation</h2>
-    <p>Based on this valuation analysis, investors should consider the following factors:</p>
-    <ul>
-        <li><strong>Valuation Level:</strong> Compare with industry peers for relative assessment</li>
-        <li><strong>Growth Potential:</strong> Focus on sustainable earnings growth capability</li>
-        <li><strong>Financial Quality:</strong> Analyze balance sheet structure and asset quality</li>
-        <li><strong>Industry Trends:</strong> Consider sector development prospects</li>
-    </ul>
+    # 投资建议
+    html_content += f"""
+    <h2>💡 四、投资建议与风险评估</h2>
     
-    <div class="summary">
-        <strong>Risk Disclaimer:</strong> This report is for reference only and does not constitute investment advice. 
-        Investment involves risks and decisions should be made prudently.
+    <div class="recommendation">
+        <strong>📈 投资亮点</strong>
+        <ul>
+            <li><strong>估值水平分析：</strong>PE为{target_metrics['pe']:.2f}，需结合行业平均水平判断估值合理性</li>
+            <li><strong>成长性评估：</strong>PEG为{target_metrics['peg']:.2f}，{'成长性估值具有吸引力' if target_metrics['peg'] < 1 and target_metrics['peg'] > 0 else '需关注成长性与估值的匹配度'}</li>
+            <li><strong>盈利能力：</strong>净利润增长率为{target_company['growth_rate']:.1f}%，{'显示良好的盈利增长潜力' if target_company['growth_rate'] > 10 else '增长相对温和'}</li>
+            <li><strong>财务结构：</strong>净资产{currency_symbol}{target_company['net_assets']/10000:.2f}亿，有息负债{currency_symbol}{target_company['debt']/10000:.2f}亿</li>
+        </ul>
+    </div>
+    
+    <div class="risk-warning">
+        <strong>⚠️ 风险提示</strong>
+        <ul>
+            <li><strong>市场风险：</strong>股票投资存在市场波动风险，估值可能受市场情绪影响</li>
+            <li><strong>行业风险：</strong>需关注行业周期性变化和政策影响</li>
+            <li><strong>业绩风险：</strong>实际业绩可能与预期存在差异，需持续跟踪</li>
+            <li><strong>估值风险：</strong>相对估值方法基于可比公司，需注意可比性差异</li>
+        </ul>
+    </div>
+    
+    <div class="recommendation">
+        <strong>🎯 操作建议</strong>
+        <ul>
+            <li><strong>短期策略：</strong>关注季度业绩表现，验证增长可持续性</li>
+            <li><strong>中期策略：</strong>跟踪行业发展趋势，评估竞争地位变化</li>
+            <li><strong>风险控制：</strong>建议设置合理的止损位，控制投资风险</li>
+            <li><strong>投资组合：</strong>不建议单一持股，应构建多元化投资组合</li>
+        </ul>
     </div>
 
+    <h2>📚 五、分析方法说明</h2>
+    <table class="financial-table">
+        <tr>
+            <th style="width: 25%;">估值指标</th>
+            <th style="width: 35%;">计算公式</th>
+            <th style="width: 40%;">分析意义</th>
+        </tr>
+        <tr>
+            <td><strong>PE 市盈率</strong></td>
+            <td>市值 ÷ 净利润</td>
+            <td>反映市场对公司未来盈利的预期，倍数越低相对越便宜</td>
+        </tr>
+        <tr>
+            <td><strong>PB 市净率</strong></td>
+            <td>市值 ÷ 净资产</td>
+            <td>衡量市场价格与账面价值的关系，提供安全边际参考</td>
+        </tr>
+        <tr>
+            <td><strong>EV/EBITDA</strong></td>
+            <td>(市值+净负债) ÷ EBITDA</td>
+            <td>考虑负债结构的企业估值倍数，便于不同资本结构公司对比</td>
+        </tr>
+        <tr>
+            <td><strong>EV/EBIT</strong></td>
+            <td>(市值+净负债) ÷ EBIT</td>
+            <td>基于税前利润的企业估值倍数</td>
+        </tr>
+        <tr>
+            <td><strong>PEG</strong></td>
+            <td>PE ÷ 净利润增长率</td>
+            <td>考虑成长性的PE修正，PEG<1通常认为估值合理</td>
+        </tr>
+    </table>
+
     <div class="footer">
-        Generated by FinancialModel.cn Professional Valuation System | © 2024 FinancialModel.cn
+        <p><strong>免责声明：</strong>本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。实际投资前请咨询专业投资顾问并进行深入的基本面分析。</p>
+        <p>报告生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')} | 技术支持：FinancialModel.cn 专业估值分析系统</p>
+        <p>© 2024 FinancialModel.cn | 让复杂的金融模型变得简单易用</p>
     </div>
 </body>
 </html>
 """
-        
-        # 转换为PDF
-        pdf_file = weasyprint.HTML(string=html_content).write_pdf()
-        return pdf_file
-        
-    except ImportError:
-        return None
-    except Exception as e:
-        st.error(f"PDF generation error: {str(e)}")
-        return None
+    
+    return html_content
 
 # 根据选择的标签页显示内容
 if selected_tab == "📈 估值计算":
@@ -1037,68 +1212,96 @@ elif selected_tab == "📄 报告导出":
         st.subheader("📄 专业分析报告")
         
         # 显示报告统计
-        st.info(f"📈 报告包含 {len(report_content.split())} 字")
+        st.info(f"📈 报告内容丰富，包含完整的估值分析")
         
         current_time_file = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # 直接生成PDF报告
-        try:
-            pdf_data = generate_pdf_report(target_metrics, st.session_state.target_company, comparable_metrics, st.session_state.comparable_companies, currency_symbol)
-            
-            if pdf_data:
-                pdf_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.pdf"
-                
-                st.download_button(
-                    label="📄 下载PDF专业报告 ⭐",
-                    data=pdf_data,
-                    file_name=pdf_filename,
-                    mime="application/pdf",
-                    help="专业格式的PDF报告，可直接打印使用",
-                    type="primary"
-                )
-            else:
-                st.warning("PDF功能暂时不可用，请使用HTML版本")
-        except Exception as e:
-            st.warning("PDF生成功能正在加载依赖包，请稍后再试或使用HTML版本")
+        # 生成完美的打印版HTML
+        perfect_html = generate_print_ready_html(target_metrics, st.session_state.target_company, comparable_metrics, st.session_state.comparable_companies, currency_symbol)
         
-        # HTML版本作为备选
-        html_report = f"""
+        # 专业PDF版本（实际是优化的HTML）
+        pdf_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.html"
+        
+        st.download_button(
+            label="📄 下载专业PDF版报告 ⭐",
+            data=perfect_html.encode('utf-8'),
+            file_name=pdf_filename,
+            mime="text/html",
+            help="下载后用浏览器打开，按Ctrl+P即可打印为完美PDF",
+            type="primary"
+        )
+        
+        # 简化版HTML
+        simple_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>{st.session_state.target_company['name']} 专业估值分析报告</title>
+    <title>{st.session_state.target_company['name']} 估值报告</title>
     <style>
-        body {{ font-family: "Microsoft YaHei", Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-        h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
-        h2 {{ color: #34495e; margin-top: 30px; }}
-        h3 {{ color: #2c3e50; }}
+        body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
+        h1 {{ color: #2c3e50; }}
+        h2 {{ color: #34495e; }}
         table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
-        th {{ background-color: #f2f2f2; font-weight: bold; }}
-        .summary {{ background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }}
-        .highlight {{ background-color: #f39c12; color: white; padding: 2px 8px; border-radius: 3px; }}
-        .footer {{ margin-top: 50px; padding-top: 20px; border-top: 1px solid #bdc3c7; color: #7f8c8d; text-align: center; }}
+        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: center; }}
+        th {{ background-color: #f2f2f2; }}
     </style>
 </head>
 <body>
-    {report_content.replace('# ', '<h1>').replace('## ', '<h2>').replace('### ', '<h3>').replace('**', '<strong>').replace('</strong>', '</strong>')}
+    <h1>{st.session_state.target_company['name']} 估值分析报告</h1>
+    <p>报告日期：{datetime.now().strftime('%Y年%m月%d日')}</p>
+    
+    <h2>核心指标</h2>
+    <p>PE: {target_metrics['pe']:.2f} | PB: {target_metrics['pb']:.2f} | EV/EBITDA: {target_metrics['ev_ebitda']:.2f}</p>
+    
+    <h2>财务数据</h2>
+    <p>市值：{currency_symbol}{target_metrics['market_cap']:.2f}亿 | 增长率：{st.session_state.target_company['growth_rate']:.1f}%</p>
+    
+    <h2>免责声明</h2>
+    <p>本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。</p>
 </body>
 </html>
 """
         
-        html_filename = f"{st.session_state.target_company['name']}_HTML报告_{current_time_file}.html"
+        simple_filename = f"{st.session_state.target_company['name']}_简版报告_{current_time_file}.html"
         
         st.download_button(
-            label="🌐 下载HTML报告（备选）",
-            data=html_report.encode('utf-8'),
-            file_name=html_filename,
+            label="📝 下载简化版报告",
+            data=simple_html.encode('utf-8'),
+            file_name=simple_filename,
             mime="text/html",
-            help="HTML格式，可在浏览器中打开并打印为PDF"
+            help="简化版HTML报告"
         )
         
         # 纯文本版本
-        text_content = report_content.replace('#', '').replace('*', '').replace('|', ' ').replace('-', ' ')
+        text_content = f"""
+{st.session_state.target_company['name']} 估值分析报告
+
+报告日期：{datetime.now().strftime('%Y年%m月%d日')}
+
+核心估值指标：
+PE 市盈率：{target_metrics['pe']:.2f}
+PB 市净率：{target_metrics['pb']:.2f}
+EV/EBITDA：{target_metrics['ev_ebitda']:.2f}
+EV/EBIT：{target_metrics['ev_ebit']:.2f}
+PEG：{target_metrics['peg']:.2f}
+
+基础财务数据：
+市值：{currency_symbol}{target_metrics['market_cap']:.2f} 亿
+企业价值：{currency_symbol}{target_metrics['enterprise_value']:.2f} 亿
+净利润：{currency_symbol}{st.session_state.target_company['net_profit']/10000:.2f} 亿
+净资产：{currency_symbol}{st.session_state.target_company['net_assets']/10000:.2f} 亿
+净利润增长率：{st.session_state.target_company['growth_rate']:.1f}%
+
+投资建议：
+基于相对估值分析，建议投资者综合考虑估值水平、成长性、财务质量和行业趋势等因素。
+
+免责声明：
+本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。
+
+报告生成：FinancialModel.cn 专业估值分析系统
+        """
+        
         text_filename = f"{st.session_state.target_company['name']}_文本报告_{current_time_file}.txt"
         
         st.download_button(
@@ -1111,14 +1314,25 @@ elif selected_tab == "📄 报告导出":
         
         # 使用说明
         st.markdown("---")
-        st.markdown("### 💡 报告格式说明")
+        st.markdown("### 💡 PDF生成方法")
         st.success("""
-        ⭐ **PDF专业报告**：推荐使用，包含完整格式和表格，可直接打印
+        **🌟 推荐方法（专业PDF）:**
+        1. 点击"📄 下载专业PDF版报告"
+        2. 下载的HTML文件用浏览器打开
+        3. 按 `Ctrl+P`（Windows）或 `Cmd+P`（Mac）
+        4. 选择"另存为PDF"或"打印到PDF"
+        5. 得到完美的专业PDF报告！
         
-        🌐 **HTML报告**：备选方案，如PDF不可用时使用
-        
-        📝 **纯文本版本**：最佳兼容性，可复制到任何文档中
+        **特点：** 
+        - ✅ 完整的中文支持
+        - ✅ 专业的格式和颜色
+        - ✅ 详细的分析内容
+        - ✅ 可直接打印使用
         """)
+        
+        # 预览功能
+        if st.button("🔍 预览专业报告"):
+            st.components.v1.html(perfect_html, height=800, scrolling=True)
 
 # 页脚
 st.markdown("---")
