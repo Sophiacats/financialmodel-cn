@@ -1300,54 +1300,259 @@ elif selected_tab == "📄 报告导出":
         
         st.success("✅ Excel报告包含完整的估值分析，支持所有中文字符，可直接用Excel打开！")
         
-        # 方案2：Word格式（RTF）
-        st.markdown("### 📝 方案2：Word格式报告")
+        # 方案2：PDF打印版（HTML）
+        st.markdown("### 📄 方案2：PDF专业报告")
         
-        rtf_content = f"""{{\\rtf1\\ansi\\deff0
-{{\\fonttbl{{\\f0 Times New Roman;}}}}
-{{\\colortbl;\\red0\\green0\\blue0;\\red0\\green112\\blue192;}}
+        # 创建专业的打印优化HTML
+        pdf_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{st.session_state.target_company['name']} 专业估值分析报告</title>
+    <style>
+        @media print {{
+            @page {{ size: A4; margin: 2cm; }}
+            body {{ -webkit-print-color-adjust: exact; }}
+        }}
+        body {{
+            font-family: Arial, "Microsoft YaHei", sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 3px solid #2E86C1;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }}
+        .company-name {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #2E86C1;
+            margin-bottom: 10px;
+        }}
+        .report-title {{
+            font-size: 18px;
+            color: #34495E;
+            margin-bottom: 5px;
+        }}
+        .report-info {{
+            font-size: 11px;
+            color: #7F8C8D;
+        }}
+        h2 {{
+            color: #2E86C1;
+            font-size: 16px;
+            border-bottom: 2px solid #E8F4FD;
+            padding-bottom: 5px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }}
+        .metrics-container {{
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }}
+        .metric-item {{
+            background: #E8F4FD;
+            border: 1px solid #2E86C1;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 5px;
+            text-align: center;
+            flex: 1;
+            min-width: 80px;
+        }}
+        .metric-value {{
+            font-size: 18px;
+            font-weight: bold;
+            color: #2E86C1;
+        }}
+        .metric-label {{
+            font-size: 10px;
+            color: #34495E;
+            margin-top: 3px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 11px;
+        }}
+        th {{
+            background-color: #2E86C1;
+            color: white;
+            padding: 8px;
+            text-align: center;
+            font-weight: bold;
+        }}
+        td {{
+            padding: 6px 8px;
+            text-align: center;
+            border: 1px solid #D5DBDB;
+        }}
+        tr:nth-child(even) {{
+            background-color: #F8F9FA;
+        }}
+        .target-row {{
+            background-color: #D5F4E6 !important;
+            font-weight: bold;
+        }}
+        .summary-box {{
+            background-color: #FEF9E7;
+            border-left: 4px solid #F39C12;
+            padding: 10px;
+            margin: 15px 0;
+        }}
+        .footer {{
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #E8F4FD;
+            text-align: center;
+            font-size: 9px;
+            color: #7F8C8D;
+        }}
+        .print-instruction {{
+            background: #E3F2FD;
+            border: 2px dashed #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            color: #1976D2;
+            font-weight: bold;
+        }}
+        @media print {{
+            .print-instruction {{ display: none; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="print-instruction">
+        📄 PDF转换说明：按 Ctrl+P (Windows) 或 Cmd+P (Mac)，选择"另存为PDF"即可获得专业PDF报告
+    </div>
 
-\\f0\\fs24
-{{\\b\\cf2\\fs32 {st.session_state.target_company['name']} 专业估值分析报告}}\\par
-\\par
-报告日期：{datetime.now().strftime('%Y年%m月%d日')}\\par
-分析系统：FinancialModel.cn\\par
-\\par
-{{\\b\\cf2\\fs28 一、核心估值指标}}\\par
-PE 市盈率：{target_metrics['pe']:.2f}\\par
-PB 市净率：{target_metrics['pb']:.2f}\\par
-EV/EBITDA：{target_metrics['ev_ebitda']:.2f}\\par
-EV/EBIT：{target_metrics['ev_ebit']:.2f}\\par
-PEG：{target_metrics['peg']:.2f}\\par
-\\par
-{{\\b\\cf2\\fs28 二、基础财务数据}}\\par
-市值：{currency_symbol}{target_metrics['market_cap']:.2f} 亿\\par
-企业价值：{currency_symbol}{target_metrics['enterprise_value']:.2f} 亿\\par
-净利润：{currency_symbol}{st.session_state.target_company['net_profit']/10000:.2f} 亿\\par
-净资产：{currency_symbol}{st.session_state.target_company['net_assets']/10000:.2f} 亿\\par
-增长率：{st.session_state.target_company['growth_rate']:.1f}%\\par
-\\par
-{{\\b\\cf2\\fs28 三、投资建议}}\\par
-基于相对估值分析，建议投资者综合考虑以下因素：\\par
-1. 估值水平：对比同行业公司进行相对估值判断\\par
-2. 成长性：关注公司的盈利增长可持续性\\par
-3. 财务质量：分析公司的资产负债结构\\par
-4. 行业趋势：考虑所处行业的发展前景\\par
-\\par
-{{\\b 免责声明：}}本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。\\par
-\\par
-报告生成：FinancialModel.cn 专业估值分析系统\\par
-}}"""
+    <div class="header">
+        <div class="company-name">{st.session_state.target_company['name']}</div>
+        <div class="report-title">专业估值分析报告</div>
+        <div class="report-info">报告日期：{datetime.now().strftime('%Y年%m月%d日')} | 货币：{currency_symbol} | FinancialModel.cn</div>
+    </div>
+
+    <div class="summary-box">
+        <strong>执行摘要：</strong>本报告基于相对估值法，对 {st.session_state.target_company['name']} 进行全面的估值分析。
+        通过与 {len(comparable_companies)} 家同行业公司的对比，从多个维度评估目标公司的投资价值。
+    </div>
+
+    <h2>一、核心估值指标</h2>
+    <div class="metrics-container">
+        <div class="metric-item">
+            <div class="metric-value">{target_metrics['pe']:.2f}</div>
+            <div class="metric-label">PE 市盈率</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value">{target_metrics['pb']:.2f}</div>
+            <div class="metric-label">PB 市净率</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value">{target_metrics['ev_ebitda']:.2f}</div>
+            <div class="metric-label">EV/EBITDA</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value">{target_metrics['ev_ebit']:.2f}</div>
+            <div class="metric-label">EV/EBIT</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value">{target_metrics['peg']:.2f}</div>
+            <div class="metric-label">PEG</div>
+        </div>
+    </div>
+
+    <h2>二、基础财务数据</h2>
+    <table>
+        <tr><th>项目</th><th>金额</th></tr>
+        <tr><td>市值</td><td>{currency_symbol}{target_metrics['market_cap']:.2f} 亿</td></tr>
+        <tr><td>企业价值</td><td>{currency_symbol}{target_metrics['enterprise_value']:.2f} 亿</td></tr>
+        <tr><td>净利润</td><td>{currency_symbol}{st.session_state.target_company['net_profit']/10000:.2f} 亿</td></tr>
+        <tr><td>净资产</td><td>{currency_symbol}{st.session_state.target_company['net_assets']/10000:.2f} 亿</td></tr>
+        <tr><td>净利润增长率</td><td>{st.session_state.target_company['growth_rate']:.1f}%</td></tr>
+    </table>
+"""
+
+        # 添加同行对比
+        if comparable_metrics:
+            pdf_html += """
+    <h2>三、同行业对比分析</h2>
+    <table>
+        <tr><th>公司名称</th><th>PE</th><th>PB</th><th>EV/EBITDA</th><th>市值(亿)</th></tr>
+"""
+            
+            # 目标公司
+            pdf_html += f"""
+        <tr class="target-row">
+            <td>🎯 {st.session_state.target_company['name']}</td>
+            <td>{target_metrics['pe']:.2f}</td>
+            <td>{target_metrics['pb']:.2f}</td>
+            <td>{target_metrics['ev_ebitda']:.2f}</td>
+            <td>{currency_symbol}{target_metrics['market_cap']:.2f}</td>
+        </tr>
+"""
+            
+            # 可比公司
+            for i, comp in enumerate(st.session_state.comparable_companies):
+                metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
+                pdf_html += f"""
+        <tr>
+            <td>{comp['name']}</td>
+            <td>{metrics['pe']:.2f}</td>
+            <td>{metrics['pb']:.2f}</td>
+            <td>{metrics['ev_ebitda']:.2f}</td>
+            <td>{currency_symbol}{metrics['market_cap']:.2f}</td>
+        </tr>
+"""
+            
+            pdf_html += "    </table>"
+
+        # 结尾
+        pdf_html += f"""
+    <h2>四、投资建议</h2>
+    <p>基于本次估值分析，建议投资者综合考虑以下因素：</p>
+    <ul>
+        <li><strong>估值水平：</strong>对比同行业公司进行相对估值判断</li>
+        <li><strong>成长性：</strong>关注公司的盈利增长可持续性</li>
+        <li><strong>财务质量：</strong>分析公司的资产负债结构</li>
+        <li><strong>行业趋势：</strong>考虑所处行业的发展前景</li>
+    </ul>
+    
+    <div class="summary-box">
+        <strong>免责声明：</strong>本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。
+        实际投资前请咨询专业投资顾问并进行深入的基本面分析。
+    </div>
+
+    <div class="footer">
+        <p>报告生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}</p>
+        <p>技术支持：FinancialModel.cn 专业估值分析系统 | © 2024 FinancialModel.cn</p>
+    </div>
+</body>
+</html>
+"""
         
-        rtf_filename = f"{st.session_state.target_company['name']}_估值报告_{current_time_file}.rtf"
+        pdf_filename = f"{st.session_state.target_company['name']}_PDF报告_{current_time_file}.html"
         
         st.download_button(
-            label="📄 下载Word格式报告",
-            data=rtf_content.encode('utf-8'),
-            file_name=rtf_filename,
-            mime="application/rtf",
-            help="RTF格式，可用Word打开，支持中文"
+            label="📄 下载PDF专业报告 ⭐",
+            data=pdf_html.encode('utf-8'),
+            file_name=pdf_filename,
+            mime="text/html",
+            help="下载后用浏览器打开，按Ctrl+P保存为PDF",
+            type="primary"
         )
+        
+        st.success("✅ 下载HTML文件，用浏览器打开后按Ctrl+P即可转换为完美PDF！")
         
         # 方案3：纯数据文本
         st.markdown("### 📋 方案3：纯数据报告")
@@ -1418,11 +1623,12 @@ PEG: {target_metrics['peg']:.2f}
         - ✅ 可编辑和美化
         - ✅ 所有电脑都有Excel
         
-        **📄 备选方案：Word格式**
-        - ✅ 适合文档编辑
-        - ✅ 可插入更多内容
+        **📄 PDF专业报告：**
+        - ✅ 下载HTML后浏览器打开
+        - ✅ 按Ctrl+P转换为PDF
+        - ✅ 专业格式和布局
         
-        **📋 简单方案：纯文本**
+        **📋 纯文本：**
         - ✅ 100%兼容性
         - ✅ 可复制到任何地方
         """)
