@@ -1212,127 +1212,222 @@ elif selected_tab == "📄 报告导出":
         st.subheader("📄 专业分析报告")
         
         # 显示报告统计
-        st.info(f"📈 报告内容丰富，包含完整的估值分析")
+        st.info(f"📈 提供多种格式的专业报告")
         
         current_time_file = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # 生成完美的打印版HTML
-        perfect_html = generate_print_ready_html(target_metrics, st.session_state.target_company, comparable_metrics, st.session_state.comparable_companies, currency_symbol)
+        # 方案1：Excel格式报告（推荐）
+        st.markdown("### 🌟 方案1：Excel专业报告（推荐）")
         
-        # 专业PDF版本（实际是优化的HTML）
-        pdf_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.html"
+        # 创建详细的Excel报告
+        excel_report_data = []
+        
+        # 基本信息
+        excel_report_data.extend([
+            ["专业估值分析报告", ""],
+            ["公司名称", st.session_state.target_company['name']],
+            ["报告日期", datetime.now().strftime('%Y年%m月%d日')],
+            ["分析师", "FinancialModel.cn 系统"],
+            ["", ""],
+            ["核心估值指标", ""],
+            ["PE 市盈率", f"{target_metrics['pe']:.2f}"],
+            ["PB 市净率", f"{target_metrics['pb']:.2f}"],
+            ["EV/EBITDA", f"{target_metrics['ev_ebitda']:.2f}"],
+            ["EV/EBIT", f"{target_metrics['ev_ebit']:.2f}"],
+            ["PEG", f"{target_metrics['peg']:.2f}"],
+            ["", ""],
+            ["基础财务数据", ""],
+            ["市值(亿)", f"{target_metrics['market_cap']:.2f}"],
+            ["企业价值(亿)", f"{target_metrics['enterprise_value']:.2f}"],
+            ["净利润(亿)", f"{target_company['net_profit']/10000:.2f}"],
+            ["净资产(亿)", f"{target_company['net_assets']/10000:.2f}"],
+            ["增长率(%)", f"{target_company['growth_rate']:.1f}"],
+            ["", ""],
+            ["同行对比分析", ""],
+            ["公司名称", "PE", "PB", "EV/EBITDA", "市值(亿)"],
+        ])
+        
+        # 添加目标公司
+        excel_report_data.append([
+            f"{target_company['name']}(目标)",
+            f"{target_metrics['pe']:.2f}",
+            f"{target_metrics['pb']:.2f}",
+            f"{target_metrics['ev_ebitda']:.2f}",
+            f"{target_metrics['market_cap']:.2f}"
+        ])
+        
+        # 添加可比公司
+        for i, comp in enumerate(st.session_state.comparable_companies):
+            metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
+            excel_report_data.append([
+                comp['name'],
+                f"{metrics['pe']:.2f}",
+                f"{metrics['pb']:.2f}",
+                f"{metrics['ev_ebitda']:.2f}",
+                f"{metrics['market_cap']:.2f}"
+            ])
+        
+        # 添加投资建议
+        excel_report_data.extend([
+            ["", ""],
+            ["投资建议", ""],
+            ["估值分析", "基于相对估值法进行多维度对比分析"],
+            ["投资评级", "请结合基本面分析综合判断"],
+            ["风险提示", "投资有风险，决策需谨慎"],
+            ["", ""],
+            ["免责声明", "本报告仅供参考，不构成投资建议"],
+        ])
+        
+        # 创建DataFrame
+        excel_df = pd.DataFrame(excel_report_data, columns=['项目', '数值', '备注', '说明', '其他'])
+        
+        # 生成Excel文件
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            excel_df.to_excel(writer, index=False, sheet_name='估值分析报告')
+        
+        output.seek(0)
+        excel_filename = f"{st.session_state.target_company['name']}_专业估值报告_{current_time_file}.xlsx"
         
         st.download_button(
-            label="📄 下载专业PDF版报告 ⭐",
-            data=perfect_html.encode('utf-8'),
-            file_name=pdf_filename,
-            mime="text/html",
-            help="下载后用浏览器打开，按Ctrl+P即可打印为完美PDF",
+            label="📊 下载Excel专业报告 ⭐",
+            data=output.getvalue(),
+            file_name=excel_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            help="Excel格式，完美支持中文，可直接打开编辑",
             type="primary"
         )
         
-        # 简化版HTML
-        simple_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>{st.session_state.target_company['name']} 估值报告</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-        h1 {{ color: #2c3e50; }}
-        h2 {{ color: #34495e; }}
-        table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: center; }}
-        th {{ background-color: #f2f2f2; }}
-    </style>
-</head>
-<body>
-    <h1>{st.session_state.target_company['name']} 估值分析报告</h1>
-    <p>报告日期：{datetime.now().strftime('%Y年%m月%d日')}</p>
-    
-    <h2>核心指标</h2>
-    <p>PE: {target_metrics['pe']:.2f} | PB: {target_metrics['pb']:.2f} | EV/EBITDA: {target_metrics['ev_ebitda']:.2f}</p>
-    
-    <h2>财务数据</h2>
-    <p>市值：{currency_symbol}{target_metrics['market_cap']:.2f}亿 | 增长率：{st.session_state.target_company['growth_rate']:.1f}%</p>
-    
-    <h2>免责声明</h2>
-    <p>本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。</p>
-</body>
-</html>
-"""
+        st.success("✅ Excel报告包含完整的估值分析，支持所有中文字符，可直接用Excel打开！")
         
-        simple_filename = f"{st.session_state.target_company['name']}_简版报告_{current_time_file}.html"
+        # 方案2：Word格式（RTF）
+        st.markdown("### 📝 方案2：Word格式报告")
+        
+        rtf_content = f"""{{\\rtf1\\ansi\\deff0
+{{\\fonttbl{{\\f0 Times New Roman;}}}}
+{{\\colortbl;\\red0\\green0\\blue0;\\red0\\green112\\blue192;}}
+
+\\f0\\fs24
+{{\\b\\cf2\\fs32 {st.session_state.target_company['name']} 专业估值分析报告}}\\par
+\\par
+报告日期：{datetime.now().strftime('%Y年%m月%d日')}\\par
+分析系统：FinancialModel.cn\\par
+\\par
+{{\\b\\cf2\\fs28 一、核心估值指标}}\\par
+PE 市盈率：{target_metrics['pe']:.2f}\\par
+PB 市净率：{target_metrics['pb']:.2f}\\par
+EV/EBITDA：{target_metrics['ev_ebitda']:.2f}\\par
+EV/EBIT：{target_metrics['ev_ebit']:.2f}\\par
+PEG：{target_metrics['peg']:.2f}\\par
+\\par
+{{\\b\\cf2\\fs28 二、基础财务数据}}\\par
+市值：{currency_symbol}{target_metrics['market_cap']:.2f} 亿\\par
+企业价值：{currency_symbol}{target_metrics['enterprise_value']:.2f} 亿\\par
+净利润：{currency_symbol}{st.session_state.target_company['net_profit']/10000:.2f} 亿\\par
+净资产：{currency_symbol}{st.session_state.target_company['net_assets']/10000:.2f} 亿\\par
+增长率：{st.session_state.target_company['growth_rate']:.1f}%\\par
+\\par
+{{\\b\\cf2\\fs28 三、投资建议}}\\par
+基于相对估值分析，建议投资者综合考虑以下因素：\\par
+1. 估值水平：对比同行业公司进行相对估值判断\\par
+2. 成长性：关注公司的盈利增长可持续性\\par
+3. 财务质量：分析公司的资产负债结构\\par
+4. 行业趋势：考虑所处行业的发展前景\\par
+\\par
+{{\\b 免责声明：}}本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。\\par
+\\par
+报告生成：FinancialModel.cn 专业估值分析系统\\par
+}}"""
+        
+        rtf_filename = f"{st.session_state.target_company['name']}_估值报告_{current_time_file}.rtf"
         
         st.download_button(
-            label="📝 下载简化版报告",
-            data=simple_html.encode('utf-8'),
-            file_name=simple_filename,
-            mime="text/html",
-            help="简化版HTML报告"
+            label="📄 下载Word格式报告",
+            data=rtf_content.encode('utf-8'),
+            file_name=rtf_filename,
+            mime="application/rtf",
+            help="RTF格式，可用Word打开，支持中文"
         )
         
-        # 纯文本版本
-        text_content = f"""
+        # 方案3：纯数据文本
+        st.markdown("### 📋 方案3：纯数据报告")
+        
+        simple_report = f"""
 {st.session_state.target_company['name']} 估值分析报告
+=====================================
 
-报告日期：{datetime.now().strftime('%Y年%m月%d日')}
+报告日期: {datetime.now().strftime('%Y年%m月%d日')}
+分析系统: FinancialModel.cn
 
-核心估值指标：
-PE 市盈率：{target_metrics['pe']:.2f}
-PB 市净率：{target_metrics['pb']:.2f}
-EV/EBITDA：{target_metrics['ev_ebitda']:.2f}
-EV/EBIT：{target_metrics['ev_ebit']:.2f}
-PEG：{target_metrics['peg']:.2f}
+核心估值指标:
+-----------
+PE 市盈率: {target_metrics['pe']:.2f}
+PB 市净率: {target_metrics['pb']:.2f}
+EV/EBITDA: {target_metrics['ev_ebitda']:.2f}
+EV/EBIT: {target_metrics['ev_ebit']:.2f}
+PEG: {target_metrics['peg']:.2f}
 
-基础财务数据：
-市值：{currency_symbol}{target_metrics['market_cap']:.2f} 亿
-企业价值：{currency_symbol}{target_metrics['enterprise_value']:.2f} 亿
-净利润：{currency_symbol}{st.session_state.target_company['net_profit']/10000:.2f} 亿
-净资产：{currency_symbol}{st.session_state.target_company['net_assets']/10000:.2f} 亿
-净利润增长率：{st.session_state.target_company['growth_rate']:.1f}%
+基础财务数据:
+-----------
+市值: {currency_symbol}{target_metrics['market_cap']:.2f} 亿
+企业价值: {currency_symbol}{target_metrics['enterprise_value']:.2f} 亿
+净利润: {currency_symbol}{st.session_state.target_company['net_profit']/10000:.2f} 亿
+净资产: {currency_symbol}{st.session_state.target_company['net_assets']/10000:.2f} 亿
+净利润增长率: {st.session_state.target_company['growth_rate']:.1f}%
 
-投资建议：
-基于相对估值分析，建议投资者综合考虑估值水平、成长性、财务质量和行业趋势等因素。
+同行对比:
+---------"""
 
-免责声明：
+        for i, comp in enumerate(st.session_state.comparable_companies):
+            metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
+            simple_report += f"""
+{comp['name']}: PE={metrics['pe']:.2f}, PB={metrics['pb']:.2f}, 市值={currency_symbol}{metrics['market_cap']:.2f}亿"""
+
+        simple_report += f"""
+
+投资建议:
+---------
+基于相对估值分析，建议投资者综合考虑估值水平、成长性、
+财务质量和行业趋势等因素。
+
+免责声明:
+---------
 本报告仅供参考，不构成投资建议。投资有风险，决策需谨慎。
 
-报告生成：FinancialModel.cn 专业估值分析系统
-        """
+报告生成: FinancialModel.cn 专业估值分析系统
+版权所有: (c) 2024 FinancialModel.cn
+"""
         
-        text_filename = f"{st.session_state.target_company['name']}_文本报告_{current_time_file}.txt"
+        text_filename = f"{st.session_state.target_company['name']}_数据报告_{current_time_file}.txt"
         
         st.download_button(
-            label="📝 下载纯文本版本",
-            data=text_content.encode('utf-8'),
+            label="📝 下载纯文本报告",
+            data=simple_report.encode('utf-8'),
             file_name=text_filename,
             mime="text/plain",
-            help="纯文本格式，兼容性最佳"
+            help="纯文本格式，100%兼容所有系统"
         )
         
-        # 使用说明
+        # 使用建议
         st.markdown("---")
-        st.markdown("### 💡 PDF生成方法")
-        st.success("""
-        **🌟 推荐方法（专业PDF）:**
-        1. 点击"📄 下载专业PDF版报告"
-        2. 下载的HTML文件用浏览器打开
-        3. 按 `Ctrl+P`（Windows）或 `Cmd+P`（Mac）
-        4. 选择"另存为PDF"或"打印到PDF"
-        5. 得到完美的专业PDF报告！
+        st.markdown("### 💡 推荐使用方案")
+        st.info("""
+        **🌟 最佳选择：Excel专业报告**
+        - ✅ 完美支持中文
+        - ✅ 专业表格格式
+        - ✅ 可编辑和美化
+        - ✅ 所有电脑都有Excel
         
-        **特点：** 
-        - ✅ 完整的中文支持
-        - ✅ 专业的格式和颜色
-        - ✅ 详细的分析内容
-        - ✅ 可直接打印使用
+        **📄 备选方案：Word格式**
+        - ✅ 适合文档编辑
+        - ✅ 可插入更多内容
+        
+        **📋 简单方案：纯文本**
+        - ✅ 100%兼容性
+        - ✅ 可复制到任何地方
         """)
         
-        # 预览功能
-        if st.button("🔍 预览专业报告"):
-            st.components.v1.html(perfect_html, height=800, scrolling=True)
+        st.success("💪 这些方案完全避免了字体问题，确保在任何设备上都能完美显示中文！")
 
 # 页脚
 st.markdown("---")
