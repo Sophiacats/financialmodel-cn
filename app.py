@@ -142,194 +142,258 @@ def calculate_metrics(company_data):
     except:
         return {'market_cap': 0, 'enterprise_value': 0, 'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
 
-# PDF生成函数
+# PDF生成函数 - 使用HTML转PDF方式
 def generate_pdf_report(target_metrics, target_company, comparable_metrics, comparable_companies, currency_symbol):
     try:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter, A4
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
+        import weasyprint
         
-        # 创建PDF缓冲区
-        buffer = io.BytesIO()
-        
-        # 创建PDF文档
-        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
-        
-        # 获取样式
-        styles = getSampleStyleSheet()
-        
-        # 自定义样式 - 使用英文内容避免字体问题
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=18,
-            spaceAfter=30,
-            alignment=1,  # 居中
-        )
-        
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
-            fontSize=14,
-            spaceAfter=12,
-        )
-        
-        story = []
-        
-        # 标题 - 使用英文避免字体问题
+        # 创建HTML内容
         current_time = datetime.now().strftime('%Y-%m-%d')
-        company_name_en = target_company['name'] if target_company['name'].isascii() else "Target Company"
-        title = Paragraph(f"{company_name_en} Valuation Analysis Report", title_style)
-        subtitle = Paragraph(f"Report Date: {current_time} | FinancialModel.cn", styles['Normal'])
         
-        story.append(title)
-        story.append(subtitle)
-        story.append(Spacer(1, 20))
-        
-        # 执行摘要
-        story.append(Paragraph("Executive Summary", heading_style))
-        summary_text = f"This report provides a comprehensive valuation analysis of {company_name_en} using relative valuation methods, comparing with {len(comparable_companies)} peer companies."
-        story.append(Paragraph(summary_text, styles['Normal']))
-        story.append(Spacer(1, 12))
-        
-        # 核心估值指标
-        story.append(Paragraph("1. Core Valuation Metrics", heading_style))
-        
-        # 创建估值指标表格
-        data = [
-            ['Metric', 'Value', 'Description'],
-            ['PE Ratio', f'{target_metrics["pe"]:.2f}', f'Payback period: {target_metrics["pe"]:.1f} years'],
-            ['PB Ratio', f'{target_metrics["pb"]:.2f}', f'Market-to-book ratio: {target_metrics["pb"]:.1f}x'],
-            ['EV/EBITDA', f'{target_metrics["ev_ebitda"]:.2f}', f'Enterprise multiple: {target_metrics["ev_ebitda"]:.1f}x'],
-            ['EV/EBIT', f'{target_metrics["ev_ebit"]:.2f}', f'EBIT multiple: {target_metrics["ev_ebit"]:.1f}x'],
-            ['PEG Ratio', f'{target_metrics["peg"]:.2f}', 'Growth-adjusted PE ratio']
-        ]
-        
-        table = Table(data)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        story.append(table)
-        story.append(Spacer(1, 12))
-        
-        # 基础财务数据
-        story.append(Paragraph("2. Financial Overview", heading_style))
-        
-        financial_data = [
-            ['Item', 'Amount'],
-            ['Market Cap', f'{currency_symbol}{target_metrics["market_cap"]:.2f}B'],
-            ['Enterprise Value', f'{currency_symbol}{target_metrics["enterprise_value"]:.2f}B'],
-            ['Net Income', f'{currency_symbol}{target_company["net_profit"]/10000:.2f}B'],
-            ['Net Assets', f'{currency_symbol}{target_company["net_assets"]/10000:.2f}B'],
-            ['Growth Rate', f'{target_company["growth_rate"]:.1f}%']
-        ]
-        
-        financial_table = Table(financial_data)
-        financial_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightblue),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        
-        story.append(financial_table)
-        story.append(Spacer(1, 12))
-        
-        # 同行业对比
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Valuation Analysis Report</title>
+    <style>
+        @page {{
+            size: A4;
+            margin: 2cm;
+        }}
+        body {{
+            font-family: Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #333;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 2px solid #0066cc;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }}
+        .company-name {{
+            font-size: 20pt;
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 5px;
+        }}
+        .report-title {{
+            font-size: 16pt;
+            margin-bottom: 10px;
+        }}
+        .report-date {{
+            font-size: 10pt;
+            color: #666;
+        }}
+        h2 {{
+            color: #0066cc;
+            font-size: 14pt;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 9pt;
+        }}
+        th {{
+            background-color: #0066cc;
+            color: white;
+            padding: 8px;
+            text-align: center;
+            font-weight: bold;
+        }}
+        td {{
+            padding: 6px 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }}
+        tr:nth-child(even) {{
+            background-color: #f9f9f9;
+        }}
+        .target-row {{
+            background-color: #e6f3ff !important;
+            font-weight: bold;
+        }}
+        .summary {{
+            background-color: #f0f8ff;
+            padding: 15px;
+            border-left: 4px solid #0066cc;
+            margin: 15px 0;
+        }}
+        .footer {{
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ccc;
+            text-align: center;
+            font-size: 9pt;
+            color: #666;
+        }}
+        .metric-box {{
+            display: inline-block;
+            width: 18%;
+            margin: 1%;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            text-align: center;
+        }}
+        .metric-value {{
+            font-size: 16pt;
+            font-weight: bold;
+            color: #0066cc;
+        }}
+        .metric-label {{
+            font-size: 8pt;
+            color: #666;
+            margin-top: 5px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">{target_company['name']}</div>
+        <div class="report-title">Professional Valuation Analysis Report</div>
+        <div class="report-date">Report Date: {current_time} | FinancialModel.cn</div>
+    </div>
+
+    <div class="summary">
+        <strong>Executive Summary:</strong> This report provides a comprehensive valuation analysis using relative valuation methods, 
+        comparing with {len(comparable_companies)} peer companies to assess the investment value.
+    </div>
+
+    <h2>1. Core Valuation Metrics</h2>
+    <div style="text-align: center;">
+        <div class="metric-box">
+            <div class="metric-value">{target_metrics['pe']:.2f}</div>
+            <div class="metric-label">PE Ratio</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-value">{target_metrics['pb']:.2f}</div>
+            <div class="metric-label">PB Ratio</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-value">{target_metrics['ev_ebitda']:.2f}</div>
+            <div class="metric-label">EV/EBITDA</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-value">{target_metrics['ev_ebit']:.2f}</div>
+            <div class="metric-label">EV/EBIT</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-value">{target_metrics['peg']:.2f}</div>
+            <div class="metric-label">PEG Ratio</div>
+        </div>
+    </div>
+
+    <h2>2. Financial Overview</h2>
+    <table>
+        <tr>
+            <th>Financial Item</th>
+            <th>Amount</th>
+        </tr>
+        <tr>
+            <td>Market Capitalization</td>
+            <td>{currency_symbol}{target_metrics['market_cap']:.2f} Billion</td>
+        </tr>
+        <tr>
+            <td>Enterprise Value</td>
+            <td>{currency_symbol}{target_metrics['enterprise_value']:.2f} Billion</td>
+        </tr>
+        <tr>
+            <td>Net Income</td>
+            <td>{currency_symbol}{target_company['net_profit']/10000:.2f} Billion</td>
+        </tr>
+        <tr>
+            <td>Net Assets</td>
+            <td>{currency_symbol}{target_company['net_assets']/10000:.2f} Billion</td>
+        </tr>
+        <tr>
+            <td>Growth Rate</td>
+            <td>{target_company['growth_rate']:.1f}%</td>
+        </tr>
+    </table>
+"""
+
+        # 添加同行对比表格
         if comparable_metrics:
-            story.append(Paragraph("3. Peer Comparison Analysis", heading_style))
+            html_content += """
+    <h2>3. Peer Comparison Analysis</h2>
+    <table>
+        <tr>
+            <th>Company</th>
+            <th>PE</th>
+            <th>PB</th>
+            <th>EV/EBITDA</th>
+            <th>PEG</th>
+            <th>Market Cap</th>
+        </tr>
+"""
             
-            # 创建对比表格
-            comparison_data = [['Company', 'PE', 'PB', 'EV/EBITDA', 'PEG', f'Market Cap({currency_symbol}B)']]
+            # 目标公司行
+            html_content += f"""
+        <tr class="target-row">
+            <td>{target_company['name']} (Target)</td>
+            <td>{target_metrics['pe']:.2f}</td>
+            <td>{target_metrics['pb']:.2f}</td>
+            <td>{target_metrics['ev_ebitda']:.2f}</td>
+            <td>{target_metrics['peg']:.2f}</td>
+            <td>{currency_symbol}{target_metrics['market_cap']:.2f}B</td>
+        </tr>
+"""
             
-            # 添加目标公司
-            comparison_data.append([
-                f"{company_name_en} (Target)",
-                f"{target_metrics['pe']:.2f}",
-                f"{target_metrics['pb']:.2f}",
-                f"{target_metrics['ev_ebitda']:.2f}",
-                f"{target_metrics['peg']:.2f}",
-                f"{target_metrics['market_cap']:.2f}"
-            ])
-            
-            # 添加可比公司
+            # 可比公司行
             for i, comp in enumerate(comparable_companies):
                 metrics = comparable_metrics[i] if i < len(comparable_metrics) else calculate_metrics(comp)
-                comp_name = comp['name'] if comp['name'].isascii() else f"Peer {i+1}"
-                comparison_data.append([
-                    comp_name,
-                    f"{metrics['pe']:.2f}",
-                    f"{metrics['pb']:.2f}",
-                    f"{metrics['ev_ebitda']:.2f}",
-                    f"{metrics['peg']:.2f}",
-                    f"{metrics['market_cap']:.2f}"
-                ])
+                html_content += f"""
+        <tr>
+            <td>{comp['name']}</td>
+            <td>{metrics['pe']:.2f}</td>
+            <td>{metrics['pb']:.2f}</td>
+            <td>{metrics['ev_ebitda']:.2f}</td>
+            <td>{metrics['peg']:.2f}</td>
+            <td>{currency_symbol}{metrics['market_cap']:.2f}B</td>
+        </tr>
+"""
             
-            comparison_table = Table(comparison_data)
-            comparison_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('BACKGROUND', (0, 1), (-1, 1), colors.lightgreen),  # 目标公司行
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 2), (-1, -1), colors.white),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(comparison_table)
-            story.append(Spacer(1, 12))
-        
-        # 投资建议
-        story.append(Paragraph("4. Investment Recommendation", heading_style))
-        investment_advice = """
-Based on this valuation analysis, investors should consider the following factors:
+            html_content += "    </table>"
 
-1. Valuation Level: Compare with industry peers for relative valuation assessment
-2. Growth Potential: Focus on sustainable earnings growth capability
-3. Financial Quality: Analyze balance sheet structure and asset quality
-4. Industry Trends: Consider sector development prospects and cycles
+        # 投资建议部分
+        html_content += """
+    <h2>4. Investment Recommendation</h2>
+    <p>Based on this valuation analysis, investors should consider the following factors:</p>
+    <ul>
+        <li><strong>Valuation Level:</strong> Compare with industry peers for relative assessment</li>
+        <li><strong>Growth Potential:</strong> Focus on sustainable earnings growth capability</li>
+        <li><strong>Financial Quality:</strong> Analyze balance sheet structure and asset quality</li>
+        <li><strong>Industry Trends:</strong> Consider sector development prospects</li>
+    </ul>
+    
+    <div class="summary">
+        <strong>Risk Disclaimer:</strong> This report is for reference only and does not constitute investment advice. 
+        Investment involves risks and decisions should be made prudently.
+    </div>
 
-Risk Disclaimer: This report is for reference only and does not constitute investment advice. 
-Investment involves risks and decisions should be made prudently.
-        """
-        story.append(Paragraph(investment_advice, styles['Normal']))
-        story.append(Spacer(1, 20))
+    <div class="footer">
+        Generated by FinancialModel.cn Professional Valuation System | © 2024 FinancialModel.cn
+    </div>
+</body>
+</html>
+"""
         
-        # 页脚
-        footer_text = "Generated by FinancialModel.cn Professional Valuation System | © 2024 FinancialModel.cn"
-        story.append(Paragraph(footer_text, styles['Normal']))
-        
-        # 构建PDF
-        doc.build(story)
-        
-        # 获取PDF数据
-        pdf_data = buffer.getvalue()
-        buffer.close()
-        
-        return pdf_data
+        # 转换为PDF
+        pdf_file = weasyprint.HTML(string=html_content).write_pdf()
+        return pdf_file
         
     except ImportError:
+        return None
+    except Exception as e:
+        st.error(f"PDF generation error: {str(e)}")
         return None
 
 # 根据选择的标签页显示内容
