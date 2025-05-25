@@ -1239,9 +1239,9 @@ elif selected_tab == "📄 报告导出":
             ["基础财务数据", ""],
             ["市值(亿)", f"{target_metrics['market_cap']:.2f}"],
             ["企业价值(亿)", f"{target_metrics['enterprise_value']:.2f}"],
-            ["净利润(亿)", f"{target_company['net_profit']/10000:.2f}"],
-            ["净资产(亿)", f"{target_company['net_assets']/10000:.2f}"],
-            ["增长率(%)", f"{target_company['growth_rate']:.1f}"],
+            ["净利润(亿)", f"{st.session_state.target_company['net_profit']/10000:.2f}"],
+            ["净资产(亿)", f"{st.session_state.target_company['net_assets']/10000:.2f}"],
+            ["增长率(%)", f"{st.session_state.target_company['growth_rate']:.1f}"],
             ["", ""],
             ["同行对比分析", ""],
             ["公司名称", "PE", "PB", "EV/EBITDA", "市值(亿)"],
@@ -1249,7 +1249,7 @@ elif selected_tab == "📄 报告导出":
         
         # 添加目标公司
         excel_report_data.append([
-            f"{target_company['name']}(目标)",
+            f"{st.session_state.target_company['name']}(目标)",
             f"{target_metrics['pe']:.2f}",
             f"{target_metrics['pb']:.2f}",
             f"{target_metrics['ev_ebitda']:.2f}",
