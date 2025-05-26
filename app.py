@@ -1,4 +1,383 @@
-import streamlit as st
+elif selected_tab == "🏢 DCF绝对估值":
+    
+    st.header("🏢 DCF绝对估值模型")
+    st.markdown("#### 基于未来现金流折现的内在价值评估")
+    
+    # 模型说明
+    with st.expander("📚 DCF模型原理与使用说明"):
+        st.markdown("""
+        **DCF (Discounted Cash Flow) 模型原理：**
+        
+        **核心公式：** 企业价值 = Σ(未来自由现金流的现值) + 永续价值的现值
+        
+        **计算步骤：**
+        1. **现金流预测：** 收入 → EBIT → NOPAT → 自由现金流
+        2. **折现计算：** 使用WACC对未来现金流折现
+        3. **永续价值：** 使用Gordon增长模型计算终值
+        4. **企业价值：** 现金流现值总和 + 永续价值现值
+        5. **股东价值：** 企业价值 - 净负债
+        
+        **三段式增长模型：**
+        - **高增长期：** 公司快速扩张阶段
+        - **稳定期：** 增长逐渐放缓阶段  
+        - **永续期：** 长期稳定增长阶段
+        
+        **关键假设：**
+        - WACC：加权平均资本成本，反映投资风险
+        - 增长率：收入增长预期
+        - 利润率：运营效率指标
+        - 资本支出：维持增长所需投资
+        """)
+    
+    # 参数输入区域
+    st.markdown("### 📊 模型参数设置")
+    
+    # 创建锁定/编辑模式切换
+    edit_mode = st.checkbox("🔓 解锁参数编辑", help="勾选后可编辑所有参数，取消勾选锁定参数")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("#### 🏢 公司基础信息")
+        st.session_state.dcf_params['company_name'] = st.text_input(
+            "公司名称", 
+            value=st.session_state.dcf_params['company_name'],
+            disabled=not edit_mode
+        )
+        
+        st.session_state.dcf_params['initial_revenue'] = st.number_input(
+            "初始年收入 (万元)", 
+            value=st.session_state.dcf_params['initial_revenue'],
+            step=1000.0,
+            disabled=not edit_mode,
+            help="公司当前年度或预测基准年收入"
+        )
+        
+        st.session_state.dcf_params['ebit_margin'] = st.slider(
+            "EBIT利润率 (%)", 
+            min_value=0.0, max_value=50.0,
+            value=st.session_state.dcf_params['ebit_margin'],
+            step=0.5,
+            disabled=not edit_mode,
+            help="息税前利润占收入的比例"
+        )
+        
+        st.session_state.dcf_params['tax_rate'] = st.slider(
+            "企业所得税率 (%)", 
+            min_value=0.0, max_value=50.0,
+            value=st.session_state.dcf_params['tax_rate'],
+            step=1.0,
+            disabled=not edit_mode,
+            help="公司适用的企业所得税率"
+        )
+    
+    with col2:
+        st.markdown("#### 📈 增长假设参数")
+        st.session_state.dcf_params['high_growth_years'] = st.selectbox(
+            "高增长期年数", 
+            options=[3, 4, 5, 6, 7],
+            index=2,  # 默认5年
+            disabled=not edit_mode,
+            help="公司高速增长的年数"
+        )
+        
+        st.session_state.dcf_params['high_growth_rate'] = st.slider(
+            "高增长期增长率 (%)", 
+            min_value=0.0, max_value=50.0,
+            value=st.session_state.dcf_params['high_growth_rate'],
+            step=1.0,
+            disabled=not edit_mode,
+            help="高增长期的年收入增长率"
+        )
+        
+        st.session_state.dcf_params['stable_growth_years'] = st.selectbox(
+            "稳定期年数", 
+            options=[3, 4, 5, 6, 7],
+            index=2,  # 默认5年
+            disabled=not edit_mode,
+            help="增长放缓的稳定期年数"
+        )
+        
+        st.session_state.dcf_params['stable_growth_rate'] = st.slider(
+            "稳定期增长率 (%)", 
+            min_value=0.0, max_value=20.0,
+            value=st.session_state.dcf_params['stable_growth_rate'],
+            step=0.5,
+            disabled=not edit_mode,
+            help="稳定期的年收入增长率"
+        )
+        
+        st.session_state.dcf_params['terminal_growth'] = st.slider(
+            "永续增长率 (%)", 
+            min_value=0.0, max_value=5.0,
+            value=st.session_state.dcf_params['terminal_growth'],
+            step=0.1,
+            disabled=not edit_mode,
+            help="长期永续增长率，通常接近GDP增长率"
+        )
+    
+    with col3:
+        st.markdown("#### 💰 财务结构参数")
+        st.session_state.dcf_params['wacc'] = st.slider(
+            "WACC 加权平均资本成本 (%)", 
+            min_value=1.0, max_value=20.0,
+            value=st.session_state.dcf_params['wacc'],
+            step=0.1,
+            disabled=not edit_mode,
+            help="反映投资风险的折现率"
+        )
+        
+        st.session_state.dcf_params['capex_rate'] = st.slider(
+            "资本支出率 (占收入%)", 
+            min_value=0.0, max_value=15.0,
+            value=st.session_state.dcf_params['capex_rate'],
+            step=0.5,
+            disabled=not edit_mode,
+            help="维持增长所需的资本投入"
+        )
+        
+        st.session_state.dcf_params['wc_change_rate'] = st.slider(
+            "营运资本变化率 (占收入%)", 
+            min_value=-5.0, max_value=10.0,
+            value=st.session_state.dcf_params['wc_change_rate'],
+            step=0.5,
+            disabled=not edit_mode,
+            help="营运资本变化对现金流的影响"
+        )
+        
+        st.session_state.dcf_params['net_debt'] = st.number_input(
+            "净负债 (万元)", 
+            value=st.session_state.dcf_params['net_debt'],
+            step=1000.0,
+            disabled=not edit_mode,
+            help="有息负债减去现金的净额"
+        )
+        
+        st.session_state.dcf_params['total_shares'] = st.number_input(
+            "总股本 (万股)", 
+            value=st.session_state.dcf_params['total_shares'],
+            step=100.0,
+            disabled=not edit_mode,
+            help="公司发行在外的股份总数"
+        )
+    
+    # 计算DCF估值
+    st.markdown("### 🧮 DCF估值计算结果")
+    
+    dcf_result = calculate_dcf_valuation(st.session_state.dcf_params)
+    
+    if dcf_result:
+        
+        # 核心结果展示
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #2E86C1; font-size: 1.8rem; margin: 0;">{dcf_result['enterprise_value']:.0f}</h3>
+                <p style="margin: 0; color: #6b7280;">企业价值 (万元)</p>
+                <small style="color: #9ca3af;">现金流现值+永续价值</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            equity_value = dcf_result['enterprise_value'] - st.session_state.dcf_params['net_debt']
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #27AE60; font-size: 1.8rem; margin: 0;">{equity_value:.0f}</h3>
+                <p style="margin: 0; color: #6b7280;">股东价值 (万元)</p>
+                <small style="color: #9ca3af;">企业价值-净负债</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            share_price = equity_value / st.session_state.dcf_params['total_shares']
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #8E44AD; font-size: 1.8rem; margin: 0;">{share_price:.2f}</h3>
+                <p style="margin: 0; color: #6b7280;">每股价值 (元)</p>
+                <small style="color: #9ca3af;">股东价值÷总股本</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            terminal_percentage = (dcf_result['terminal_pv'] / dcf_result['enterprise_value']) * 100
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #E67E22; font-size: 1.8rem; margin: 0;">{terminal_percentage:.1f}%</h3>
+                <p style="margin: 0; color: #6b7280;">永续价值占比</p>
+                <small style="color: #9ca3af;">终值敏感性指标</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # 现金流明细展示
+        st.markdown("### 📋 现金流预测明细")
+        
+        # 创建现金流预测表格
+        cf_data = []
+        for proj in dcf_result['projections']:
+            cf_data.append({
+                '年份': f"第{proj['year']}年",
+                '增长阶段': proj['period'],
+                '收入 (万元)': f"{proj['revenue']:,.0f}",
+                'EBIT (万元)': f"{proj['ebit']:,.0f}",
+                'NOPAT (万元)': f"{proj['nopat']:,.0f}",
+                '资本支出 (万元)': f"{proj['capex']:,.0f}",
+                '营运资本变化 (万元)': f"{proj['wc_change']:,.0f}",
+                '自由现金流 (万元)': f"{proj['fcf']:,.0f}",
+                '折现因子': f"{proj['discount_factor']:.4f}",
+                '现值 (万元)': f"{proj['present_value']:,.0f}"
+            })
+        
+        # 添加永续价值行
+        cf_data.append({
+            '年份': f"第{dcf_result['years']+1}年+",
+            '增长阶段': '永续期',
+            '收入 (万元)': '-',
+            'EBIT (万元)': '-',
+            'NOPAT (万元)': '-',
+            '资本支出 (万元)': '-',
+            '营运资本变化 (万元)': '-',
+            '自由现金流 (万元)': f"{dcf_result['terminal_value']:,.0f}",
+            '折现因子': f"{dcf_result['terminal_pv']/dcf_result['terminal_value']:.4f}",
+            '现值 (万元)': f"{dcf_result['terminal_pv']:,.0f}"
+        })
+        
+        cf_df = pd.DataFrame(cf_data)
+        st.dataframe(cf_df, use_container_width=True)
+        
+        # 现金流可视化
+        st.markdown("### 📊 现金流可视化分析")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 现金流趋势图
+            years = [f"年{p['year']}" for p in dcf_result['projections']]
+            fcf_values = [p['fcf'] for p in dcf_result['projections']]
+            pv_values = [p['present_value'] for p in dcf_result['projections']]
+            
+            fig_fcf = go.Figure()
+            fig_fcf.add_trace(go.Scatter(
+                x=years, y=fcf_values, 
+                mode='lines+markers',
+                name='自由现金流',
+                line=dict(color='#3498db', width=3)
+            ))
+            fig_fcf.add_trace(go.Scatter(
+                x=years, y=pv_values,
+                mode='lines+markers', 
+                name='现值',
+                line=dict(color='#e74c3c', width=3)
+            ))
+            fig_fcf.update_layout(
+                title="现金流趋势分析",
+                xaxis_title="年份",
+                yaxis_title="现金流 (万元)",
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_fcf, use_container_width=True)
+        
+        with col2:
+            # 价值构成饼图
+            labels = ['现金流现值', '永续价值现值']
+            values = [dcf_result['fcf_pv_sum'], dcf_result['terminal_pv']]
+            
+            fig_pie = go.Figure(data=[go.Pie(
+                labels=labels, 
+                values=values,
+                hole=0.4,
+                marker_colors=['#3498db', '#e74c3c']
+            )])
+            fig_pie.update_layout(
+                title="企业价值构成",
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        # 敏感性分析
+        st.markdown("### 🎯 敏感性分析")
+        
+        with st.expander("🔍 查看敏感性分析详情", expanded=True):
+            sensitivity_results = sensitivity_analysis(st.session_state.dcf_params)
+            
+            if sensitivity_results:
+                # 创建敏感性分析表格
+                wacc_values = sorted(list(set([r['wacc'] for r in sensitivity_results])))
+                growth_values = sorted(list(set([r['terminal_growth'] for r in sensitivity_results])))
+                
+                # 构建矩阵
+                sensitivity_matrix = []
+                for growth in growth_values:
+                    row = [f"{growth:.1f}%"]
+                    for wacc in wacc_values:
+                        for r in sensitivity_results:
+                            if abs(r['wacc'] - wacc) < 0.001 and abs(r['terminal_growth'] - growth) < 0.001:
+                                row.append(f"{r['enterprise_value']:,.0f}")
+                                break
+                    sensitivity_matrix.append(row)
+                
+                # 创建表格
+                columns = ['永续增长率 \\ WACC'] + [f"{w:.1f}%" for w in wacc_values]
+                sens_df = pd.DataFrame(sensitivity_matrix, columns=columns)
+                
+                st.markdown("**企业价值敏感性分析 (万元)**")
+                st.dataframe(sens_df, use_container_width=True)
+                
+                # 敏感性分析图表
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # WACC敏感性
+                    base_growth = st.session_state.dcf_params['terminal_growth']
+                    wacc_impact = [r for r in sensitivity_results if abs(r['terminal_growth'] - base_growth) < 0.001]
+                    wacc_x = [r['wacc'] for r in wacc_impact]
+                    wacc_y = [r['enterprise_value'] for r in wacc_impact]
+                    
+                    fig_wacc = go.Figure()
+                    fig_wacc.add_trace(go.Scatter(
+                        x=wacc_x, y=wacc_y,
+                        mode='lines+markers',
+                        name='企业价值',
+                        line=dict(color='#9b59b6', width=3)
+                    ))
+                    fig_wacc.update_layout(
+                        title="WACC敏感性分析",
+                        xaxis_title="WACC (%)",
+                        yaxis_title="企业价值 (万元)",
+                        template="plotly_white"
+                    )
+                    st.plotly_chart(fig_wacc, use_container_width=True)
+                
+                with col2:
+                    # 增长率敏感性
+                    base_wacc = st.session_state.dcf_params['wacc']
+                    growth_impact = [r for r in sensitivity_results if abs(r['wacc'] - base_wacc) < 0.001]
+                    growth_x = [r['terminal_growth'] for r in growth_impact]
+                    growth_y = [r['enterprise_value'] for r in growth_impact]
+                    
+                    fig_growth = go.Figure()
+                    fig_growth.add_trace(go.Scatter(
+                        x=growth_x, y=growth_y,
+                        mode='lines+markers',
+                        name='企业价值',
+                        line=dict(color='#f39c12', width=3)
+                    ))
+                    fig_growth.update_layout(
+                        title="永续增长率敏感性分析",
+                        xaxis_title="永续增长率 (%)",
+                        yaxis_title="企业价值 (万元)",
+                        template="plotly_white"
+                    )
+                    st.plotly_chart(fig_growth, use_container_width=True)
+        
+        # 估值总结
+        st.markdown("### 📝 DCF估值总结")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 💎 关键估值结论import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
@@ -82,11 +461,11 @@ if template_level == "入门版":
     available_tabs = ["📈 估值计算", "📊 对比分析"]
     template_info = "🟡 入门版：基础PE/PB估值功能"
 elif template_level == "进阶版":
-    available_tabs = ["📈 股票估值", "🏢 DCF估值", "📋 数据管理", "📊 对比分析", "💡 投资建议"]
-    template_info = "🔵 进阶版：完整估值分析 + DCF建模"
+    available_tabs = ["📈 估值计算", "📋 数据管理", "📊 对比分析", "💡 投资建议"]
+    template_info = "🔵 进阶版：完整估值分析 + 投资建议"
 else:  # 专业版
-    available_tabs = ["📈 股票估值", "🏢 DCF估值", "📋 数据管理", "📊 对比分析", "💡 投资建议", "📄 报告导出"]
-    template_info = "🟢 专业版：全功能 + DCF建模 + 报告导出"
+    available_tabs = ["📈 估值计算", "🏢 DCF绝对估值", "📋 数据管理", "📊 对比分析", "💡 投资建议", "📄 报告导出"]
+    template_info = "🟢 专业版：全功能 + DCF模型 + 报告导出"
 
 # 显示模板信息
 st.sidebar.info(template_info)
@@ -122,25 +501,160 @@ if 'comparable_companies' not in st.session_state:
         {'name': '同行D', 'stock_price': 48.90, 'total_shares': 13.2, 'net_profit': 38000, 'net_assets': 195000, 'ebitda': 68000, 'ebit': 55000, 'cash': 28000, 'debt': 88000, 'growth_rate': 11.7}
     ]
 
-# 计算估值指标的函数
-def calculate_metrics(company_data):
+# DCF估值模型计算函数
+def calculate_dcf_valuation(dcf_params):
+    """
+    计算DCF绝对估值
+    包含三段式增长模型、敏感性分析等专业功能
+    """
     try:
-        market_cap = company_data['stock_price'] * company_data['total_shares']
-        enterprise_value = market_cap + company_data['debt'] - company_data['cash']
+        # 基础参数
+        initial_revenue = dcf_params['initial_revenue']
+        ebit_margin = dcf_params['ebit_margin'] / 100
+        tax_rate = dcf_params['tax_rate'] / 100
+        capex_rate = dcf_params['capex_rate'] / 100
+        wc_change_rate = dcf_params['wc_change_rate'] / 100
+        wacc = dcf_params['wacc'] / 100
+        terminal_growth = dcf_params['terminal_growth'] / 100
         
-        metrics = {
-            'market_cap': round(market_cap, 2),
-            'enterprise_value': round(enterprise_value, 2),
-            'pe': round(market_cap / (company_data['net_profit'] / 10000), 2) if company_data['net_profit'] > 0 else 0,
-            'pb': round(market_cap / (company_data['net_assets'] / 10000), 2) if company_data['net_assets'] > 0 else 0,
-            'ev_ebitda': round(enterprise_value / (company_data['ebitda'] / 10000), 2) if company_data['ebitda'] > 0 else 0,
-            'ev_ebit': round(enterprise_value / (company_data['ebit'] / 10000), 2) if company_data['ebit'] > 0 else 0,
-            'peg': round((market_cap / (company_data['net_profit'] / 10000)) / company_data['growth_rate'], 2) if company_data['growth_rate'] > 0 and company_data['net_profit'] > 0 else 0
+        # 三段式增长参数
+        high_growth_years = dcf_params['high_growth_years']
+        stable_growth_years = dcf_params['stable_growth_years']
+        high_growth_rate = dcf_params['high_growth_rate'] / 100
+        stable_growth_rate = dcf_params['stable_growth_rate'] / 100
+        
+        # 计算现金流预测
+        years = high_growth_years + stable_growth_years
+        projections = []
+        
+        for year in range(1, years + 1):
+            if year <= high_growth_years:
+                growth_rate = high_growth_rate
+                period = "高增长期"
+            else:
+                growth_rate = stable_growth_rate
+                period = "稳定期"
+            
+            # 收入预测
+            if year == 1:
+                revenue = initial_revenue * (1 + growth_rate)
+            else:
+                revenue = projections[-1]['revenue'] * (1 + growth_rate)
+            
+            # EBIT计算
+            ebit = revenue * ebit_margin
+            
+            # NOPAT计算 (税后净营业利润)
+            nopat = ebit * (1 - tax_rate)
+            
+            # 资本支出
+            capex = revenue * capex_rate
+            
+            # 营运资本变化
+            wc_change = revenue * wc_change_rate
+            
+            # 自由现金流 (FCFF)
+            fcf = nopat - capex - wc_change
+            
+            # 折现因子
+            discount_factor = 1 / ((1 + wacc) ** year)
+            
+            # 现值
+            present_value = fcf * discount_factor
+            
+            projections.append({
+                'year': year,
+                'period': period,
+                'revenue': revenue,
+                'ebit': ebit,
+                'nopat': nopat,
+                'capex': capex,
+                'wc_change': wc_change,
+                'fcf': fcf,
+                'discount_factor': discount_factor,
+                'present_value': present_value
+            })
+        
+        # 计算永续价值 (Terminal Value)
+        terminal_fcf = projections[-1]['fcf'] * (1 + terminal_growth)
+        terminal_value = terminal_fcf / (wacc - terminal_growth)
+        terminal_pv = terminal_value / ((1 + wacc) ** years)
+        
+        # 企业总价值
+        fcf_pv_sum = sum([p['present_value'] for p in projections])
+        enterprise_value = fcf_pv_sum + terminal_pv
+        
+        # 计算结果汇总
+        results = {
+            'projections': projections,
+            'fcf_pv_sum': fcf_pv_sum,
+            'terminal_value': terminal_value,
+            'terminal_pv': terminal_pv,
+            'enterprise_value': enterprise_value,
+            'years': years
         }
         
-        return metrics
-    except:
-        return {'market_cap': 0, 'enterprise_value': 0, 'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
+        return results
+        
+    except Exception as e:
+        st.error(f"DCF计算错误: {str(e)}")
+        return None
+
+# 敏感性分析函数
+def sensitivity_analysis(base_params, wacc_range=0.01, growth_range=0.005):
+    """
+    进行敏感性分析
+    分析WACC和增长率变化对估值的影响
+    """
+    base_wacc = base_params['wacc'] / 100
+    base_growth = base_params['terminal_growth'] / 100
+    
+    wacc_scenarios = [base_wacc - wacc_range, base_wacc, base_wacc + wacc_range]
+    growth_scenarios = [base_growth - growth_range, base_growth, base_growth + growth_range]
+    
+    sensitivity_results = []
+    
+    for wacc in wacc_scenarios:
+        for growth in growth_scenarios:
+            # 修改参数
+            temp_params = base_params.copy()
+            temp_params['wacc'] = wacc * 100
+            temp_params['terminal_growth'] = growth * 100
+            
+            # 计算DCF
+            result = calculate_dcf_valuation(temp_params)
+            if result:
+                sensitivity_results.append({
+                    'wacc': wacc * 100,
+                    'terminal_growth': growth * 100,
+                    'enterprise_value': result['enterprise_value']
+                })
+    
+    return sensitivity_results
+
+# 初始化DCF参数
+if 'dcf_params' not in st.session_state:
+    st.session_state.dcf_params = {
+        # 基础参数
+        'company_name': '目标公司',
+        'initial_revenue': 10000,  # 万元
+        'ebit_margin': 15.0,  # %
+        'tax_rate': 25.0,  # %
+        'capex_rate': 5.0,  # 占收入比例 %
+        'wc_change_rate': 2.0,  # 营运资本变化率 %
+        'wacc': 10.0,  # %
+        'terminal_growth': 3.0,  # %
+        
+        # 三段式增长参数
+        'high_growth_years': 5,
+        'stable_growth_years': 5,
+        'high_growth_rate': 20.0,  # %
+        'stable_growth_rate': 8.0,  # %
+        
+        # 股东价值相关
+        'net_debt': 5000,  # 万元
+        'total_shares': 1000,  # 万股
+    }
 
 # 生成完美的PDF打印版HTML
 def generate_print_ready_html(target_metrics, target_company, comparable_metrics, comparable_companies, currency_symbol):
@@ -572,7 +1086,7 @@ def generate_print_ready_html(target_metrics, target_company, comparable_metrics
     return html_content
 
 # 根据选择的标签页显示内容
-if selected_tab == "📈 股票估值":
+if selected_tab == "📈 估值计算":
     
     # 目标公司数据输入
     st.header("🎯 目标公司数据输入")
