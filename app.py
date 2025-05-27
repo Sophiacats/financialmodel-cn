@@ -937,40 +937,272 @@ elif selected_model == "DCF估值模型":
                             # 报告内容预览
                             st.success("✅ 报告生成完成！")
                             
-                            # 创建报告预览
-                            report_content = f"""
-# {report_title}
+                            # 创建专业的HTML报告
+                            report_html = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{report_title}</title>
+    <style>
+        @media print {{
+            .no-print {{ display: none; }}
+        }}
+        body {{
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }}
+        .header h1 {{
+            color: #1f2937;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }}
+        .header .meta {{
+            color: #6b7280;
+            font-size: 14px;
+        }}
+        .section {{
+            margin-bottom: 30px;
+        }}
+        .section h2 {{
+            color: #3b82f6;
+            border-left: 4px solid #3b82f6;
+            padding-left: 15px;
+            font-size: 20px;
+        }}
+        .section h3 {{
+            color: #1f2937;
+            font-size: 16px;
+            margin-top: 20px;
+        }}
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }}
+        .metric-card {{
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+            text-align: center;
+        }}
+        .metric-value {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #3b82f6;
+            margin-bottom: 5px;
+        }}
+        .metric-label {{
+            color: #6b7280;
+            font-size: 14px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th, td {{
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: right;
+        }}
+        th {{
+            background-color: #f3f4f6;
+            font-weight: bold;
+            color: #1f2937;
+        }}
+        .assumptions {{
+            background: #dbeafe;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }}
+        .risk-warning {{
+            background: #fef3c7;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #f59e0b;
+            margin: 20px 0;
+        }}
+        .footer {{
+            text-align: center;
+            color: #6b7280;
+            font-size: 12px;
+            margin-top: 40px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+        }}
+        .print-button {{
+            background: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }}
+        .print-button:hover {{
+            background: #2563eb;
+        }}
+    </style>
+</head>
+<body>
+    <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+        <button class="print-button" onclick="window.print()">🖨️ 打印/保存为PDF</button>
+        <button class="print-button" onclick="downloadReport()">💾 下载HTML报告</button>
+    </div>
 
-**分析师:** {analyst_name}  
-**报告日期:** {report_date}  
-**评级建议:** 基于DCF分析
+    <div class="header">
+        <h1>{report_title}</h1>
+        <div class="meta">
+            <p><strong>分析师:</strong> {analyst_name} | <strong>报告日期:</strong> {report_date}</p>
+            <p><strong>生成平台:</strong> FinancialModel.cn 专业版</p>
+        </div>
+    </div>
 
-## 执行摘要
+    <div class="section">
+        <h2>📋 执行摘要</h2>
+        <p>基于贴现现金流(DCF)分析，{st.session_state.dcf_data['company_name']}的内在价值为<strong>{currency_symbol}{dcf_result['share_price']:.2f}每股</strong>。</p>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">{currency_symbol}{dcf_result['enterprise_value']:.1f}M</div>
+                <div class="metric-label">企业价值</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{currency_symbol}{dcf_result['equity_value']:.1f}M</div>
+                <div class="metric-label">股权价值</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{currency_symbol}{dcf_result['share_price']:.2f}</div>
+                <div class="metric-label">每股内在价值</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%</div>
+                <div class="metric-label">终值占比</div>
+            </div>
+        </div>
+    </div>
 
-{st.session_state.dcf_data['company_name']}的DCF估值分析显示，公司内在价值为{currency_symbol}{dcf_result['share_price']:.2f}每股。
+    <div class="section">
+        <h2>🔢 关键假设</h2>
+        <div class="assumptions">
+            <h3>核心估值参数</h3>
+            <ul>
+                <li><strong>加权平均资本成本(WACC):</strong> {st.session_state.dcf_data['wacc']:.1f}%</li>
+                <li><strong>永续增长率:</strong> {st.session_state.dcf_data['terminal_growth']:.1f}%</li>
+                <li><strong>预测期:</strong> {st.session_state.dcf_data['forecast_years']}年</li>
+                <li><strong>自由现金流率:</strong> {st.session_state.dcf_data['fcf_margin']:.1f}%</li>
+                <li><strong>基期收入:</strong> {st.session_state.dcf_data['base_revenue']:.1f}百万{currency_symbol}</li>
+            </ul>
+        </div>
+    </div>
 
-### 核心估值指标
-- **企业价值:** {currency_symbol}{dcf_result['enterprise_value']:.1f}百万
-- **股权价值:** {currency_symbol}{dcf_result['equity_value']:.1f}百万  
-- **每股内在价值:** {currency_symbol}{dcf_result['share_price']:.2f}
-- **终值占比:** {(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%
-
-### 关键假设
-- **WACC:** {st.session_state.dcf_data['wacc']:.1f}%
-- **永续增长率:** {st.session_state.dcf_data['terminal_growth']:.1f}%
-- **预测期:** {st.session_state.dcf_data['forecast_years']}年
-- **自由现金流率:** {st.session_state.dcf_data['fcf_margin']:.1f}%
-
-### 风险提示
-1. 模型基于当前市场环境和公司基本面假设
-2. 实际结果可能因市场变化而有所不同
-3. 建议结合其他估值方法进行综合判断
-
----
-*本报告由 FinancialModel.cn 专业金融建模平台生成*
-                            """
+    <div class="section">
+        <h2>📊 现金流预测与估值分解</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>年份</th>
+                    <th>自由现金流(百万{currency_symbol})</th>
+                    <th>贴现因子</th>
+                    <th>现值(百万{currency_symbol})</th>
+                </tr>
+            </thead>
+            <tbody>"""
                             
-                            st.markdown(report_content)
+                            # 添加现金流预测表格数据
+                            for i, year in enumerate(dcf_result['years']):
+                                discount_factor = 1/((1 + st.session_state.dcf_data['wacc']/100)**(i+1))
+                                report_html += f"""
+                <tr>
+                    <td>第{year}年</td>
+                    <td>{dcf_result['forecasted_fcf'][i]:.1f}</td>
+                    <td>{discount_factor:.3f}</td>
+                    <td>{dcf_result['pv_fcf'][i]:.1f}</td>
+                </tr>"""
+                            
+                            report_html += f"""
+            </tbody>
+        </table>
+        
+        <h3>估值汇总</h3>
+        <table>
+            <tbody>
+                <tr><td>预测期现金流现值</td><td>{dcf_result['total_pv_fcf']:.1f}百万{currency_symbol}</td></tr>
+                <tr><td>终值</td><td>{dcf_result['terminal_value']:.1f}百万{currency_symbol}</td></tr>
+                <tr><td>终值现值</td><td>{dcf_result['pv_terminal']:.1f}百万{currency_symbol}</td></tr>
+                <tr style="background-color: #e0f2fe;"><td><strong>企业价值</strong></td><td><strong>{dcf_result['enterprise_value']:.1f}百万{currency_symbol}</strong></td></tr>
+                <tr><td>加: 现金及等价物</td><td>{st.session_state.dcf_data['cash']:.1f}百万{currency_symbol}</td></tr>
+                <tr><td>减: 总债务</td><td>{st.session_state.dcf_data['debt']:.1f}百万{currency_symbol}</td></tr>
+                <tr style="background-color: #e8f5e8;"><td><strong>股权价值</strong></td><td><strong>{dcf_result['equity_value']:.1f}百万{currency_symbol}</strong></td></tr>
+                <tr><td>流通股数</td><td>{st.session_state.dcf_data['shares_outstanding']:.1f}百万股</td></tr>
+                <tr style="background-color: #fff3cd;"><td><strong>每股内在价值</strong></td><td><strong>{currency_symbol}{dcf_result['share_price']:.2f}</strong></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>⚠️ 风险提示</h2>
+        <div class="risk-warning">
+            <h3>重要声明</h3>
+            <ul>
+                <li>本DCF估值模型基于当前可获得的信息和合理假设</li>
+                <li>实际投资结果可能因市场环境变化而与预期不符</li>
+                <li>终值占企业价值比重为{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%，需关注长期假设的合理性</li>
+                <li>建议结合相对估值、同业比较等其他估值方法进行综合判断</li>
+                <li>投资决策应考虑个人风险承受能力和投资目标</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>本报告由 <strong>FinancialModel.cn</strong> 专业金融建模平台生成</p>
+        <p>生成时间: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')} | 版本: 专业版</p>
+        <p>🚀 让复杂的金融模型变得简单易用 | 💡 为投资决策提供专业支持</p>
+    </div>
+
+    <script>
+        function downloadReport() {{
+            const element = document.documentElement;
+            const opt = {{
+                margin: 1,
+                filename: '{st.session_state.dcf_data['company_name']}_DCF估值报告.html',
+                image: {{ type: 'jpeg', quality: 0.98 }},
+                html2canvas: {{ scale: 2 }},
+                jsPDF: {{ unit: 'in', format: 'letter', orientation: 'portrait' }}
+            }};
+            
+            // 创建下载链接
+            const blob = new Blob([document.documentElement.outerHTML], {{ type: 'text/html' }});
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '{st.session_state.dcf_data['company_name']}_DCF估值报告_{report_date}.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }}
+    </script>
+</body>
+</html>"""
+                            
+                            # 在Streamlit中显示HTML报告
+                            st.components.v1.html(report_html, height=800, scrolling=True)
                             
                             # 下载选项
                             st.subheader("📥 下载报告")
@@ -978,15 +1210,12 @@ elif selected_model == "DCF估值模型":
                             col1, col2, col3 = st.columns(3)
                             
                             with col1:
-                                # 生成PDF下载链接（模拟）
-                                pdf_buffer = io.BytesIO()
-                                pdf_b64 = base64.b64encode(report_content.encode()).decode()
-                                
+                                # HTML报告下载
                                 st.download_button(
-                                    label="📄 下载PDF报告",
-                                    data=report_content,
-                                    file_name=f"{st.session_state.dcf_data['company_name']}_DCF报告_{report_date}.txt",
-                                    mime="text/plain"
+                                    label="📄 下载HTML报告",
+                                    data=report_html,
+                                    file_name=f"{st.session_state.dcf_data['company_name']}_DCF报告_{report_date}.html",
+                                    mime="text/html"
                                 )
                             
                             with col2:
@@ -1022,45 +1251,132 @@ elif selected_model == "DCF估值模型":
                                 )
                             
                             with col3:
-                                # PowerPoint演示（生成真实PPTX文件的模拟）
-                                def create_ppt_content():
-                                    # 生成PowerPoint内容概要（实际应用中需要python-pptx库）
-                                    ppt_content = f"""
-PowerPoint演示文稿结构：
+                                # PowerPoint演示HTML版本
+                                ppt_html = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{st.session_state.dcf_data['company_name']} DCF估值演示</title>
+    <style>
+        body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }}
+        .slide {{ 
+            width: 90%; max-width: 800px; margin: 20px auto; 
+            background: white; padding: 40px; 
+            border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            page-break-after: always;
+        }}
+        .slide h1 {{ color: #3b82f6; text-align: center; font-size: 32px; margin-bottom: 20px; }}
+        .slide h2 {{ color: #1f2937; font-size: 24px; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }}
+        .highlight {{ background: #dbeafe; padding: 20px; border-radius: 8px; text-align: center; }}
+        .metrics {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }}
+        .metric {{ background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; }}
+        .metric-value {{ font-size: 24px; font-weight: bold; color: #3b82f6; }}
+        .no-print {{ text-align: center; margin: 20px; }}
+        .print-btn {{ background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }}
+        @media print {{ .no-print {{ display: none; }} }}
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button class="print-btn" onclick="window.print()">🖨️ 打印演示文稿</button>
+    </div>
 
-幻灯片1: 封面
-- 标题: {st.session_state.dcf_data['company_name']} DCF估值分析
-- 分析师: {analyst_name}
-- 日期: {report_date}
+    <!-- 幻灯片1: 封面 -->
+    <div class="slide">
+        <h1>{st.session_state.dcf_data['company_name']}</h1>
+        <h1>DCF估值分析演示</h1>
+        <div class="highlight">
+            <h2>分析师: {analyst_name}</h2>
+            <h2>日期: {report_date}</h2>
+            <p style="margin-top: 30px; color: #6b7280;">FinancialModel.cn 专业版</p>
+        </div>
+    </div>
 
-幻灯片2: 执行摘要  
-- 内在价值: {currency_symbol}{dcf_result['share_price']:.2f}
-- 企业价值: {currency_symbol}{dcf_result['enterprise_value']:.1f}百万
-- 投资建议: 基于DCF分析结果
+    <!-- 幻灯片2: 执行摘要 -->
+    <div class="slide">
+        <h2>📋 执行摘要</h2>
+        <div class="highlight">
+            <h1>每股内在价值</h1>
+            <div style="font-size: 48px; color: #10b981; margin: 20px 0;">
+                {currency_symbol}{dcf_result['share_price']:.2f}
+            </div>
+        </div>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">{currency_symbol}{dcf_result['enterprise_value']:.1f}M</div>
+                <div>企业价值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{currency_symbol}{dcf_result['equity_value']:.1f}M</div>
+                <div>股权价值</div>
+            </div>
+        </div>
+    </div>
 
-幻灯片3: 关键假设
-- WACC: {st.session_state.dcf_data['wacc']:.1f}%
-- 永续增长率: {st.session_state.dcf_data['terminal_growth']:.1f}%
-- 预测期: {st.session_state.dcf_data['forecast_years']}年
+    <!-- 幻灯片3: 关键假设 -->
+    <div class="slide">
+        <h2>🔢 关键假设</h2>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['wacc']:.1f}%</div>
+                <div>WACC</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['terminal_growth']:.1f}%</div>
+                <div>永续增长率</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['forecast_years']}年</div>
+                <div>预测期</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['fcf_margin']:.1f}%</div>
+                <div>自由现金流率</div>
+            </div>
+        </div>
+    </div>
 
-幻灯片4: 估值结果
-- 现金流现值: {currency_symbol}{dcf_result['total_pv_fcf']:.1f}百万
-- 终值现值: {currency_symbol}{dcf_result['pv_terminal']:.1f}百万
-- 股权价值: {currency_symbol}{dcf_result['equity_value']:.1f}百万
+    <!-- 幻灯片4: 估值分解 -->
+    <div class="slide">
+        <h2>💰 估值分解</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h3>预测期现金流现值: {currency_symbol}{dcf_result['total_pv_fcf']:.1f}M</h3>
+            <h3>终值现值: {currency_symbol}{dcf_result['pv_terminal']:.1f}M</h3>
+            <h3 style="color: #3b82f6;">企业价值: {currency_symbol}{dcf_result['enterprise_value']:.1f}M</h3>
+            <hr>
+            <h3>减去净债务: {currency_symbol}{st.session_state.dcf_data['debt'] - st.session_state.dcf_data['cash']:.1f}M</h3>
+            <h3 style="color: #10b981;">股权价值: {currency_symbol}{dcf_result['equity_value']:.1f}M</h3>
+        </div>
+        <div class="highlight" style="margin-top: 20px;">
+            <h2>终值占比: {(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%</h2>
+        </div>
+    </div>
 
-幻灯片5: 风险提示与建议
-
-注：此为演示文稿内容概要，实际文件需要使用专业PPT软件生成。
-                                    """
-                                    return ppt_content
-                                
-                                ppt_content = create_ppt_content()
+    <!-- 幻灯片5: 风险提示 -->
+    <div class="slide">
+        <h2>⚠️ 风险提示与建议</h2>
+        <div style="background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <ul style="font-size: 18px; line-height: 1.8;">
+                <li>DCF模型基于当前假设，实际结果可能不同</li>
+                <li>终值占比{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%，需关注长期预测准确性</li>
+                <li>建议结合其他估值方法进行验证</li>
+                <li>投资决策需考虑个人风险承受能力</li>
+            </ul>
+        </div>
+        <div class="highlight" style="margin-top: 30px;">
+            <h2>投资建议: 基于DCF分析结果</h2>
+        </div>
+    </div>
+</body>
+</html>"""
                                 
                                 st.download_button(
-                                    label="📊 下载PPT概要",
-                                    data=ppt_content, 
-                                    file_name=f"{st.session_state.dcf_data['company_name']}_DCF演示概要.txt",
-                                    mime="text/plain"
+                                    label="📊 下载PPT演示",
+                                    data=ppt_html, 
+                                    file_name=f"{st.session_state.dcf_data['company_name']}_DCF演示_{report_date}.html",
+                                    mime="text/html"
                                 )
         
     elif selected_dcf_tab == "🔧 模型导出":
