@@ -1207,32 +1207,9 @@ elif selected_model == "DCF估值模型":
                             # 提供在新窗口打开的选项
                             st.subheader("📥 报告选项")
                             
-                            col1, col2, col3 = st.columns(3)
+                            col1, col2 = st.columns(2)
                             
                             with col1:
-                                st.markdown("### 📄 PDF报告")
-                                st.info("点击下方按钮在新窗口打开HTML报告，然后使用浏览器的打印功能保存为PDF")
-                                
-                                # 使用base64编码方式传递HTML内容
-                                import base64
-                                report_html_b64 = base64.b64encode(report_html.encode('utf-8')).decode('utf-8')
-                                
-                                pdf_js = f"""
-                                <script>
-                                function openPDFReport() {{
-                                    var htmlContent = atob('{report_html_b64}');
-                                    var newWindow = window.open('', '_blank');
-                                    newWindow.document.write(htmlContent);
-                                    newWindow.document.close();
-                                }}
-                                </script>
-                                <button onclick="openPDFReport()" style="background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
-                                    📄 打开PDF报告
-                                </button>
-                                """
-                                st.components.v1.html(pdf_js, height=80)
-                            
-                            with col2:
                                 # Excel模型下载（真实Excel文件）
                                 def create_simple_excel():
                                     from io import BytesIO
@@ -1265,7 +1242,7 @@ elif selected_model == "DCF估值模型":
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                 )
                             
-                            with col3:
+                            with col2:
                                 st.markdown("### 📊 PowerPoint演示")
                                 st.info("点击下方按钮在新窗口打开演示文稿，然后使用浏览器的打印功能")
                                 
@@ -1413,11 +1390,9 @@ elif selected_model == "DCF估值模型":
                             st.markdown("""
                             ### 📖 使用说明
                             
-                            **PDF报告生成步骤：**
-                            1. 点击"📄 打开PDF报告"按钮
-                            2. 在新打开的窗口中，按 `Ctrl+P` (Windows) 或 `Cmd+P` (Mac)
-                            3. 选择"保存为PDF"或连接的打印机
-                            4. 设置页面布局和边距，点击保存
+                            **PDF报告生成：**
+                            - 使用上方的"🖨️ 打印/保存为PDF"按钮
+                            - 在浏览器打印对话框中选择"保存为PDF"
                             
                             **PowerPoint演示生成步骤：**
                             1. 点击"📊 打开PPT演示"按钮  
