@@ -1214,11 +1214,12 @@ elif selected_model == "DCF估值模型":
                                 st.info("点击下方按钮在新窗口打开HTML报告，然后使用浏览器的打印功能保存为PDF")
                                 
                                 # 使用JavaScript在新窗口打开HTML
+                                escaped_html = report_html.replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                                 pdf_js = f"""
                                 <script>
                                 function openPDFReport() {{
                                     var newWindow = window.open('', '_blank');
-                                    newWindow.document.write(`{report_html.replace('`', '\\`')}`);
+                                    newWindow.document.write("{escaped_html}");
                                     newWindow.document.close();
                                 }}
                                 </script>
@@ -1387,11 +1388,12 @@ elif selected_model == "DCF估值模型":
 </html>"""
                                 
                                 # 使用JavaScript在新窗口打开PPT
+                                escaped_ppt_html = ppt_html.replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
                                 ppt_js = f"""
                                 <script>
                                 function openPPTReport() {{
                                     var newWindow = window.open('', '_blank');
-                                    newWindow.document.write(`{ppt_html.replace('`', '\\`')}`);
+                                    newWindow.document.write("{escaped_ppt_html}");
                                     newWindow.document.close();
                                 }}
                                 </script>
