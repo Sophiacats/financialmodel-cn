@@ -1,4 +1,187 @@
-import streamlit as st
+# Excel模型下载（完整版本）
+                                def create_dcf_excel():
+                                    from io import BytesIO
+                                    import pandas as pd
+                                    
+                                    output = BytesIO()
+                                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                        # 1. 输入参数工作表
+                                        input_data = pd.DataFrame({
+                                            '参数名称': [
+                                                '公司名称', '基期收入(百万)', '自由现金流率(%)', 'WACC(%)', 
+                                                '永续增长率(%)', '预测年数', '流通股数(百万股)', 
+                                                '现金(百万)', '债务(百万)', '分析师', '报告日期'
+                                            ],
+                                            '当前数值': [
+                                                str(st.session_state.dcf_data['company_name']),
+                                                float(st.session_state.dcf_data['base_revenue']),
+                                                float(st.session_state.dcf_data['fcf_margin']),
+                                                float(st.session_state.dcf_data['wacc']),
+                                                float(st.session_state.dcf_data['terminal_growth']),
+                                                int(st.session_state.dcf_data['forecast_years']),
+                                                float(st.session_state.dcf_data['shares_outstanding']),
+                                                float(st.session_state.dcf_data['cash']),
+                                                float(st.session_state.dcf_data['debt']),
+                                                '分析师姓名',
+                                                datetime.now().strftime('%Y-%m-%d')
+                                            ],
+                                            '说明': [
+                                                '目标公司名称',
+                                                '最近一年的营业收入',
+                                                '自由现金流占收入的比例',
+                                                '加权平均资本成本',
+                                                '永续期增长率',
+                                                '详细预测的年数',
+                                                '已发行流通股份数量',
+                                                '现金及现金等价物',
+                                                '总债务',
+                                                '负责分析师',
+                                                '模型生成日期'
+                                            ]
+                                        })
+                                        input_data.to_excel(writer, sheet_name='输入参数', index=False)
+                                        
+                                        # 2. 收入增长率设置
+                                        growth_data = []
+                                        for i in range(st.session_state.dcf_data['forecast_years']):
+                                            if i < len(st.session_state.dcf_data['revenue_growth_rates']):
+                                                growth_rate = st.session_state.dcf_data['revenue_growth_rates'][i]
+                                            else:
+                                                growth_rate = st.session_state.dcf_data['revenue_growth_rates'][-1]
+                                            growth_data.append({
+                                                '年份': f'第{i+1}年',
+                                                '收入增长率(%)': float(growth_rate),
+                                                '说明': f'预测第{i+1}年的收入增长率'
+                                            })
+                                        
+                                        growth_df = pd.DataFrame(growth_data)
+                                        growth_df.to_excel(writer, sheet_name='增长率设置', index=False)
+                                        
+                                        # 3. 详细现金流预测
+                                        years = list(range(1, st.session_state.dcf_data['forecast_years'] + 1))
+                                        detailed_forecast = []
+                                        revenue = float(st.session_state.dcf_data['base_revenue'])
+                                        
+                                        for i, year in enumerate(years):
+                                            if i < len(st.session_state.dcf_data['revenue_growth_rates']):
+                                                growth = float(st.session_state.dcf_data['revenue_growth_rates'][i]) / 100
+                                            else:
+                                                growth = float(st.session_state.dcf_data['revenue_growth_rates'][-1]) / 100
+                                            
+                                            revenue = revenue * (1 + growth)
+                                            fcf = revenue * float(st.session_state.dcf_data['fcf_margin']) / 100
+                                            discount_factor = 1 / ((1 + float(st.session_state.dcf_data['wacc'])/100) ** year)
+                                            present_value = fcf * discount_factor
+                                            
+                                            detailed_forecast.append({
+                                                '年份': f'第{year}年',
+                                                '预测收入': round(revenue, 1),
+                                                '收入增长率(%)': round(growth * 100, 1),
+                                                '自由现金流': round(fcf, 1),
+                                                '贴现因子': round(discount_factor, 4),
+                                                '现值': round(present_value, 1)
+                                            })
+                                        
+                                        forecast_df = pd.DataFrame(detailed_forecast)
+                                        forecast_df.to_excel(writer, sheet_name='现金流预测', index=False)
+                                        
+                                        # 4. 终值计算详细步骤
+                                        terminal_fcf = detailed_forecast[-1]['自由现金流'] * (1 + float(st.session_state.dcf_data['terminal_growth'])/100)
+                                        terminal_value = terminal_fcf / (float(st.session_state.dcf_data['wacc'])/100 - float(st.session_state.dcf_data['terminal_growth'])/100)
+                                        terminal_pv = terminal_value / ((1 + float(st.session_state.dcf_data['wacc'])/100) ** int(st.session_state.dcf_data['forecast_years']))
+                                        
+                                        terminal_calc = pd.DataFrame({
+                                            '计算项目': [
+                                                '最后一年自由现金流',
+                                                '永续增长率(%)',
+                                                '终值期自由现金流',
+                                                'WACC(%)',
+                                                '终值',
+                                                '终值现值',
+                                                '终值占企业价值比例(%)'
+                                            ],
+                                            '数值': [
+                                                round(detailed_forecast[-1]['自由现金流'], 1),
+                                                float(st.session_state.dcf_data['terminal_growth']),
+                                                round(terminal_fcf, 1),
+                                                float(st.session_state.dcf_data['wacc']),
+                                                round(terminal_value, 1),
+                                                round(terminal_pv, 1),
+                                                round(terminal_pv / dcf_result['enterprise_value'] * 100, 1)
+                                            ],
+                                            '说明': [
+                                                '来自现金流预测表',
+                                                '输入参数',
+                                                '最后一年FCF乘以增长率',
+                                                '输入参数',
+                                                '终值期FCF除以贴现率差',
+                                                '终值的现值',
+                                                '终值现值占企业价值比例'
+                                            ]
+                                        })
+                                        terminal_calc.to_excel(writer, sheet_name='终值计算', index=False)
+                                        
+                                        # 5. 完整估值汇总
+                                        valuation_summary = pd.DataFrame({
+                                            '估值组成': [
+                                                '预测期现金流现值',
+                                                '终值现值',
+                                                '企业价值(EV)',
+                                                '加现金及等价物',
+                                                '减总债务',
+                                                '股权价值',
+                                                '流通股数(百万股)',
+                                                '每股内在价值'
+                                            ],
+                                            '金额(百万)': [
+                                                round(dcf_result['total_pv_fcf'], 1),
+                                                round(dcf_result['pv_terminal'], 1),
+                                                round(dcf_result['enterprise_value'], 1),
+                                                float(st.session_state.dcf_data['cash']),
+                                                float(st.session_state.dcf_data['debt']),
+                                                round(dcf_result['equity_value'], 1),
+                                                float(st.session_state.dcf_data['shares_outstanding']),
+                                                round(dcf_result['share_price'], 2)
+                                            ],
+                                            '占EV比例(%)': [
+                                                round(dcf_result['total_pv_fcf'] / dcf_result['enterprise_value'] * 100, 1),
+                                                round(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100, 1),
+                                                100.0,
+                                                0.0,
+                                                0.0,
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ]
+                                        })
+                                        valuation_summary.to_excel(writer, sheet_name='估值汇总', index=False)
+                                        
+                                        # 6. 敏感性分析矩阵
+                                        wacc_range_values = [6.0, 7.0, 8.0, 8.5, 9.0, 10.0, 11.0]
+                                        growth_range_values = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+                                        
+                                        sensitivity_data = []
+                                        for wacc in wacc_range_values:
+                                            row_data = {'WACC': f"{wacc}%"}
+                                            for growth in growth_range_values:
+                                                temp_data = st.session_state.dcf_data.copy()
+                                                temp_data['wacc'] = wacc
+                                                temp_data['terminal_growth'] = growth
+                                                result = calculate_dcf_valuation(temp_data)
+                                                if result:
+                                                    row_data[f"增长率{growth}%"] = round(result['share_price'], 2)
+                                                else:
+                                                    row_data[f"增长率{growth}%"] = 0.0
+                                            sensitivity_data.append(row_data)
+                                        
+                                        sensitivity_df = pd.DataFrame(sensitivity_data)
+                                        sensitivity_df.to_excel(writer, sheet_name='敏感性分析', index=False)
+                                        
+                                        # 7. 使用说明
+                                        instructions = pd.DataFrame({
+                                            'DCF模型使用指南': [
+                                                '基本使用方法',
+                                                '1. 在输import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -694,6 +877,11 @@ elif selected_model == "DCF估值模型":
             padding-left: 15px;
             font-size: 20px;
         }}
+        .section h3 {{
+            color: #1f2937;
+            font-size: 16px;
+            margin-top: 20px;
+        }}
         .metrics-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -713,6 +901,46 @@ elif selected_model == "DCF估值模型":
             color: #3b82f6;
             margin-bottom: 5px;
         }}
+        .metric-label {{
+            color: #6b7280;
+            font-size: 14px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th, td {{
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: right;
+        }}
+        th {{
+            background-color: #f3f4f6;
+            font-weight: bold;
+            color: #1f2937;
+        }}
+        .assumptions {{
+            background: #dbeafe;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }}
+        .risk-warning {{
+            background: #fef3c7;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #f59e0b;
+            margin: 20px 0;
+        }}
+        .footer {{
+            text-align: center;
+            color: #6b7280;
+            font-size: 12px;
+            margin-top: 40px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+        }}
         .print-button {{
             background: #3b82f6;
             color: white;
@@ -722,6 +950,9 @@ elif selected_model == "DCF估值模型":
             cursor: pointer;
             font-size: 16px;
             margin: 10px;
+        }}
+        .print-button:hover {{
+            background: #2563eb;
         }}
     </style>
 </head>
@@ -733,27 +964,159 @@ elif selected_model == "DCF估值模型":
 
     <div class="header">
         <h1>{report_title}</h1>
-        <p><strong>分析师:</strong> {analyst_name} | <strong>报告日期:</strong> {report_date}</p>
+        <div class="meta">
+            <p><strong>分析师:</strong> {analyst_name} | <strong>报告日期:</strong> {report_date}</p>
+            <p><strong>生成平台:</strong> FinancialModel.cn 专业版</p>
+        </div>
     </div>
 
     <div class="section">
         <h2>📋 执行摘要</h2>
-        <p>基于DCF分析，{st.session_state.dcf_data['company_name']}的内在价值为<strong>{currency_symbol}{dcf_result['share_price']:.2f}每股</strong>。</p>
+        <p>基于贴现现金流(DCF)分析，{st.session_state.dcf_data['company_name']}的内在价值为<strong>{currency_symbol}{dcf_result['share_price']:.2f}每股</strong>。</p>
         
         <div class="metrics-grid">
             <div class="metric-card">
                 <div class="metric-value">{currency_symbol}{dcf_result['enterprise_value']:.1f}M</div>
-                <div>企业价值</div>
+                <div class="metric-label">企业价值</div>
             </div>
             <div class="metric-card">
                 <div class="metric-value">{currency_symbol}{dcf_result['equity_value']:.1f}M</div>
-                <div>股权价值</div>
+                <div class="metric-label">股权价值</div>
             </div>
             <div class="metric-card">
                 <div class="metric-value">{currency_symbol}{dcf_result['share_price']:.2f}</div>
-                <div>每股内在价值</div>
+                <div class="metric-label">每股内在价值</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%</div>
+                <div class="metric-label">终值占比</div>
             </div>
         </div>
+    </div>
+
+    <div class="section">
+        <h2>🔢 关键假设</h2>
+        <div class="assumptions">
+            <h3>核心估值参数</h3>
+            <ul>
+                <li><strong>加权平均资本成本(WACC):</strong> {st.session_state.dcf_data['wacc']:.1f}%</li>
+                <li><strong>永续增长率:</strong> {st.session_state.dcf_data['terminal_growth']:.1f}%</li>
+                <li><strong>预测期:</strong> {st.session_state.dcf_data['forecast_years']}年</li>
+                <li><strong>自由现金流率:</strong> {st.session_state.dcf_data['fcf_margin']:.1f}%</li>
+                <li><strong>基期收入:</strong> {st.session_state.dcf_data['base_revenue']:.1f}百万{currency_symbol}</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📊 现金流预测与估值分解</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>年份</th>
+                    <th>自由现金流(百万{currency_symbol})</th>
+                    <th>贴现因子</th>
+                    <th>现值(百万{currency_symbol})</th>
+                </tr>
+            </thead>
+            <tbody>"""
+                            
+                            # 添加现金流预测表格数据
+                            for i, year in enumerate(dcf_result['years']):
+                                discount_factor = 1/((1 + st.session_state.dcf_data['wacc']/100)**(i+1))
+                                report_html += f"""
+                <tr>
+                    <td>第{year}年</td>
+                    <td>{dcf_result['forecasted_fcf'][i]:.1f}</td>
+                    <td>{discount_factor:.3f}</td>
+                    <td>{dcf_result['pv_fcf'][i]:.1f}</td>
+                </tr>"""
+                            
+                            report_html += f"""
+            </tbody>
+        </table>
+        
+        <h3>估值汇总</h3>
+        <table>
+            <tbody>
+                <tr><td>预测期现金流现值</td><td>{dcf_result['total_pv_fcf']:.1f}百万{currency_symbol}</td></tr>
+                <tr><td>终值</td><td>{dcf_result['terminal_value']:.1f}百万{currency_symbol}</td></tr>
+                <tr><td>终值现值</td><td>{dcf_result['pv_terminal']:.1f}百万{currency_symbol}</td></tr>
+                <tr style="background-color: #e0f2fe;"><td><strong>企业价值</strong></td><td><strong>{dcf_result['enterprise_value']:.1f}百万{currency_symbol}</strong></td></tr>
+                <tr><td>加: 现金及等价物</td><td>{st.session_state.dcf_data['cash']:.1f}百万{currency_symbol}</td></tr>
+                <tr><td>减: 总债务</td><td>{st.session_state.dcf_data['debt']:.1f}百万{currency_symbol}</td></tr>
+                <tr style="background-color: #e8f5e8;"><td><strong>股权价值</strong></td><td><strong>{dcf_result['equity_value']:.1f}百万{currency_symbol}</strong></td></tr>
+                <tr><td>流通股数</td><td>{st.session_state.dcf_data['shares_outstanding']:.1f}百万股</td></tr>
+                <tr style="background-color: #fff3cd;"><td><strong>每股内在价值</strong></td><td><strong>{currency_symbol}{dcf_result['share_price']:.2f}</strong></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>📈 收入增长率假设</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>年份</th>
+                    <th>收入增长率(%)</th>
+                    <th>预测收入(百万{currency_symbol})</th>
+                </tr>
+            </thead>
+            <tbody>"""
+                            
+                            # 添加收入增长率表格
+                            revenue = st.session_state.dcf_data['base_revenue']
+                            for i in range(st.session_state.dcf_data['forecast_years']):
+                                if i < len(st.session_state.dcf_data['revenue_growth_rates']):
+                                    growth_rate = st.session_state.dcf_data['revenue_growth_rates'][i]
+                                else:
+                                    growth_rate = st.session_state.dcf_data['revenue_growth_rates'][-1]
+                                
+                                revenue = revenue * (1 + growth_rate/100)
+                                report_html += f"""
+                <tr>
+                    <td>第{i+1}年</td>
+                    <td>{growth_rate:.1f}%</td>
+                    <td>{revenue:.1f}</td>
+                </tr>"""
+                            
+                            report_html += f"""
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>⚠️ 风险提示</h2>
+        <div class="risk-warning">
+            <h3>重要声明</h3>
+            <ul>
+                <li>本DCF估值模型基于当前可获得的信息和合理假设</li>
+                <li>实际投资结果可能因市场环境变化而与预期不符</li>
+                <li>终值占企业价值比重为{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%，需关注长期假设的合理性</li>
+                <li>建议结合相对估值、同业比较等其他估值方法进行综合判断</li>
+                <li>投资决策应考虑个人风险承受能力和投资目标</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📝 方法论说明</h2>
+        <h3>DCF模型原理</h3>
+        <p>贴现现金流(DCF)估值法通过预测公司未来的自由现金流，并使用适当的贴现率将其折现至现值，从而得出公司的内在价值。</p>
+        
+        <h3>关键计算步骤</h3>
+        <ol>
+            <li><strong>预测自由现金流:</strong> 基于收入增长预测和现金流率假设</li>
+            <li><strong>计算贴现率:</strong> 使用WACC作为贴现率</li>
+            <li><strong>终值计算:</strong> 采用永续增长模型计算终值</li>
+            <li><strong>估值汇总:</strong> 将预测期现金流现值与终值现值相加得到企业价值</li>
+        </ol>
+    </div>
+
+    <div class="footer">
+        <p>本报告由 <strong>FinancialModel.cn</strong> 专业金融建模平台生成</p>
+        <p>生成时间: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')} | 版本: 专业版</p>
+        <p>🚀 让复杂的金融模型变得简单易用 | 💡 为投资决策提供专业支持</p>
     </div>
 
     <script>
@@ -781,49 +1144,44 @@ elif selected_model == "DCF估值模型":
                             col1, col2 = st.columns(2)
                             
                             with col1:
-                                # Excel模型下载（修复版本）
-                                def create_dcf_excel():
-                                    from io import BytesIO
-                                    import pandas as pd
-                                    
-                                    output = BytesIO()
-                                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                                        # 基础估值结果
-                                        valuation_data = pd.DataFrame({
-                                            '估值项目': [
-                                                '企业价值', '股权价值', '每股价值', 
-                                                'WACC(%)', '永续增长率(%)', '预测年数',
-                                                '预测期现金流现值', '终值现值', '终值占比(%)'
-                                            ],
-                                            '数值': [
-                                                dcf_result['enterprise_value'],
-                                                dcf_result['equity_value'],
-                                                dcf_result['share_price'],
-                                                st.session_state.dcf_data['wacc'],
-                                                st.session_state.dcf_data['terminal_growth'],
-                                                st.session_state.dcf_data['forecast_years'],
-                                                dcf_result['total_pv_fcf'],
-                                                dcf_result['pv_terminal'],
-                                                round(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100, 1)
+                                        # 7. 使用说明
+                                        instructions = pd.DataFrame({
+                                            'DCF模型使用指南': [
+                                                '基本使用方法',
+                                                '1. 在输入参数工作表中修改基础数据',
+                                                '2. 在增长率设置中调整各年收入增长预期',
+                                                '3. 查看现金流预测了解详细计算过程',
+                                                '4. 在估值汇总中查看最终估值结果',
+                                                '',
+                                                '关键假设说明',
+                                                'WACC应基于公司具体的资本结构计算',
+                                                '永续增长率通常不应超过长期GDP增长率',
+                                                '现金流预测基于收入增长和现金流率假设',
+                                                '终值占企业价值的比例不应过高',
+                                                '',
+                                                '敏感性分析',
+                                                '关注WACC和永续增长率变化对估值的影响',
+                                                '建议进行多情景分析验证结果稳健性',
+                                                '',
+                                                '重要提醒',
+                                                'DCF估值仅供参考需结合其他估值方法',
+                                                '模型基于假设实际结果可能有差异',
+                                                '投资决策需考虑多种因素和风险',
+                                                '',
+                                                f'模型生成时间 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+                                                '生成平台 FinancialModel.cn 专业版'
                                             ]
                                         })
-                                        valuation_data.to_excel(writer, sheet_name='DCF估值结果', index=False)
-                                        
-                                        # 现金流预测
-                                        forecast_data = pd.DataFrame({
-                                            '年份': [f'第{i+1}年' for i in range(len(dcf_result['forecasted_fcf']))],
-                                            '自由现金流': dcf_result['forecasted_fcf'],
-                                            '现值': dcf_result['pv_fcf']
-                                        })
-                                        forecast_data.to_excel(writer, sheet_name='现金流预测', index=False)
+                                        instructions.to_excel(writer, sheet_name='使用说明', index=False)
                                     
                                     return output.getvalue()
                                 
                                 excel_data = create_dcf_excel()
                                 
-                                st.markdown("### 📊 Excel模型")
+                                st.markdown("### 📊 Excel DCF模型")
+                                st.info("完整的DCF模型，包含7个工作表：输入参数、增长率设置、现金流预测、终值计算、估值汇总、敏感性分析、使用说明")
                                 st.download_button(
-                                    label="📊 下载Excel模型", 
+                                    label="📊 下载完整DCF模型", 
                                     data=excel_data,
                                     file_name=f"DCF模型_{st.session_state.dcf_data['company_name']}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -859,6 +1217,10 @@ elif selected_model == "DCF估值模型":
         .no-print { text-align: center; margin: 20px; }
         .print-btn { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
         @media print { .no-print { display: none; } }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: center; }
+        th { background-color: #f3f4f6; font-weight: bold; }
+        .risk-box { background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; margin: 20px 0; }
     </style>
 </head>
 <body>
@@ -866,6 +1228,7 @@ elif selected_model == "DCF估值模型":
         <button class="print-btn" onclick="window.print()">🖨️ 打印演示文稿</button>
     </div>
 
+    <!-- 幻灯片1: 封面 -->
     <div class="slide">
         <h1>""" + f"{st.session_state.dcf_data['company_name']}" + """</h1>
         <h1>DCF估值分析演示</h1>
@@ -876,6 +1239,7 @@ elif selected_model == "DCF估值模型":
         </div>
     </div>
 
+    <!-- 幻灯片2: 执行摘要 -->
     <div class="slide">
         <h2>📋 执行摘要</h2>
         <div class="highlight">
@@ -892,6 +1256,149 @@ elif selected_model == "DCF估值模型":
             <div class="metric">
                 <div class="metric-value">""" + f"{currency_symbol}{dcf_result['equity_value']:.1f}M" + """</div>
                 <div>股权价值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{currency_symbol}{dcf_result['total_pv_fcf']:.1f}M" + """</div>
+                <div>预测期现金流现值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%" + """</div>
+                <div>终值占比</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 幻灯片3: 关键假设 -->
+    <div class="slide">
+        <h2>🔢 关键假设</h2>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['wacc']:.1f}%" + """</div>
+                <div>WACC</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['terminal_growth']:.1f}%" + """</div>
+                <div>永续增长率</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['forecast_years']}年" + """</div>
+                <div>预测期</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['fcf_margin']:.1f}%" + """</div>
+                <div>自由现金流率</div>
+            </div>
+        </div>
+        <div style="background: #dbeafe; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3>收入增长率假设</h3>
+            <table>
+                <tr>
+                    <th>年份</th>"""
+                
+                for i in range(st.session_state.dcf_data['forecast_years']):
+                    ppt_js += f"""<th>第{i+1}年</th>"""
+                
+                ppt_js += """</tr>
+                <tr>
+                    <td><strong>增长率</strong></td>"""
+                
+                for i in range(st.session_state.dcf_data['forecast_years']):
+                    if i < len(st.session_state.dcf_data['revenue_growth_rates']):
+                        growth_rate = st.session_state.dcf_data['revenue_growth_rates'][i]
+                    else:
+                        growth_rate = st.session_state.dcf_data['revenue_growth_rates'][-1]
+                    ppt_js += f"""<td>{growth_rate:.1f}%</td>"""
+                
+                ppt_js += """</tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- 幻灯片4: 估值分解 -->
+    <div class="slide">
+        <h2>💰 估值分解</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h3>现金流预测与现值</h3>
+            <table>
+                <tr>
+                    <th>年份</th>
+                    <th>自由现金流(M)</th>
+                    <th>现值(M)</th>
+                </tr>"""
+                
+                for i, year in enumerate(dcf_result['years']):
+                    ppt_js += f"""
+                <tr>
+                    <td>第{year}年</td>
+                    <td>{dcf_result['forecasted_fcf'][i]:.1f}</td>
+                    <td>{dcf_result['pv_fcf'][i]:.1f}</td>
+                </tr>"""
+                
+                ppt_js += f"""
+            </table>
+        </div>
+        <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center;">
+            <h3>估值汇总</h3>
+            <p><strong>预测期现金流现值:</strong> """ + f"{currency_symbol}{dcf_result['total_pv_fcf']:.1f}M" + """</p>
+            <p><strong>终值现值:</strong> """ + f"{currency_symbol}{dcf_result['pv_terminal']:.1f}M" + """</p>
+            <p style="font-size: 24px; color: #10b981;"><strong>企业价值:</strong> """ + f"{currency_symbol}{dcf_result['enterprise_value']:.1f}M" + """</p>
+            <hr>
+            <p><strong>减去净债务:</strong> """ + f"{currency_symbol}{st.session_state.dcf_data['debt'] - st.session_state.dcf_data['cash']:.1f}M" + """</p>
+            <p style="font-size: 24px; color: #3b82f6;"><strong>股权价值:</strong> """ + f"{currency_symbol}{dcf_result['equity_value']:.1f}M" + """</p>
+        </div>
+    </div>
+
+    <!-- 幻灯片5: 风险提示 -->
+    <div class="slide">
+        <h2>⚠️ 风险提示与建议</h2>
+        <div class="risk-box">
+            <h3>关键风险因素</h3>
+            <ul style="font-size: 18px; line-height: 1.8; text-align: left;">
+                <li>DCF模型基于当前假设，实际结果可能不同</li>
+                <li>终值占比""" + f"{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%" + """，需关注长期预测准确性</li>
+                <li>建议结合其他估值方法进行验证</li>
+                <li>投资决策需考虑个人风险承受能力</li>
+                <li>市场环境变化可能影响估值结果</li>
+            </ul>
+        </div>
+        <div class="highlight" style="margin-top: 30px;">
+            <h2>投资建议</h2>
+            <p style="font-size: 20px;">基于DCF分析，目标价格 """ + f"{currency_symbol}{dcf_result['share_price']:.2f}" + """</p>
+            <p>建议结合市场条件和其他估值方法综合判断</p>
+        </div>
+    </div>
+
+    <!-- 幻灯片6: 模型说明 -->
+    <div class="slide">
+        <h2>📚 DCF模型说明</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h3>贴现现金流估值法核心原理</h3>
+            <ol style="font-size: 18px; line-height: 1.8;">
+                <li><strong>预测自由现金流:</strong> 基于收入增长和现金流率假设</li>
+                <li><strong>确定贴现率:</strong> 使用WACC反映投资风险</li>
+                <li><strong>计算终值:</strong> 采用永续增长模型</li>
+                <li><strong>求和现值:</strong> 预测期现金流现值 + 终值现值</li>
+            </ol>
+        </div>
+        <div style="background: #dbeafe; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3>模型优势与局限</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h4>✅ 优势</h4>
+                    <ul>
+                        <li>理论基础扎实</li>
+                        <li>考虑时间价值</li>
+                        <li>关注现金流</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>⚠️ 局限</h4>
+                    <ul>
+                        <li>依赖预测假设</li>
+                        <li>对参数敏感</li>
+                        <li>需要专业判断</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
