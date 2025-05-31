@@ -1367,17 +1367,132 @@ elif selected_model == "DCF估值模型":
 </body>
 </html>"""
                                 
-                                # 使用base64编码方式传递PPT HTML内容
-                                ppt_html_b64 = base64.b64encode(ppt_html.encode('utf-8')).decode('utf-8')
-                                
-                                ppt_js = f"""
+                                # 使用更简单可靠的方法打开PPT
+                                ppt_js = """
                                 <script>
-                                function openPPTReport() {{
-                                    var htmlContent = atob('{ppt_html_b64}');
+                                function openPPTReport() {
+                                    var pptContent = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>""" + f"{st.session_state.dcf_data['company_name']} DCF估值演示" + """</title>
+    <style>
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+        .slide { 
+            width: 90%; max-width: 800px; margin: 20px auto; 
+            background: white; padding: 40px; 
+            border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            page-break-after: always;
+        }
+        .slide h1 { color: #3b82f6; text-align: center; font-size: 32px; margin-bottom: 20px; }
+        .slide h2 { color: #1f2937; font-size: 24px; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+        .highlight { background: #dbeafe; padding: 20px; border-radius: 8px; text-align: center; }
+        .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }
+        .metric { background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #3b82f6; }
+        .no-print { text-align: center; margin: 20px; }
+        .print-btn { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        @media print { .no-print { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button class="print-btn" onclick="window.print()">🖨️ 打印演示文稿</button>
+    </div>
+
+    <!-- 幻灯片1: 封面 -->
+    <div class="slide">
+        <h1>""" + f"{st.session_state.dcf_data['company_name']}" + """</h1>
+        <h1>DCF估值分析演示</h1>
+        <div class="highlight">
+            <h2>分析师: """ + f"{analyst_name}" + """</h2>
+            <h2>日期: """ + f"{report_date}" + """</h2>
+            <p style="margin-top: 30px; color: #6b7280;">FinancialModel.cn 专业版</p>
+        </div>
+    </div>
+
+    <!-- 幻灯片2: 执行摘要 -->
+    <div class="slide">
+        <h2>📋 执行摘要</h2>
+        <div class="highlight">
+            <h1>每股内在价值</h1>
+            <div style="font-size: 48px; color: #10b981; margin: 20px 0;">
+                """ + f"{currency_symbol}{dcf_result['share_price']:.2f}" + """
+            </div>
+        </div>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">""" + f"{currency_symbol}{dcf_result['enterprise_value']:.1f}M" + """</div>
+                <div>企业价值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{currency_symbol}{dcf_result['equity_value']:.1f}M" + """</div>
+                <div>股权价值</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 幻灯片3: 关键假设 -->
+    <div class="slide">
+        <h2>🔢 关键假设</h2>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['wacc']:.1f}%" + """</div>
+                <div>WACC</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['terminal_growth']:.1f}%" + """</div>
+                <div>永续增长率</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['forecast_years']}年" + """</div>
+                <div>预测期</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">""" + f"{st.session_state.dcf_data['fcf_margin']:.1f}%" + """</div>
+                <div>自由现金流率</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 幻灯片4: 估值分解 -->
+    <div class="slide">
+        <h2>💰 估值分解</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h3>预测期现金流现值: """ + f"{currency_symbol}{dcf_result['total_pv_fcf']:.1f}M" + """</h3>
+            <h3>终值现值: """ + f"{currency_symbol}{dcf_result['pv_terminal']:.1f}M" + """</h3>
+            <h3 style="color: #3b82f6;">企业价值: """ + f"{currency_symbol}{dcf_result['enterprise_value']:.1f}M" + """</h3>
+            <hr>
+            <h3>减去净债务: """ + f"{currency_symbol}{st.session_state.dcf_data['debt'] - st.session_state.dcf_data['cash']:.1f}M" + """</h3>
+            <h3 style="color: #10b981;">股权价值: """ + f"{currency_symbol}{dcf_result['equity_value']:.1f}M" + """</h3>
+        </div>
+        <div class="highlight" style="margin-top: 20px;">
+            <h2>终值占比: """ + f"{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%" + """</h2>
+        </div>
+    </div>
+
+    <!-- 幻灯片5: 风险提示 -->
+    <div class="slide">
+        <h2>⚠️ 风险提示与建议</h2>
+        <div style="background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+            <ul style="font-size: 18px; line-height: 1.8;">
+                <li>DCF模型基于当前假设，实际结果可能不同</li>
+                <li>终值占比""" + f"{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%" + """，需关注长期预测准确性</li>
+                <li>建议结合其他估值方法进行验证</li>
+                <li>投资决策需考虑个人风险承受能力</li>
+            </ul>
+        </div>
+        <div class="highlight" style="margin-top: 30px;">
+            <h2>投资建议: 基于DCF分析结果</h2>
+        </div>
+    </div>
+</body>
+</html>`;
                                     var newWindow = window.open('', '_blank');
-                                    newWindow.document.write(htmlContent);
+                                    newWindow.document.write(pptContent);
                                     newWindow.document.close();
-                                }}
+                                }
                                 </script>
                                 <button onclick="openPPTReport()" style="background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
                                     📊 打开PPT演示
