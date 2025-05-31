@@ -1,4 +1,140 @@
-import streamlit as st
+# 主内容区域
+if selected_model == "相对估值模型":
+    # 根据模板级别显示不同功能
+    if template_level == "免费版":
+        available_tabs = ["📈 估值计算", "📊 对比分析"]
+        template_info = "🟡 免费版：基础PE/PB估值功能"
+    elif template_level == "专业版":
+        available_tabs = ["📈 估值计算", "📋 数据管理", "📊 对比分析", "💡 投资建议", "📄 报告导出"]
+        template_info = "🔵 专业版：全功能 + 报告导出"
+    else:  # 企业版
+        available_tabs = ["📈 估值计算", "📋 数据管理", "📊 对比分析", "💡 投资建议", "📄 报告导出", "🔧 API接口"]
+        template_info = "🟢 企业版：全功能 + API + 定制服务"
+
+    # 显示模板信息
+    st.info(template_info)
+
+    # 功能导航
+    selected_tab = st.selectbox("选择功能模块", available_tabs)
+
+    # 初始化session state
+    if 'target_company' not in st.session_state:
+        st.session_state.target_company = {
+            'name': '目标公司',
+            'stock_price': 45.60,
+            'total_shares': 12.5,
+            'net_profit': 35000,
+            'net_assets': 180000,
+            'ebitda': 65000,
+            'ebit': 52000,
+            'cash': 25000,
+            'debt': 85000,
+            'growth_rate': 12.5
+        }
+
+    if 'comparable_companies' not in st.session_state:
+        st.session_state.comparable_companies = [
+            {'name': '同行A', 'stock_price': 38.50, 'total_shares': 10.2, 'net_profit': 28000, 'net_assets': 150000, 'ebitda': 55000, 'ebit': 42000, 'cash': 20000, 'debt': 70000, 'growth_rate': 10.2},
+            {'name': '同行B', 'stock_price': 52.30, 'total_shares': 15.8, 'net_profit': 45000, 'net_assets': 220000, 'ebitda': 78000, 'ebit': 62000, 'cash': 35000, 'debt': 95000, 'growth_rate': 15.8}
+        ]
+
+    # 计算估值指标的函数
+    def calculate_metrics(company_data):
+        try:
+            market_cap = company_data['stock_price'] * company_data['total_shares']
+            enterprise_value = market_cap + company_data['debt'] - company_data['cash']
+            
+            metrics = {
+                'market_cap': round(market_cap, 2),
+                'enterprise_value': round(enterprise_value, 2),
+                'pe': round(market_cap / (company_data['net_profit'] / 10000), 2) if company_data['net_profit'] > 0 else 0,
+                'pb': round(market_cap / (company_data['net_assets'] / 10000), 2) if company_data['net_assets'] > 0 else 0,
+                'ev_ebitda': round(enterprise_value / (company_data['ebitda'] / 10000), 2) if company_data['ebitda'] > 0 else 0,
+                'ev_ebit': round(enterprise_value / (company_data['ebit'] / 10000), 2) if company_data['ebit'] > 0 else 0,
+                'peg': round((market_cap / (company_data['net_profit'] / 10000)) / company_data['growth_rate'], 2) if company_data['growth_rate'] > 0 and company_data['net_profit'] > 0 else 0
+            }
+            
+            return metrics
+        except:
+            return {'market_cap': 0, 'enterprise_value': 0, 'pe': 0, 'pb': 0, 'ev_ebitda': 0, 'ev_ebit': 0, 'peg': 0}
+    
+    if selected_tab == "📈 估值计算":
+        st.header("🎯 目标公司数据输入")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.session_state.target_company['name'] = st.text_input("公司名称", st.session_state.target_company['name'])
+            st.session_state.target_company['stock_price'] = st.number_input(f"股价 ({currency_symbol})", value=float(st.session_state.target_company['stock_price']), step=0.01, min_value=0.0)
+            
+        with col2:
+            st.session_state.target_company['net_profit'] = st.number_input(f"净利润 ({unit_text})", value=float(st.session_state.target_company['net_profit']), step=1000.0)
+            st.session_state.target_company['net_assets'] = st.number_input(f"净资产 ({unit_text})", value=float(st.session_state.target_company['net_assets']), step=1000.0, min_value=0.0)
+            
+        with col3:
+            st.session_state.target_company['ebitda'] = st.number_input(f"EBITDA ({unit_text})", value=float(st.session_state.target_company['ebitda']), step=1000.0)
+            st.session_state.target_company['growth_rate'] = st.number_input("净利润增长率 (%)", value=float(st.session_state.target_company['growth_rate']), step=0.1)
+
+        # 计算目标公司指标
+        target_metrics = calculate_metrics(st.session_state.target_company)
+        
+        # 显示核心估值指标
+        st.header("🧮 核心估值指标")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #3b82f6; font-size: 2rem; margin: 0;">{target_metrics['pe']}</h3>
+                <p style="margin: 0; color: #6b7280;">PE 市盈率</p>
+                <small style="color: #9ca3af;">市值 ÷ 净利润</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #10b981; font-size: 2rem; margin: 0;">{target_metrics['pb']}</h3>
+                <p style="margin: 0; color: #6b7280;">PB 市净率</p>
+                <small style="color: #9ca3af;">市值 ÷ 净资产</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #8b5cf6; font-size: 2rem; margin: 0;">{target_metrics['ev_ebitda']}</h3>
+                <p style="margin: 0; color: #6b7280;">EV/EBITDA</p>
+                <small style="color: #9ca3af;">企业价值 ÷ EBITDA</small>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with col4:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #f59e0b; font-size: 2rem; margin: 0;">{target_metrics['ev_ebit']}</h3>
+                <p style="margin: 0; color: #6b7280;">EV/EBIT</p>
+                <small style="color: #9ca3af;">企业价值 ÷ EBIT</small>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with col5:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="color: #ef4444; font-size: 2rem; margin: 0;">{target_metrics['peg']}</h3>
+                <p style="margin: 0; color: #6b7280;">PEG</p>
+                <small style="color: #9ca3af;">PE ÷ 增长率</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif selected_tab == "📊 对比分析":
+        st.header("🔍 同行业对比分析")
+        st.info("💡 这里可以添加可比公司对比分析功能")
+        
+    else:
+        st.header(f"📋 {selected_tab}")
+        if template_import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -206,11 +342,12 @@ def calculate_dcf_valuation(data):
     except:
         return None
 
-# 主内容区域
-if selected_model == "相对估值模型":
-    st.header("📈 相对估值模型")
-    st.info("🔵 专业版：PE/PB估值功能")
-    st.write("相对估值模型功能正在开发中...")
+    else:
+        st.header(f"📋 {selected_tab}")
+        if template_level == "免费版":
+            st.warning("🔒 此功能需要专业版或企业版订阅")
+        else:
+            st.info(f"💡 {template_level}功能：{selected_tab}")
 
 elif selected_model == "DCF估值模型":
     if template_level == "免费版":
@@ -781,24 +918,73 @@ elif selected_model == "DCF估值模型":
                             with col1:
                                 st.markdown("### 📊 Excel模型")
                                 
-                                if st.button("生成Excel模型"):
+                                if st.button("📊 生成Excel模型", key="excel_gen_btn"):
                                     try:
                                         output = io.BytesIO()
                                         with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                            # DCF估值结果
                                             valuation_data = pd.DataFrame({
-                                                '估值项目': ['企业价值', '股权价值', '每股价值'],
-                                                '数值': [dcf_result['enterprise_value'], dcf_result['equity_value'], dcf_result['share_price']]
+                                                '估值项目': [
+                                                    '企业价值', '股权价值', '每股价值', 
+                                                    'WACC(%)', '永续增长率(%)', '预测年数',
+                                                    '预测期现金流现值', '终值现值', '终值占比(%)'
+                                                ],
+                                                '数值': [
+                                                    dcf_result['enterprise_value'],
+                                                    dcf_result['equity_value'],
+                                                    dcf_result['share_price'],
+                                                    st.session_state.dcf_data['wacc'],
+                                                    st.session_state.dcf_data['terminal_growth'],
+                                                    st.session_state.dcf_data['forecast_years'],
+                                                    dcf_result['total_pv_fcf'],
+                                                    dcf_result['pv_terminal'],
+                                                    round(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100, 1)
+                                                ]
                                             })
-                                            valuation_data.to_excel(writer, sheet_name='DCF结果', index=False)
+                                            valuation_data.to_excel(writer, sheet_name='DCF估值结果', index=False)
+                                            
+                                            # 现金流预测详细表
+                                            forecast_data = pd.DataFrame({
+                                                '年份': [f'第{i+1}年' for i in range(len(dcf_result['forecasted_fcf']))],
+                                                '自由现金流(百万)': [round(fcf, 1) for fcf in dcf_result['forecasted_fcf']],
+                                                '贴现因子': [round(1/((1 + st.session_state.dcf_data['wacc']/100)**(i+1)), 4) for i in range(len(dcf_result['forecasted_fcf']))],
+                                                '现值(百万)': [round(pv, 1) for pv in dcf_result['pv_fcf']]
+                                            })
+                                            forecast_data.to_excel(writer, sheet_name='现金流预测', index=False)
+                                            
+                                            # 输入参数表
+                                            input_data = pd.DataFrame({
+                                                '参数名称': [
+                                                    '公司名称', '基期收入(百万)', '自由现金流率(%)', 
+                                                    'WACC(%)', '永续增长率(%)', '预测年数',
+                                                    '流通股数(百万股)', '现金(百万)', '债务(百万)'
+                                                ],
+                                                '当前数值': [
+                                                    st.session_state.dcf_data['company_name'],
+                                                    st.session_state.dcf_data['base_revenue'],
+                                                    st.session_state.dcf_data['fcf_margin'],
+                                                    st.session_state.dcf_data['wacc'],
+                                                    st.session_state.dcf_data['terminal_growth'],
+                                                    st.session_state.dcf_data['forecast_years'],
+                                                    st.session_state.dcf_data['shares_outstanding'],
+                                                    st.session_state.dcf_data['cash'],
+                                                    st.session_state.dcf_data['debt']
+                                                ]
+                                            })
+                                            input_data.to_excel(writer, sheet_name='输入参数', index=False)
                                         
+                                        st.success("✅ Excel模型生成成功！")
                                         st.download_button(
-                                            label="📥 下载Excel文件",
+                                            label="💾 下载Excel DCF模型",
                                             data=output.getvalue(),
-                                            file_name=f"DCF_{st.session_state.dcf_data['company_name']}.xlsx",
-                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                            file_name=f"DCF模型_{st.session_state.dcf_data['company_name']}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                            key="excel_download_final"
                                         )
                                     except Exception as e:
                                         st.error(f"Excel生成失败: {str(e)}")
+                                
+                                st.info("Excel模型包含：DCF估值结果、现金流预测、输入参数三个工作表")
                             
                             with col2:
                                 st.markdown("### 📊 PowerPoint演示")
@@ -807,14 +993,218 @@ elif selected_model == "DCF估值模型":
                                 ppt_js = f"""
                                 <script>
                                 function openPPT() {{
-                                    var content = `<html><body style="font-family: Arial;">
-                                    <h1>{st.session_state.dcf_data['company_name']} DCF分析</h1>
-                                    <h2>每股价值: {currency_symbol}{dcf_result['share_price']:.2f}</h2>
-                                    <p>企业价值: {currency_symbol}{dcf_result['enterprise_value']:.1f}M</p>
-                                    <p>股权价值: {currency_symbol}{dcf_result['equity_value']:.1f}M</p>
-                                    </body></html>`;
+                                    var content = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>{st.session_state.dcf_data['company_name']} DCF估值演示</title>
+    <style>
+        body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }}
+        .slide {{ 
+            width: 90%; max-width: 800px; margin: 20px auto; 
+            background: white; padding: 40px; 
+            border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            page-break-after: always;
+        }}
+        .slide h1 {{ color: #3b82f6; text-align: center; font-size: 32px; margin-bottom: 20px; }}
+        .slide h2 {{ color: #1f2937; font-size: 24px; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }}
+        .highlight {{ background: #dbeafe; padding: 20px; border-radius: 8px; text-align: center; }}
+        .metrics {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin: 20px 0; }}
+        .metric {{ background: #f8fafc; padding: 15px; border-radius: 8px; text-align: center; }}
+        .metric-value {{ font-size: 24px; font-weight: bold; color: #3b82f6; }}
+        .no-print {{ text-align: center; margin: 20px; }}
+        .print-btn {{ background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }}
+        @media print {{ .no-print {{ display: none; }} }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        th, td {{ border: 1px solid #e5e7eb; padding: 12px; text-align: center; }}
+        th {{ background-color: #f3f4f6; font-weight: bold; }}
+        .risk-box {{ background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button class="print-btn" onclick="window.print()">🖨️ 打印演示文稿</button>
+    </div>
+
+    <!-- 幻灯片1: 封面 -->
+    <div class="slide">
+        <h1>{st.session_state.dcf_data['company_name']}</h1>
+        <h1>DCF估值分析演示</h1>
+        <div class="highlight">
+            <h2>分析师: {analyst_name}</h2>
+            <h2>日期: {report_date}</h2>
+            <p style="margin-top: 30px; color: #6b7280;">FinancialModel.cn 专业版</p>
+        </div>
+    </div>
+
+    <!-- 幻灯片2: 执行摘要 -->
+    <div class="slide">
+        <h2>📋 执行摘要</h2>
+        <div class="highlight">
+            <h1>每股内在价值</h1>
+            <div style="font-size: 48px; color: #10b981; margin: 20px 0;">
+                {currency_symbol}{dcf_result['share_price']:.2f}
+            </div>
+        </div>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">{currency_symbol}{dcf_result['enterprise_value']:.1f}M</div>
+                <div>企业价值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{currency_symbol}{dcf_result['equity_value']:.1f}M</div>
+                <div>股权价值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{currency_symbol}{dcf_result['total_pv_fcf']:.1f}M</div>
+                <div>预测期现金流现值</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%</div>
+                <div>终值占比</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 幻灯片3: 关键假设 -->
+    <div class="slide">
+        <h2>🔢 关键假设</h2>
+        <div class="metrics">
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['wacc']:.1f}%</div>
+                <div>WACC</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['terminal_growth']:.1f}%</div>
+                <div>永续增长率</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['forecast_years']}年</div>
+                <div>预测期</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">{st.session_state.dcf_data['fcf_margin']:.1f}%</div>
+                <div>自由现金流率</div>
+            </div>
+        </div>
+        <div style="background: #dbeafe; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3>收入增长率假设</h3>
+            <table>
+                <tr>
+                    <th>年份</th>`
+                
+                for i in range(st.session_state.dcf_data['forecast_years']):
+                    content += f`<th>第{i+1}年</th>`
+                
+                content += `</tr>
+                <tr>
+                    <td><strong>增长率</strong></td>`
+                
+                for i in range(st.session_state.dcf_data['forecast_years']):
+                    if i < len(st.session_state.dcf_data['revenue_growth_rates']):
+                        growth_rate = st.session_state.dcf_data['revenue_growth_rates'][i]
+                    else:
+                        growth_rate = st.session_state.dcf_data['revenue_growth_rates'][-1]
+                    content += f`<td>{growth_rate:.1f}%</td>`
+                
+                content += `</tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- 幻灯片4: 估值分解 -->
+    <div class="slide">
+        <h2>💰 估值分解</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h3>现金流预测与现值</h3>
+            <table>
+                <tr>
+                    <th>年份</th>
+                    <th>自由现金流(M)</th>
+                    <th>现值(M)</th>
+                </tr>`
+                
+                for i, year in enumerate(dcf_result['years']):
+                    content += f`
+                <tr>
+                    <td>第{year}年</td>
+                    <td>{dcf_result['forecasted_fcf'][i]:.1f}</td>
+                    <td>{dcf_result['pv_fcf'][i]:.1f}</td>
+                </tr>`
+                
+                content += f`
+            </table>
+        </div>
+        <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center;">
+            <h3>估值汇总</h3>
+            <p><strong>预测期现金流现值:</strong> {currency_symbol}{dcf_result['total_pv_fcf']:.1f}M</p>
+            <p><strong>终值现值:</strong> {currency_symbol}{dcf_result['pv_terminal']:.1f}M</p>
+            <p style="font-size: 24px; color: #10b981;"><strong>企业价值:</strong> {currency_symbol}{dcf_result['enterprise_value']:.1f}M</p>
+            <hr>
+            <p><strong>减去净债务:</strong> {currency_symbol}{st.session_state.dcf_data['debt'] - st.session_state.dcf_data['cash']:.1f}M</p>
+            <p style="font-size: 24px; color: #3b82f6;"><strong>股权价值:</strong> {currency_symbol}{dcf_result['equity_value']:.1f}M</p>
+        </div>
+    </div>
+
+    <!-- 幻灯片5: 风险提示 -->
+    <div class="slide">
+        <h2>⚠️ 风险提示与建议</h2>
+        <div class="risk-box">
+            <h3>关键风险因素</h3>
+            <ul style="font-size: 18px; line-height: 1.8; text-align: left;">
+                <li>DCF模型基于当前假设，实际结果可能不同</li>
+                <li>终值占比{(dcf_result['pv_terminal'] / dcf_result['enterprise_value'] * 100):.1f}%，需关注长期预测准确性</li>
+                <li>建议结合其他估值方法进行验证</li>
+                <li>投资决策需考虑个人风险承受能力</li>
+                <li>市场环境变化可能影响估值结果</li>
+            </ul>
+        </div>
+        <div class="highlight" style="margin-top: 30px;">
+            <h2>投资建议</h2>
+            <p style="font-size: 20px;">基于DCF分析，目标价格 {currency_symbol}{dcf_result['share_price']:.2f}</p>
+            <p>建议结合市场条件和其他估值方法综合判断</p>
+        </div>
+    </div>
+
+    <!-- 幻灯片6: 模型说明 -->
+    <div class="slide">
+        <h2>📚 DCF模型说明</h2>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h3>贴现现金流估值法核心原理</h3>
+            <ol style="font-size: 18px; line-height: 1.8;">
+                <li><strong>预测自由现金流:</strong> 基于收入增长和现金流率假设</li>
+                <li><strong>确定贴现率:</strong> 使用WACC反映投资风险</li>
+                <li><strong>计算终值:</strong> 采用永续增长模型</li>
+                <li><strong>求和现值:</strong> 预测期现金流现值 + 终值现值</li>
+            </ol>
+        </div>
+        <div style="background: #dbeafe; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3>模型优势与局限</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h4>✅ 优势</h4>
+                    <ul>
+                        <li>理论基础扎实</li>
+                        <li>考虑时间价值</li>
+                        <li>关注现金流</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4>⚠️ 局限</h4>
+                    <ul>
+                        <li>依赖预测假设</li>
+                        <li>对参数敏感</li>
+                        <li>需要专业判断</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`;
                                     var newWindow = window.open('', '_blank');
                                     newWindow.document.write(content);
+                                    newWindow.document.close();
                                 }}
                                 </script>
                                 <button onclick="openPPT()" style="background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px;">
