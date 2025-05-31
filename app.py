@@ -1204,19 +1204,29 @@ elif selected_model == "DCF估值模型":
                             # 在Streamlit中显示HTML报告
                             st.components.v1.html(report_html, height=800, scrolling=True)
                             
-                            # 下载选项
-                            st.subheader("📥 下载报告")
+                            # 提供在新窗口打开的选项
+                            st.subheader("📥 报告选项")
                             
                             col1, col2, col3 = st.columns(3)
                             
                             with col1:
-                                # HTML报告下载
-                                st.download_button(
-                                    label="📄 下载HTML报告",
-                                    data=report_html,
-                                    file_name=f"{st.session_state.dcf_data['company_name']}_DCF报告_{report_date}.html",
-                                    mime="text/html"
-                                )
+                                st.markdown("### 📄 PDF报告")
+                                st.info("点击下方按钮在新窗口打开HTML报告，然后使用浏览器的打印功能保存为PDF")
+                                
+                                # 使用JavaScript在新窗口打开HTML
+                                pdf_js = f"""
+                                <script>
+                                function openPDFReport() {{
+                                    var newWindow = window.open('', '_blank');
+                                    newWindow.document.write(`{report_html.replace('`', '\\`')}`);
+                                    newWindow.document.close();
+                                }}
+                                </script>
+                                <button onclick="openPDFReport()" style="background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
+                                    📄 打开PDF报告
+                                </button>
+                                """
+                                st.components.v1.html(pdf_js, height=80)
                             
                             with col2:
                                 # Excel模型下载（真实Excel文件）
@@ -1243,6 +1253,7 @@ elif selected_model == "DCF估值模型":
                                 
                                 excel_data = create_simple_excel()
                                 
+                                st.markdown("### 📊 Excel模型")
                                 st.download_button(
                                     label="📊 下载Excel模型", 
                                     data=excel_data,
@@ -1251,6 +1262,9 @@ elif selected_model == "DCF估值模型":
                                 )
                             
                             with col3:
+                                st.markdown("### 📊 PowerPoint演示")
+                                st.info("点击下方按钮在新窗口打开演示文稿，然后使用浏览器的打印功能")
+                                
                                 # PowerPoint演示HTML版本
                                 ppt_html = f"""
 <!DOCTYPE html>
@@ -1372,12 +1386,42 @@ elif selected_model == "DCF估值模型":
 </body>
 </html>"""
                                 
-                                st.download_button(
-                                    label="📊 下载PPT演示",
-                                    data=ppt_html, 
-                                    file_name=f"{st.session_state.dcf_data['company_name']}_DCF演示_{report_date}.html",
-                                    mime="text/html"
-                                )
+                                # 使用JavaScript在新窗口打开PPT
+                                ppt_js = f"""
+                                <script>
+                                function openPPTReport() {{
+                                    var newWindow = window.open('', '_blank');
+                                    newWindow.document.write(`{ppt_html.replace('`', '\\`')}`);
+                                    newWindow.document.close();
+                                }}
+                                </script>
+                                <button onclick="openPPTReport()" style="background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
+                                    📊 打开PPT演示
+                                </button>
+                                """
+                                st.components.v1.html(ppt_js, height=80)
+                            
+                            # 添加使用说明
+                            st.markdown("---")
+                            st.markdown("""
+                            ### 📖 使用说明
+                            
+                            **PDF报告生成步骤：**
+                            1. 点击"📄 打开PDF报告"按钮
+                            2. 在新打开的窗口中，按 `Ctrl+P` (Windows) 或 `Cmd+P` (Mac)
+                            3. 选择"保存为PDF"或连接的打印机
+                            4. 设置页面布局和边距，点击保存
+                            
+                            **PowerPoint演示生成步骤：**
+                            1. 点击"📊 打开PPT演示"按钮  
+                            2. 在新窗口中查看5页幻灯片内容
+                            3. 使用浏览器打印功能保存为PDF
+                            4. 可选择横向布局以适合演示格式
+                            
+                            **Excel模型：**
+                            - 直接点击下载按钮获得真实的Excel文件
+                            - 可在Excel中编辑参数和查看计算公式
+                            """)
         
     elif selected_dcf_tab == "🔧 模型导出":
         st.header("💾 DCF模型导出")
