@@ -1,7 +1,4 @@
-'贴现因子': [round(1/((1 + st.session_state.dcf_data['wacc']/100)**(i+1)), 3) for i in range(len(dcf_result['years']))]
-            })
-            
-            st.dataframe(forecast_df, use_container_width=True)
+st.dataframe(forecast_df, use_container_width=True)
             
             # 现金流图表
             fig = go.Figure()
