@@ -137,6 +137,22 @@ class DCFData:
         self.shares_outstanding = kwargs.get('shares_outstanding', 100.0)
         self.cash = kwargs.get('cash', 50.0)
         self.debt = kwargs.get('debt', 200.0)
+    
+    def to_dict(self) -> Dict:
+        """转换为字典"""
+        return {
+            'company_name': self.company_name,
+            'base_revenue': self.base_revenue,
+            'base_fcf': self.base_fcf,
+            'revenue_growth_rates': self.revenue_growth_rates,
+            'fcf_margin': self.fcf_margin,
+            'wacc': self.wacc,
+            'terminal_growth': self.terminal_growth,
+            'forecast_years': self.forecast_years,
+            'shares_outstanding': self.shares_outstanding,
+            'cash': self.cash,
+            'debt': self.debt
+        }
 
 # ==================== 核心计算引擎 ====================
 class ValuationEngine:
@@ -575,13 +591,18 @@ class DCFValuationModel:
     def _render_growth_rate_settings(self):
         """渲染收入增长率设置"""
         st.subheader("📈 收入增长率预测")
-        growth_cols = st.columns(st.session_state.dcf_data['forecast_years'])
+        forecast_years = st.session_state.dcf_data['forecast_years']
+        growth_cols = st.columns(forecast_years)
         
         # 确保增长率列表长度匹配预测年数
-        while len(st.session_state.dcf_data['revenue_growth_rates']) < st.session_state.dcf_data['forecast_years']:
+        while len(st.session_state.dcf_data['revenue_growth_rates']) < forecast_years:
             st.session_state.dcf_data['revenue_growth_rates'].append(5.0)
         
-        for i in range(st.session_state.dcf_data['forecast_years']):
+        # 如果列表太长，截断它
+        if len(st.session_state.dcf_data['revenue_growth_rates']) > forecast_years:
+            st.session_state.dcf_data['revenue_growth_rates'] = st.session_state.dcf_data['revenue_growth_rates'][:forecast_years]
+        
+        for i in range(forecast_years):
             with growth_cols[i]:
                 st.session_state.dcf_data['revenue_growth_rates'][i] = st.number_input(
                     f"第{i+1}年 (%)", 
@@ -591,13 +612,24 @@ class DCFValuationModel:
     
     def _calculate_and_display_dcf(self):
         """计算并显示DCF结果"""
+        # 验证输入数据
+        is_valid, errors = DataValidator.validate_dcf_inputs(st.session_state.dcf_data)
+        
+        if not is_valid:
+            st.error("输入数据有误：")
+            for error in errors:
+                st.error(f"• {error}")
+            return
+        
+        # 创建DCF数据对象并计算
         dcf_data_obj = DCFData(**st.session_state.dcf_data)
         dcf_result = ValuationEngine.calculate_dcf_valuation(dcf_data_obj)
         
         if dcf_result:
             self._display_dcf_results(dcf_result)
             self._display_dcf_charts(dcf_result)
-    
+        else:
+            st.error("DCF计算失败，请检查输入参数")
     def _display_dcf_results(self, dcf_result: Dict):
         """显示DCF结果"""
         st.subheader("💰 估值结果")
@@ -719,15 +751,20 @@ class DCFValuationModel:
         for wacc in wacc_values:
             row = []
             for growth in growth_values:
+                # 确保创建完整的副本
                 temp_data = st.session_state.dcf_data.copy()
-                temp_data['wacc'] = wacc
-                temp_data['terminal_growth'] = growth
+                temp_data['wacc'] = float(wacc)
+                temp_data['terminal_growth'] = float(growth)
                 
-                dcf_data_obj = DCFData(**temp_data)
-                result = ValuationEngine.calculate_dcf_valuation(dcf_data_obj)
-                if result:
-                    row.append(result['share_price'])
-                else:
+                try:
+                    dcf_data_obj = DCFData(**temp_data)
+                    result = ValuationEngine.calculate_dcf_valuation(dcf_data_obj)
+                    if result and 'share_price' in result:
+                        row.append(result['share_price'])
+                    else:
+                        row.append(0)
+                except Exception as e:
+                    logger.error(f"敏感性分析计算错误: {e}")
                     row.append(0)
             
             sensitivity_matrix.append(row)
@@ -868,20 +905,29 @@ class DataValidator:
         """验证DCF输入数据"""
         errors = []
         
-        if dcf_data['wacc'] <= 0:
-            errors.append("WACC必须大于0")
-        
-        if dcf_data['terminal_growth'] < 0 or dcf_data['terminal_growth'] > ModelConstants.MAX_TERMINAL_GROWTH:
-            errors.append(f"永续增长率应在0-{ModelConstants.MAX_TERMINAL_GROWTH}%之间")
-        
-        if dcf_data['wacc'] <= dcf_data['terminal_growth']:
-            errors.append("WACC必须大于永续增长率")
-        
-        if dcf_data['base_revenue'] <= 0:
-            errors.append("基期收入必须大于0")
-        
-        if dcf_data['shares_outstanding'] <= 0:
-            errors.append("流通股数必须大于0")
+        try:
+            wacc = float(dcf_data.get('wacc', 0))
+            terminal_growth = float(dcf_data.get('terminal_growth', 0))
+            base_revenue = float(dcf_data.get('base_revenue', 0))
+            shares_outstanding = float(dcf_data.get('shares_outstanding', 0))
+            
+            if wacc <= 0:
+                errors.append("WACC必须大于0")
+            
+            if terminal_growth < 0 or terminal_growth > ModelConstants.MAX_TERMINAL_GROWTH:
+                errors.append(f"永续增长率应在0-{ModelConstants.MAX_TERMINAL_GROWTH}%之间")
+            
+            if wacc <= terminal_growth:
+                errors.append("WACC必须大于永续增长率")
+            
+            if base_revenue <= 0:
+                errors.append("基期收入必须大于0")
+            
+            if shares_outstanding <= 0:
+                errors.append("流通股数必须大于0")
+                
+        except (ValueError, TypeError) as e:
+            errors.append(f"数据格式错误: {str(e)}")
         
         return len(errors) == 0, errors
 
