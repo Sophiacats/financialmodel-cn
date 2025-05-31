@@ -1213,13 +1213,16 @@ elif selected_model == "DCF估值模型":
                                 st.markdown("### 📄 PDF报告")
                                 st.info("点击下方按钮在新窗口打开HTML报告，然后使用浏览器的打印功能保存为PDF")
                                 
-                                # 使用JavaScript在新窗口打开HTML
-                                escaped_html = report_html.replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                                # 使用base64编码方式传递HTML内容
+                                import base64
+                                report_html_b64 = base64.b64encode(report_html.encode('utf-8')).decode('utf-8')
+                                
                                 pdf_js = f"""
                                 <script>
                                 function openPDFReport() {{
+                                    var htmlContent = atob('{report_html_b64}');
                                     var newWindow = window.open('', '_blank');
-                                    newWindow.document.write("{escaped_html}");
+                                    newWindow.document.write(htmlContent);
                                     newWindow.document.close();
                                 }}
                                 </script>
@@ -1387,13 +1390,15 @@ elif selected_model == "DCF估值模型":
 </body>
 </html>"""
                                 
-                                # 使用JavaScript在新窗口打开PPT
-                                escaped_ppt_html = ppt_html.replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                                # 使用base64编码方式传递PPT HTML内容
+                                ppt_html_b64 = base64.b64encode(ppt_html.encode('utf-8')).decode('utf-8')
+                                
                                 ppt_js = f"""
                                 <script>
                                 function openPPTReport() {{
+                                    var htmlContent = atob('{ppt_html_b64}');
                                     var newWindow = window.open('', '_blank');
-                                    newWindow.document.write("{escaped_ppt_html}");
+                                    newWindow.document.write(htmlContent);
                                     newWindow.document.close();
                                 }}
                                 </script>
