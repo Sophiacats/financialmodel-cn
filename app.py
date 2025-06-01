@@ -690,7 +690,407 @@ if selected_model == "相对估值模型":
         
     elif selected_tab == "📄 报告导出":
         st.header("📋 专业估值分析报告")
-        st.info("💡 这里放入你完整的报告导出代码")
+        
+        if template_level == "免费版":
+            st.warning("🔒 此功能需要专业版或企业版订阅")
+        else:
+            # 计算目标公司指标用于报告
+            target_metrics = calculate_metrics(st.session_state.target_company)
+            
+            st.subheader("📊 生成专业估值报告")
+            
+            # 报告参数设置
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                report_title = st.text_input("报告标题", f"{st.session_state.target_company['name']} 相对估值分析报告")
+                analyst_name = st.text_input("分析师", "FinancialModel.cn")
+                report_date = st.date_input("报告日期", datetime.now())
+            
+            with col2:
+                include_charts = st.checkbox("包含图表", True)
+                include_comparison = st.checkbox("包含同业对比", True)
+                report_language = st.selectbox("报告语言", ["中文", "English"], index=0)
+            
+            if st.button("🔄 生成估值报告", type="primary"):
+                with st.spinner("正在生成报告..."):
+                    # 模拟报告生成
+                    progress_bar = st.progress(0)
+                    for i in range(100):
+                        progress_bar.progress(i + 1)
+                    
+                    # 报告内容预览
+                    st.success("✅ 估值报告生成完成！")
+                    
+                    # 计算可比公司指标
+                    comparable_metrics = []
+                    for comp in st.session_state.comparable_companies:
+                        metrics = calculate_metrics(comp)
+                        comparable_metrics.append({
+                            'name': comp['name'],
+                            'pe': metrics['pe'],
+                            'pb': metrics['pb'],
+                            'ev_ebitda': metrics['ev_ebitda']
+                        })
+                    
+                    # 计算平均值
+                    avg_pe = sum([m['pe'] for m in comparable_metrics]) / len(comparable_metrics) if comparable_metrics else 0
+                    avg_pb = sum([m['pb'] for m in comparable_metrics]) / len(comparable_metrics) if comparable_metrics else 0
+                    avg_ev_ebitda = sum([m['ev_ebitda'] for m in comparable_metrics]) / len(comparable_metrics) if comparable_metrics else 0
+                    
+                    # 创建专业的HTML报告
+                    report_html = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{report_title}</title>
+    <style>
+        @media print {{
+            .no-print {{ display: none; }}
+        }}
+        body {{
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }}
+        .header {{
+            text-align: center;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }}
+        .header h1 {{
+            color: #1f2937;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }}
+        .header .meta {{
+            color: #6b7280;
+            font-size: 14px;
+        }}
+        .section {{
+            margin-bottom: 30px;
+        }}
+        .section h2 {{
+            color: #3b82f6;
+            border-left: 4px solid #3b82f6;
+            padding-left: 15px;
+            font-size: 20px;
+        }}
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }}
+        .metric-card {{
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+            text-align: center;
+        }}
+        .metric-value {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #3b82f6;
+            margin-bottom: 5px;
+        }}
+        .metric-label {{
+            color: #6b7280;
+            font-size: 14px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th, td {{
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: center;
+        }}
+        th {{
+            background-color: #f3f4f6;
+            font-weight: bold;
+            color: #1f2937;
+        }}
+        .comparison {{
+            background: #dbeafe;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }}
+        .risk-warning {{
+            background: #fef3c7;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #f59e0b;
+            margin: 20px 0;
+        }}
+        .footer {{
+            text-align: center;
+            color: #6b7280;
+            font-size: 12px;
+            margin-top: 40px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 20px;
+        }}
+        .print-button {{
+            background: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }}
+        .print-button:hover {{
+            background: #2563eb;
+        }}
+    </style>
+</head>
+<body>
+    <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+        <button class="print-button" onclick="window.print()">🖨️ 打印/保存为PDF</button>
+    </div>
+
+    <div class="header">
+        <h1>{report_title}</h1>
+        <div class="meta">
+            <p><strong>分析师:</strong> {analyst_name} | <strong>报告日期:</strong> {report_date}</p>
+            <p><strong>生成平台:</strong> FinancialModel.cn 专业版</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📋 执行摘要</h2>
+        <p>基于相对估值分析，{st.session_state.target_company['name']}的估值水平如下：</p>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">{target_metrics['pe']}</div>
+                <div class="metric-label">PE 市盈率</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{target_metrics['pb']}</div>
+                <div class="metric-label">PB 市净率</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{target_metrics['ev_ebitda']}</div>
+                <div class="metric-label">EV/EBITDA</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{currency_symbol}{st.session_state.target_company['stock_price']}</div>
+                <div class="metric-label">当前股价</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📊 同业对比分析</h2>
+        <div class="comparison">
+            <h3>估值倍数对比</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>公司</th>
+                        <th>PE</th>
+                        <th>PB</th>
+                        <th>EV/EBITDA</th>
+                        <th>市值(万元)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="background-color: #fff3cd;">
+                        <td><strong>{st.session_state.target_company['name']}</strong></td>
+                        <td><strong>{target_metrics['pe']}</strong></td>
+                        <td><strong>{target_metrics['pb']}</strong></td>
+                        <td><strong>{target_metrics['ev_ebitda']}</strong></td>
+                        <td><strong>{target_metrics['market_cap']}</strong></td>
+                    </tr>"""
+                    
+                    # 添加可比公司数据
+                    for comp_metric in comparable_metrics:
+                        comp_data = next(comp for comp in st.session_state.comparable_companies if comp['name'] == comp_metric['name'])
+                        comp_market_cap = comp_data['stock_price'] * comp_data['total_shares']
+                        report_html += f"""
+                    <tr>
+                        <td>{comp_metric['name']}</td>
+                        <td>{comp_metric['pe']}</td>
+                        <td>{comp_metric['pb']}</td>
+                        <td>{comp_metric['ev_ebitda']}</td>
+                        <td>{comp_market_cap:.2f}</td>
+                    </tr>"""
+                    
+                    report_html += f"""
+                    <tr style="background-color: #e8f5e8;">
+                        <td><strong>行业平均</strong></td>
+                        <td><strong>{avg_pe:.2f}</strong></td>
+                        <td><strong>{avg_pb:.2f}</strong></td>
+                        <td><strong>{avg_ev_ebitda:.2f}</strong></td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>💡 估值分析结论</h2>
+        <div class="comparison">
+            <h3>相对估值评估</h3>
+            <ul>"""
+                    
+                    # 生成估值分析结论
+                    if target_metrics['pe'] > avg_pe * 1.2:
+                        report_html += f"<li>PE估值：当前PE({target_metrics['pe']})显著高于行业平均({avg_pe:.2f})，存在高估风险</li>"
+                    elif target_metrics['pe'] < avg_pe * 0.8:
+                        report_html += f"<li>PE估值：当前PE({target_metrics['pe']})显著低于行业平均({avg_pe:.2f})，具有投资价值</li>"
+                    else:
+                        report_html += f"<li>PE估值：当前PE({target_metrics['pe']})接近行业平均({avg_pe:.2f})，估值合理</li>"
+                    
+                    if target_metrics['pb'] > avg_pb * 1.2:
+                        report_html += f"<li>PB估值：当前PB({target_metrics['pb']})高于行业平均({avg_pb:.2f})，账面价值溢价较高</li>"
+                    elif target_metrics['pb'] < avg_pb * 0.8:
+                        report_html += f"<li>PB估值：当前PB({target_metrics['pb']})低于行业平均({avg_pb:.2f})，安全边际较好</li>"
+                    else:
+                        report_html += f"<li>PB估值：当前PB({target_metrics['pb']})接近行业平均({avg_pb:.2f})，估值合理</li>"
+                    
+                    # 综合建议
+                    pe_premium = (target_metrics['pe'] / avg_pe - 1) * 100 if avg_pe > 0 else 0
+                    pb_premium = (target_metrics['pb'] / avg_pb - 1) * 100 if avg_pb > 0 else 0
+                    avg_premium = (pe_premium + pb_premium) / 2
+                    
+                    if avg_premium > 20:
+                        investment_advice = "谨慎投资 - 估值偏高"
+                    elif avg_premium < -20:
+                        investment_advice = "建议关注 - 估值偏低"
+                    else:
+                        investment_advice = "中性观点 - 估值合理"
+                    
+                    report_html += f"""
+                <li><strong>综合建议：{investment_advice}</strong></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>⚠️ 风险提示</h2>
+        <div class="risk-warning">
+            <h3>重要声明</h3>
+            <ul>
+                <li>本相对估值分析基于历史财务数据和当前市场条件</li>
+                <li>估值倍数可能因行业周期、市场情绪等因素发生变化</li>
+                <li>相对估值需要结合绝对估值方法(如DCF)进行综合判断</li>
+                <li>投资决策应考虑公司基本面、行业前景和个人风险偏好</li>
+                <li>过往表现不代表未来收益，投资需谨慎</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>本报告由 <strong>FinancialModel.cn</strong> 专业金融建模平台生成</p>
+        <p>生成时间: {datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')} | 版本: 专业版</p>
+        <p>🚀 让复杂的金融模型变得简单易用 | 💡 为投资决策提供专业支持</p>
+    </div>
+</body>
+</html>"""
+                    
+                    # 在Streamlit中显示HTML报告
+                    st.components.v1.html(report_html, height=800, scrolling=True)
+                    
+                    # 提供Excel导出选项
+                    st.subheader("📥 导出选项")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("### 📊 Excel分析报告")
+                        
+                        # 创建Excel报告
+                        def create_valuation_excel():
+                            output = io.BytesIO()
+                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                # 目标公司数据
+                                target_df = pd.DataFrame([{
+                                    '公司名称': st.session_state.target_company['name'],
+                                    '股价': st.session_state.target_company['stock_price'],
+                                    '总股本(万股)': st.session_state.target_company['total_shares'],
+                                    '净利润(万元)': st.session_state.target_company['net_profit'],
+                                    '净资产(万元)': st.session_state.target_company['net_assets'],
+                                    'EBITDA(万元)': st.session_state.target_company['ebitda'],
+                                    '市值(万元)': target_metrics['market_cap'],
+                                    'PE': target_metrics['pe'],
+                                    'PB': target_metrics['pb'],
+                                    'EV/EBITDA': target_metrics['ev_ebitda']
+                                }])
+                                target_df.to_excel(writer, sheet_name='目标公司', index=False)
+                                
+                                # 可比公司数据
+                                comp_data = []
+                                for i, comp in enumerate(st.session_state.comparable_companies):
+                                    comp_metrics = calculate_metrics(comp)
+                                    comp_data.append({
+                                        '公司名称': comp['name'],
+                                        '股价': comp['stock_price'],
+                                        '总股本(万股)': comp['total_shares'],
+                                        '净利润(万元)': comp['net_profit'],
+                                        '净资产(万元)': comp['net_assets'],
+                                        'EBITDA(万元)': comp['ebitda'],
+                                        '市值(万元)': comp_metrics['market_cap'],
+                                        'PE': comp_metrics['pe'],
+                                        'PB': comp_metrics['pb'],
+                                        'EV/EBITDA': comp_metrics['ev_ebitda']
+                                    })
+                                
+                                comp_df = pd.DataFrame(comp_data)
+                                comp_df.to_excel(writer, sheet_name='可比公司', index=False)
+                                
+                                # 对比分析
+                                comparison_df = pd.DataFrame([
+                                    {'指标': 'PE', '目标公司': target_metrics['pe'], '行业平均': avg_pe, '溢价率(%)': (target_metrics['pe']/avg_pe-1)*100 if avg_pe > 0 else 0},
+                                    {'指标': 'PB', '目标公司': target_metrics['pb'], '行业平均': avg_pb, '溢价率(%)': (target_metrics['pb']/avg_pb-1)*100 if avg_pb > 0 else 0},
+                                    {'指标': 'EV/EBITDA', '目标公司': target_metrics['ev_ebitda'], '行业平均': avg_ev_ebitda, '溢价率(%)': (target_metrics['ev_ebitda']/avg_ev_ebitda-1)*100 if avg_ev_ebitda > 0 else 0}
+                                ])
+                                comparison_df.to_excel(writer, sheet_name='对比分析', index=False)
+                            
+                            return output.getvalue()
+                        
+                        excel_data = create_valuation_excel()
+                        
+                        st.download_button(
+                            label="📊 下载Excel分析报告",
+                            data=excel_data,
+                            file_name=f"{st.session_state.target_company['name']}_估值分析报告_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    
+                    with col2:
+                        st.markdown("### 📄 PDF报告")
+                        st.info("使用上方的'🖨️ 打印/保存为PDF'按钮在浏览器中保存为PDF文件")
+                        
+                        st.markdown("### 📋 使用说明")
+                        st.markdown("""
+                        **PDF报告生成：**
+                        1. 点击报告上方的"🖨️ 打印/保存为PDF"按钮
+                        2. 在浏览器打印对话框中选择"保存为PDF"
+                        3. 设置页面布局为A4纵向
+                        
+                        **Excel报告内容：**
+                        - 目标公司详细数据
+                        - 可比公司数据
+                        - 对比分析结果
+                        """)
+            
+            # 添加使用说明
+            st.markdown("---")
+            st.info("💡 专业版用户可以生成包含详细分析的估值报告，支持PDF和Excel格式导出")
 
 elif selected_model == "DCF估值模型":
     # 根据模板级别显示不同功能
