@@ -177,29 +177,61 @@ def calculate_altman_z_score(data):
         info = data['info']
         balance_sheet = data['balance_sheet']
         
-        # 获取必要数据
+        # 检查数据是否为空
+        if balance_sheet.empty:
+            return 0, "数据不足", "gray"
+        
+        # 获取必要数据，使用get方法避免KeyError
         total_assets = info.get('totalAssets', 0)
-        current_assets = balance_sheet.loc['Current Assets'].iloc[0] if 'Current Assets' in balance_sheet.index else 0
-        current_liabilities = balance_sheet.loc['Current Liabilities'].iloc[0] if 'Current Liabilities' in balance_sheet.index else 0
-        retained_earnings = balance_sheet.loc['Retained Earnings'].iloc[0] if 'Retained Earnings' in balance_sheet.index else 0
+        
+        # 安全获取资产负债表数据
+        current_assets = 0
+        current_liabilities = 0
+        retained_earnings = 0
+        total_liabilities = 0
+        
+        if not balance_sheet.empty and len(balance_sheet.columns) > 0:
+            # 尝试不同的可能字段名
+            for ca_field in ['Current Assets', 'Total Current Assets']:
+                if ca_field in balance_sheet.index:
+                    current_assets = balance_sheet.loc[ca_field].iloc[0]
+                    break
+            
+            for cl_field in ['Current Liabilities', 'Total Current Liabilities']:
+                if cl_field in balance_sheet.index:
+                    current_liabilities = balance_sheet.loc[cl_field].iloc[0]
+                    break
+            
+            if 'Retained Earnings' in balance_sheet.index:
+                retained_earnings = balance_sheet.loc['Retained Earnings'].iloc[0]
+            
+            for tl_field in ['Total Liabilities Net Minority Interest', 'Total Liabilities', 'Total Liab']:
+                if tl_field in balance_sheet.index:
+                    total_liabilities = balance_sheet.loc[tl_field].iloc[0]
+                    break
+        
         ebit = info.get('ebitda', 0)
         market_cap = info.get('marketCap', 0)
-        total_liabilities = balance_sheet.loc['Total Liabilities Net Minority Interest'].iloc[0] if 'Total Liabilities Net Minority Interest' in balance_sheet.index else 0
         revenue = info.get('totalRevenue', 0)
         
-        if total_assets == 0:
-            return None, "数据不足"
+        # 如果总资产为0或负数，返回默认值
+        if total_assets <= 0:
+            return 0, "数据不足", "gray"
         
         # 计算Z-Score组成部分
         working_capital = current_assets - current_liabilities
         
         A = (working_capital / total_assets) * 1.2
-        B = (retained_earnings / total_assets) * 1.4
-        C = (ebit / total_assets) * 3.3
+        B = (retained_earnings / total_assets) * 1.4 if not pd.isna(retained_earnings) else 0
+        C = (ebit / total_assets) * 3.3 if ebit > 0 else 0
         D = (market_cap / total_liabilities) * 0.6 if total_liabilities > 0 else 0
-        E = (revenue / total_assets) * 1.0
+        E = (revenue / total_assets) * 1.0 if revenue > 0 else 0
         
         z_score = A + B + C + D + E
+        
+        # 处理异常值
+        if pd.isna(z_score) or z_score < -10 or z_score > 10:
+            z_score = 0
         
         # 判断财务健康状态
         if z_score > 2.99:
@@ -215,7 +247,7 @@ def calculate_altman_z_score(data):
         return z_score, status, color
     except Exception as e:
         st.warning(f"Altman Z-Score计算失败: {str(e)}")
-        return None, "计算失败", "gray"
+        return 0, "计算失败", "gray"
 
 def calculate_dcf_valuation(data):
     """DCF估值模型"""
@@ -223,8 +255,23 @@ def calculate_dcf_valuation(data):
         info = data['info']
         cash_flow = data['cash_flow']
         
+        # 检查数据是否为空
+        if cash_flow.empty:
+            return None
+        
         # 获取自由现金流
-        fcf = cash_flow.loc['Free Cash Flow'].iloc[0] if 'Free Cash Flow' in cash_flow.index else 0
+        fcf = 0
+        if 'Free Cash Flow' in cash_flow.index and len(cash_flow.columns) > 0:
+            fcf = cash_flow.loc['Free Cash Flow'].iloc[0]
+        elif 'Operating Cash Flow' in cash_flow.index and len(cash_flow.columns) > 0:
+            # 如果没有自由现金流，使用经营现金流估算
+            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
+            capex = cash_flow.loc['Capital Expenditure'].iloc[0] if 'Capital Expenditure' in cash_flow.index else 0
+            fcf = ocf + capex  # capex通常是负数
+        
+        # 如果现金流为负或0，无法进行DCF估值
+        if fcf <= 0:
+            return None
         
         # 假设增长率和折现率
         growth_rate = 0.05  # 5%增长率
@@ -247,9 +294,16 @@ def calculate_dcf_valuation(data):
         enterprise_value = dcf_value + terminal_pv
         
         # 计算每股价值
-        shares = info.get('sharesOutstanding', 1)
-        fair_value_per_share = enterprise_value / shares if shares > 0 else 0
+        shares = info.get('sharesOutstanding', 0)
+        if shares <= 0:
+            return None
+            
+        fair_value_per_share = enterprise_value / shares
         
+        # 合理性检查
+        if fair_value_per_share < 0 or fair_value_per_share > 10000:
+            return None
+            
         return fair_value_per_share
     except Exception as e:
         st.warning(f"DCF估值计算失败: {str(e)}")
@@ -422,7 +476,7 @@ if analyze_button and ticker:
                 dcf_value = calculate_dcf_valuation(data)
                 current_price = info.get('currentPrice', 0)
                 
-                if dcf_value:
+                if dcf_value and current_price > 0:
                     st.write("**DCF估值**")
                     col_x, col_y = st.columns(2)
                     with col_x:
@@ -431,6 +485,8 @@ if analyze_button and ticker:
                     with col_y:
                         margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
                         st.metric("安全边际", f"{margin:.2f}%")
+                else:
+                    st.info("DCF估值数据不足")
                 
                 # 相对估值
                 st.write("**相对估值**")
@@ -438,8 +494,10 @@ if analyze_button and ticker:
                 if rel_val:
                     col_m, col_n = st.columns(2)
                     with col_m:
-                        st.metric("PE", f"{rel_val['pe_ratio']:.2f}")
-                        st.metric("PB", f"{rel_val['pb_ratio']:.2f}")
+                        pe_display = f"{rel_val['pe_ratio']:.2f}" if rel_val['pe_ratio'] > 0 else "N/A"
+                        pb_display = f"{rel_val['pb_ratio']:.2f}" if rel_val['pb_ratio'] > 0 else "N/A"
+                        st.metric("PE", pe_display)
+                        st.metric("PB", pb_display)
                     with col_n:
                         st.metric("行业PE", f"{rel_val['industry_pe']:.2f}")
                         st.metric("行业PB", f"{rel_val['industry_pb']:.2f}")
@@ -494,20 +552,23 @@ if analyze_button and ticker:
                 total_score += 0
             
             # 估值评分
-            if dcf_value and margin > 20:
-                total_score += 30
-            elif dcf_value and margin > 0:
-                total_score += 15
+            if dcf_value and current_price > 0:
+                margin = ((dcf_value - current_price) / dcf_value * 100)
+                if margin > 20:
+                    total_score += 30
+                elif margin > 0:
+                    total_score += 15
             
             # 技术面评分
-            latest_close = hist_data['Close'].iloc[-1]
-            ma20 = hist_data['MA20'].iloc[-1]
-            ma60 = hist_data['MA60'].iloc[-1]
-            
-            if latest_close > ma20 > ma60:
-                total_score += 30
-            elif latest_close > ma20:
-                total_score += 15
+            if not hist_data.empty and len(hist_data) > 60:
+                latest_close = hist_data['Close'].iloc[-1]
+                ma20 = hist_data['MA20'].iloc[-1] if 'MA20' in hist_data.columns and not pd.isna(hist_data['MA20'].iloc[-1]) else latest_close
+                ma60 = hist_data['MA60'].iloc[-1] if 'MA60' in hist_data.columns and not pd.isna(hist_data['MA60'].iloc[-1]) else latest_close
+                
+                if latest_close > ma20 > ma60:
+                    total_score += 30
+                elif latest_close > ma20:
+                    total_score += 15
             
             # 最终建议
             if total_score >= 70:
