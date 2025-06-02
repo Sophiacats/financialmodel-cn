@@ -1287,13 +1287,148 @@ if analyze_button and ticker:
             st.metric("推荐仓位", f"{kelly_position*100:.1f}%")
             st.caption("基于Kelly公式计算")
             
+            # 获取DCF值（如果之前没有计算）
+            if 'dcf_value' not in locals():
+                dcf_value, _ = calculate_dcf_valuation(data)
+            
+            # 获取z_score
+            if 'z_score' not in locals():
+                z_score, _, _ = calculate_altman_z_score(data)
+            
+            # 分析信号
+            valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
+            technical_signals = analyze_technical_signals(hist_data)
+            
+            # 生成交易建议
+            recommendation = generate_trading_recommendation(
+                valuation_signals, 
+                technical_signals, 
+                current_price,
+                dcf_value
+            )
+            
             # 综合评分
             comprehensive = calculate_comprehensive_score(
                 f_score, 
-                z_score if 'z_score' in locals() else 0,
+                z_score if z_score else 0,
                 valuation_signals['margin'],
                 technical_signals
             )
+            
+            st.markdown("---")
+            st.subheader("🎯 智能投资评分")
+            
+            col_score1, col_score2, col_score3 = st.columns(3)
+            with col_score1:
+                st.metric("价值得分", f"{comprehensive['value_score']}/50")
+            with col_score2:
+                st.metric("技术得分", f"{comprehensive['tech_score']}/50")
+            with col_score3:
+                st.metric("综合得分", f"{comprehensive['total_score']}/100")
+            
+            # 最终建议
+            if comprehensive['recommendation'] == 'BUY':
+                st.success(f"🟢 **最终建议：{comprehensive['recommendation']}**")
+            elif comprehensive['recommendation'] == 'SELL':
+                st.error(f"🔴 **最终建议：{comprehensive['recommendation']}**")
+            else:
+                st.info(f"🔵 **最终建议：{comprehensive['recommendation']}**")
+            
+            # 新增：财务趋势图
+            st.markdown("---")
+            st.subheader("📊 财务趋势分析")
+            
+            fin_trends = calculate_financial_trends(data)
+            if fin_trends:
+                # 创建子图
+                fig_trends = go.Figure()
+                
+                # 添加营收趋势
+                fig_trends.add_trace(go.Bar(
+                    name='营业收入',
+                    x=fin_trends['years'],
+                    y=[x/1e9 for x in fin_trends['revenues']],
+                    yaxis='y',
+                    marker_color='lightblue'
+                ))
+                
+                # 添加净利润趋势
+                fig_trends.add_trace(go.Bar(
+                    name='净利润',
+                    x=fin_trends['years'],
+                    y=[x/1e9 for x in fin_trends['net_incomes']],
+                    yaxis='y',
+                    marker_color='lightgreen'
+                ))
+                
+                # 添加EPS趋势线
+                fig_trends.add_trace(go.Scatter(
+                    name='每股收益(EPS)',
+                    x=fin_trends['years'],
+                    y=fin_trends['eps'],
+                    yaxis='y2',
+                    mode='lines+markers',
+                    line=dict(color='red', width=3)
+                ))
+                
+                fig_trends.update_layout(
+                    title='近3年财务趋势',
+                    xaxis=dict(title='年份'),
+                    yaxis=dict(title='金额（十亿美元）', side='left'),
+                    yaxis2=dict(title='EPS ($)', overlaying='y', side='right'),
+                    hovermode='x',
+                    barmode='group',
+                    height=400
+                )
+                
+                st.plotly_chart(fig_trends, use_container_width=True)
+            else:
+                st.info("财务趋势数据不足")
+            
+            # 新增：风险雷达图
+            st.markdown("---")
+            st.subheader("🎯 风险评估雷达图")
+            
+            risk_metrics = calculate_risk_metrics(data)
+            if risk_metrics:
+                categories = ['偿债能力', '波动性控制', '财务杠杆', '现金流增长', '盈利能力']
+                values = [
+                    risk_metrics['interest_coverage'],
+                    risk_metrics['beta_score'],
+                    risk_metrics['leverage_score'],
+                    risk_metrics['fcf_growth_score'],
+                    risk_metrics['profitability_score']
+                ]
+                
+                fig_radar = go.Figure(data=go.Scatterpolar(
+                    r=values,
+                    theta=categories,
+                    fill='toself',
+                    name='风险评分'
+                ))
+                
+                fig_radar.update_layout(
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True,
+                            range=[0, 10]
+                        )
+                    ),
+                    showlegend=False,
+                    title="风险指标评分（10分制）",
+                    height=400
+                )
+                
+                st.plotly_chart(fig_radar, use_container_width=True)
+                
+                # 风险解读
+                avg_risk_score = sum(values) / len(values)
+                if avg_risk_score >= 7:
+                    st.success("✅ 总体风险等级：低")
+                elif avg_risk_score >= 5:
+                    st.warning("⚠️ 总体风险等级：中")
+                else:
+                    st.error("🚨 总体风险等级：高")
             
             st.markdown("---")
             st.subheader("🎯 智能投资评分")
