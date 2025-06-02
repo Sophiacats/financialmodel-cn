@@ -8,6 +8,13 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+# 技术分析库（如果没有安装，系统会自动使用备用方案）
+try:
+    import pandas_ta as ta
+    TA_AVAILABLE = True
+except ImportError:
+    TA_AVAILABLE = False
+
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -339,6 +346,7 @@ def calculate_technical_indicators(hist_data):
     """计算技术指标"""
     try:
         # 计算移动平均线
+        hist_data['MA10'] = hist_data['Close'].rolling(window=10).mean()
         hist_data['MA20'] = hist_data['Close'].rolling(window=20).mean()
         hist_data['MA60'] = hist_data['Close'].rolling(window=60).mean()
         
@@ -356,6 +364,16 @@ def calculate_technical_indicators(hist_data):
         rs = gain / loss
         hist_data['RSI'] = 100 - (100 / (1 + rs))
         
+        # 计算布林带
+        hist_data['BB_Middle'] = hist_data['Close'].rolling(window=20).mean()
+        bb_std = hist_data['Close'].rolling(window=20).std()
+        hist_data['BB_Upper'] = hist_data['BB_Middle'] + (bb_std * 2)
+        hist_data['BB_Lower'] = hist_data['BB_Middle'] - (bb_std * 2)
+        hist_data['BB_Width'] = hist_data['BB_Upper'] - hist_data['BB_Lower']
+        
+        # 计算成交量移动平均
+        hist_data['Volume_MA'] = hist_data['Volume'].rolling(window=20).mean()
+        
         return hist_data
     except Exception as e:
         st.warning(f"技术指标计算失败: {str(e)}")
@@ -365,6 +383,211 @@ def calculate_kelly_criterion(win_prob, win_loss_ratio):
     """Kelly公式计算推荐仓位"""
     f = (win_prob * win_loss_ratio - (1 - win_prob)) / win_loss_ratio
     return max(0, min(f, 0.25))  # 限制最大仓位为25%
+
+def analyze_valuation_signals(data, dcf_value, current_price):
+    """分析估值信号"""
+    valuation_signals = {
+        'undervalued': False,
+        'overvalued': False,
+        'margin': 0,
+        'pe_status': 'neutral',
+        'pb_status': 'neutral'
+    }
+    
+    try:
+        info = data['info']
+        
+        # DCF估值分析
+        if dcf_value and current_price > 0:
+            margin = ((dcf_value - current_price) / dcf_value * 100)
+            valuation_signals['margin'] = margin
+            
+            if margin > 20:  # 低估20%以上
+                valuation_signals['undervalued'] = True
+            elif margin < -20:  # 高估20%以上
+                valuation_signals['overvalued'] = True
+        
+        # PE/PB相对估值分析
+        pe_ratio = info.get('trailingPE', 0)
+        pb_ratio = info.get('priceToBook', 0)
+        
+        # 这里使用行业平均值作为参考（实际应用中应该获取历史数据）
+        if pe_ratio > 0 and pe_ratio < 15:
+            valuation_signals['pe_status'] = 'undervalued'
+        elif pe_ratio > 30:
+            valuation_signals['pe_status'] = 'overvalued'
+            
+        if pb_ratio > 0 and pb_ratio < 1.5:
+            valuation_signals['pb_status'] = 'undervalued'
+        elif pb_ratio > 5:
+            valuation_signals['pb_status'] = 'overvalued'
+    
+    except Exception as e:
+        st.warning(f"估值信号分析失败: {str(e)}")
+    
+    return valuation_signals
+
+def analyze_technical_signals(hist_data):
+    """分析技术信号"""
+    signals = {
+        'ma_golden_cross': False,
+        'ma_death_cross': False,
+        'macd_golden_cross': False,
+        'macd_death_cross': False,
+        'rsi_oversold': False,
+        'rsi_overbought': False,
+        'bb_breakout': False,
+        'volume_divergence': False,
+        'trend': 'neutral'
+    }
+    
+    try:
+        if len(hist_data) < 60:
+            return signals
+        
+        # 获取最近的数据
+        latest = hist_data.iloc[-1]
+        prev = hist_data.iloc[-2]
+        
+        # 移动均线信号
+        if 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
+            if latest['MA10'] > latest['MA60'] and prev['MA10'] <= prev['MA60']:
+                signals['ma_golden_cross'] = True
+            elif latest['MA10'] < latest['MA60'] and prev['MA10'] >= prev['MA60']:
+                signals['ma_death_cross'] = True
+        
+        # MACD信号
+        if 'MACD' in hist_data.columns and 'Signal' in hist_data.columns:
+            if latest['MACD'] > latest['Signal'] and prev['MACD'] <= prev['Signal']:
+                signals['macd_golden_cross'] = True
+            elif latest['MACD'] < latest['Signal'] and prev['MACD'] >= prev['Signal']:
+                signals['macd_death_cross'] = True
+        
+        # RSI信号
+        if 'RSI' in hist_data.columns:
+            rsi_recent = hist_data['RSI'].iloc[-5:]  # 最近5天
+            if latest['RSI'] < 30:
+                signals['rsi_oversold'] = True
+            elif latest['RSI'] > 70:
+                signals['rsi_overbought'] = True
+            
+            # 检查RSI是否拐头向上
+            if len(rsi_recent) >= 3 and rsi_recent.iloc[-1] > rsi_recent.iloc[-2] < rsi_recent.iloc[-3]:
+                if latest['RSI'] < 40:
+                    signals['rsi_oversold'] = True
+        
+        # 布林带信号
+        if 'BB_Middle' in hist_data.columns:
+            if latest['Close'] > latest['BB_Middle'] and prev['Close'] <= prev['BB_Middle']:
+                # 检查布林带是否扩张
+                bb_width_change = (latest['BB_Width'] - hist_data['BB_Width'].iloc[-5]) / hist_data['BB_Width'].iloc[-5]
+                if bb_width_change > 0.1:  # 布林带扩张10%以上
+                    signals['bb_breakout'] = True
+        
+        # 成交量背离检查
+        if 'Volume_MA' in hist_data.columns:
+            recent_prices = hist_data['Close'].iloc[-5:]
+            recent_volumes = hist_data['Volume'].iloc[-5:]
+            
+            # 价格上涨但成交量下降
+            if recent_prices.iloc[-1] > recent_prices.iloc[0] and recent_volumes.iloc[-1] < recent_volumes.iloc[0]:
+                signals['volume_divergence'] = True
+        
+        # 判断总体趋势
+        if latest['Close'] > latest['MA60']:
+            signals['trend'] = 'bullish'
+        else:
+            signals['trend'] = 'bearish'
+            
+    except Exception as e:
+        st.warning(f"技术信号分析失败: {str(e)}")
+    
+    return signals
+
+def generate_trading_recommendation(valuation_signals, technical_signals, current_price, dcf_value):
+    """生成交易建议"""
+    recommendation = {
+        'action': 'HOLD',
+        'confidence': 0,
+        'reasons': [],
+        'entry_range': (0, 0),
+        'stop_loss': 0,
+        'take_profit': (0, 0),
+        'position_size': 0
+    }
+    
+    buy_signals = 0
+    sell_signals = 0
+    
+    # 检查买入条件
+    # 估值条件
+    if valuation_signals['undervalued'] or valuation_signals['pe_status'] == 'undervalued' or valuation_signals['pb_status'] == 'undervalued':
+        buy_signals += 1
+        recommendation['reasons'].append("估值处于低估区间")
+    
+    # 技术条件
+    tech_buy_conditions = [
+        (technical_signals['ma_golden_cross'], "10日均线上穿60日均线"),
+        (technical_signals['macd_golden_cross'], "MACD金叉成立"),
+        (technical_signals['rsi_oversold'], "RSI超卖且拐头向上"),
+        (technical_signals['bb_breakout'], "突破布林带中轨且带宽扩张")
+    ]
+    
+    tech_buy_count = sum([1 for condition, _ in tech_buy_conditions if condition])
+    
+    if tech_buy_count >= 2:
+        buy_signals += 1
+        recommendation['reasons'].extend([reason for condition, reason in tech_buy_conditions if condition])
+    
+    # 检查卖出条件
+    # 估值条件
+    if valuation_signals['overvalued'] or valuation_signals['pe_status'] == 'overvalued' or valuation_signals['pb_status'] == 'overvalued':
+        sell_signals += 1
+        recommendation['reasons'].append("估值处于高估区间")
+    
+    # 技术条件
+    tech_sell_conditions = [
+        (technical_signals['rsi_overbought'], "RSI超买"),
+        (technical_signals['macd_death_cross'], "MACD死叉"),
+        (technical_signals['volume_divergence'], "量价背离"),
+        (technical_signals['ma_death_cross'], "均线死叉")
+    ]
+    
+    tech_sell_count = sum([1 for condition, _ in tech_sell_conditions if condition])
+    
+    if tech_sell_count >= 2:
+        sell_signals += 1
+        recommendation['reasons'].extend([reason for condition, reason in tech_sell_conditions if condition])
+    
+    # 生成最终建议
+    if buy_signals >= 2:
+        recommendation['action'] = 'BUY'
+        recommendation['confidence'] = min(buy_signals * 30, 90)
+        
+        # 计算入场区间和止损止盈
+        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        recommendation['stop_loss'] = current_price * 0.92
+        
+        if dcf_value and dcf_value > current_price:
+            recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
+        else:
+            recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
+        
+        # Kelly公式计算仓位
+        win_prob = 0.6 + (recommendation['confidence'] / 100) * 0.2
+        recommendation['position_size'] = calculate_kelly_criterion(win_prob, 2.0) * 100
+        
+    elif sell_signals >= 2:
+        recommendation['action'] = 'SELL'
+        recommendation['confidence'] = min(sell_signals * 30, 90)
+        recommendation['reasons'].insert(0, "建议减仓或清仓")
+        
+    else:
+        recommendation['action'] = 'HOLD'
+        recommendation['confidence'] = 50
+        recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
+    
+    return recommendation
 
 # ==================== 主程序 ====================
 # 侧边栏输入
@@ -536,9 +759,92 @@ if analyze_button and ticker:
             plt.tight_layout()
             st.pyplot(fig2)
             
-            # 投资建议卡片
+            # 新增：自动买卖点建议模块
             st.markdown("---")
-            st.subheader("🎯 投资建议")
+            st.subheader("💡 智能买卖点建议")
+            
+            # 分析信号
+            valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
+            technical_signals = analyze_technical_signals(hist_data)
+            
+            # 生成交易建议
+            recommendation = generate_trading_recommendation(
+                valuation_signals, 
+                technical_signals, 
+                current_price,
+                dcf_value
+            )
+            
+            # 显示建议卡片
+            if recommendation['action'] == 'BUY':
+                st.success(f"🟢 **强烈建议：{recommendation['action']}**")
+                color_style = "background-color: #d4edda; padding: 15px; border-radius: 10px; border: 1px solid #c3e6cb;"
+            elif recommendation['action'] == 'SELL':
+                st.error(f"🔴 **强烈建议：{recommendation['action']}**")
+                color_style = "background-color: #f8d7da; padding: 15px; border-radius: 10px; border: 1px solid #f5c6cb;"
+            else:
+                st.info(f"🔵 **建议：{recommendation['action']}**")
+                color_style = "background-color: #d1ecf1; padding: 15px; border-radius: 10px; border: 1px solid #bee5eb;"
+            
+            # 详细信息展示
+            with st.container():
+                st.markdown(f'<div style="{color_style}">', unsafe_allow_html=True)
+                
+                # 基本信息
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.metric("当前价格", f"${current_price:.2f}")
+                    if dcf_value:
+                        st.metric("合理估值", f"${dcf_value:.2f}")
+                with col_b:
+                    st.metric("安全边际", f"{valuation_signals['margin']:.1f}%")
+                    st.metric("信心度", f"{recommendation['confidence']}%")
+                
+                # 信号原因
+                st.markdown("**📊 判断依据：**")
+                for reason in recommendation['reasons']:
+                    st.write(f"• {reason}")
+                
+                # 操作建议
+                if recommendation['action'] == 'BUY':
+                    st.markdown("**📍 操作建议：**")
+                    st.write(f"• 建仓区间：${recommendation['entry_range'][0]:.2f} - ${recommendation['entry_range'][1]:.2f}")
+                    st.write(f"• 止损价位：${recommendation['stop_loss']:.2f}")
+                    st.write(f"• 止盈目标：${recommendation['take_profit'][0]:.2f} - ${recommendation['take_profit'][1]:.2f}")
+                    st.write(f"• 推荐仓位：{recommendation['position_size']:.1f}%")
+                
+                # 技术指标状态
+                st.markdown("**📈 技术指标状态：**")
+                latest = hist_data.iloc[-1]
+                
+                col_x, col_y = st.columns(2)
+                with col_x:
+                    if 'RSI' in hist_data.columns:
+                        rsi_value = latest['RSI']
+                        rsi_status = "超卖" if rsi_value < 30 else "超买" if rsi_value > 70 else "中性"
+                        st.write(f"• RSI: {rsi_value:.1f} ({rsi_status})")
+                    
+                    if 'MACD' in hist_data.columns:
+                        macd_status = "金叉" if technical_signals['macd_golden_cross'] else "死叉" if technical_signals['macd_death_cross'] else "中性"
+                        st.write(f"• MACD: {macd_status}")
+                
+                with col_y:
+                    if 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
+                        ma_status = "多头" if latest['MA10'] > latest['MA60'] else "空头"
+                        st.write(f"• 均线: {ma_status}")
+                    
+                    trend_status = "上升" if technical_signals['trend'] == 'bullish' else "下降"
+                    st.write(f"• 趋势: {trend_status}")
+                
+                # 更新时间
+                st.markdown("---")
+                st.caption(f"⏰ 更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            # 原有的投资建议部分（可以保留或整合）
+            st.markdown("---")
+            st.subheader("🎯 综合评分")
             
             # 综合评分
             total_score = 0
