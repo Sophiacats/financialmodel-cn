@@ -562,15 +562,20 @@ def generate_trading_recommendation(valuation_signals, technical_signals, curren
     # 生成最终建议
     if buy_signals >= 2:
         recommendation['action'] = 'BUY'
-        recommendation['confidence'] = min(buy_signals * 30, 90)
+        recommendation['confidence'] = min(buy_signals * 30 + tech_buy_count * 10, 90)
         
-        # 计算入场区间和止损止盈
+        # 计算入场区间（当前价格的±2%）
         recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        
+        # 计算止损（-8%）
         recommendation['stop_loss'] = current_price * 0.92
         
+        # 计算止盈目标
         if dcf_value and dcf_value > current_price:
+            # 如果有DCF估值，使用估值作为目标
             recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
         else:
+            # 否则使用技术目标（15%-25%）
             recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
         
         # Kelly公式计算仓位
@@ -579,13 +584,29 @@ def generate_trading_recommendation(valuation_signals, technical_signals, curren
         
     elif sell_signals >= 2:
         recommendation['action'] = 'SELL'
-        recommendation['confidence'] = min(sell_signals * 30, 90)
+        recommendation['confidence'] = min(sell_signals * 30 + tech_sell_count * 10, 90)
         recommendation['reasons'].insert(0, "建议减仓或清仓")
+        
+        # 卖出时也提供参考价位
+        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        recommendation['stop_loss'] = current_price * 1.08  # 反向止损
+        recommendation['take_profit'] = (current_price * 0.90, current_price * 0.85)  # 目标回调位
         
     else:
         recommendation['action'] = 'HOLD'
         recommendation['confidence'] = 50
         recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
+        
+        # HOLD时也提供参考价位
+        recommendation['entry_range'] = (current_price * 0.95, current_price * 0.98)
+        recommendation['stop_loss'] = current_price * 0.92
+        if dcf_value and dcf_value > current_price:
+            recommendation['take_profit'] = (dcf_value * 0.90, dcf_value)
+        else:
+            recommendation['take_profit'] = (current_price * 1.10, current_price * 1.20)
+        
+        # 计算观望时的参考仓位
+        recommendation['position_size'] = 10.0  # 小仓位试探
     
     return recommendation
 
@@ -805,13 +826,26 @@ if analyze_button and ticker:
                 for reason in recommendation['reasons']:
                     st.write(f"• {reason}")
                 
-                # 操作建议
+                # 操作建议 - 修复显示所有操作的建议
+                st.markdown("**📍 操作建议：**")
+                
                 if recommendation['action'] == 'BUY':
-                    st.markdown("**📍 操作建议：**")
-                    st.write(f"• 建仓区间：${recommendation['entry_range'][0]:.2f} - ${recommendation['entry_range'][1]:.2f}")
-                    st.write(f"• 止损价位：${recommendation['stop_loss']:.2f}")
-                    st.write(f"• 止盈目标：${recommendation['take_profit'][0]:.2f} - ${recommendation['take_profit'][1]:.2f}")
-                    st.write(f"• 推荐仓位：{recommendation['position_size']:.1f}%")
+                    st.write(f"• 🎯 建仓区间：${recommendation['entry_range'][0]:.2f} - ${recommendation['entry_range'][1]:.2f}")
+                    st.write(f"• 🛡️ 止损价位：${recommendation['stop_loss']:.2f} (下跌{((current_price - recommendation['stop_loss'])/current_price*100):.1f}%)")
+                    st.write(f"• 💰 止盈目标：${recommendation['take_profit'][0]:.2f} - ${recommendation['take_profit'][1]:.2f} (上涨{((recommendation['take_profit'][0] - current_price)/current_price*100):.1f}%-{((recommendation['take_profit'][1] - current_price)/current_price*100):.1f}%)")
+                    st.write(f"• 📊 推荐仓位：{recommendation['position_size']:.1f}%")
+                elif recommendation['action'] == 'SELL':
+                    st.write(f"• 🔴 建议清仓或减仓")
+                    st.write(f"• 📉 当前处于高估区域")
+                    st.write(f"• ⚠️ 建议等待回调后再考虑")
+                else:  # HOLD
+                    st.write(f"• 🔵 建议继续持有观望")
+                    st.write(f"• 📊 等待更明确的信号")
+                    if dcf_value and current_price < dcf_value * 0.85:
+                        buy_zone = (dcf_value * 0.75, dcf_value * 0.85)
+                        st.write(f"• 💡 参考买入区间：${buy_zone[0]:.2f} - ${buy_zone[1]:.2f}")
+                    if current_price > 0:
+                        st.write(f"• 🛡️ 参考止损：${current_price * 0.92:.2f}")
                 
                 # 技术指标状态
                 st.markdown("**📈 技术指标状态：**")
