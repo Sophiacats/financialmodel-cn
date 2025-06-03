@@ -8,6 +8,15 @@ def generate_trading_recommendation(valuation_signals, technical_signals, curren
         'stop_loss': 0,
         'take_profit': (0, 0),
         'position_size': 0
+    }"""
+    recommendation = {
+        'action': 'HOLD',
+        'confidence': 0,
+        'reasons': [],
+        'entry_range': (0, 0),
+        'stop_loss': 0,
+        'take_profit': (0, 0),
+        'position_size': 0
     }
     
     buy_signals = 0
