@@ -1,406 +1,4 @@
-def generate_trading_recommendation(valuation_signals, technical_signals, current_price, dcf_value):
-    """生成交易建议"""
-    recommendation = {
-        'action': 'HOLD',
-        'confidence': 0,
-        'reasons': [],
-        'entry_range': (0, 0),
-        'stop_loss': 0,
-        'take_profit': (0, 0),
-        'position_size': 0
-    }"""
-    recommendation = {
-        'action': 'HOLD',
-        'confidence': 0,
-        'reasons': [],
-        'entry_range': (0, 0),
-        'stop_loss': 0,
-        'take_profit': (0, 0),
-        'position_size': 0
-    }
-    
-    buy_signals = 0
-    sell_signals = 0
-    
-    # 检查买入条件
-    # 估值条件
-    if valuation_signals['undervalued'] or valuation_signals['pe_status'] == 'undervalued' or valuation_signals['pb_status'] == 'undervalued':
-        buy_signals += 1
-        recommendation['reasons'].append("估值处于低估区间")
-    
-    # 技术条件
-    tech_buy_conditions = [
-        (technical_signals['ma_golden_cross'], "10日均线上穿60日均线"),
-        (technical_signals['macd_golden_cross'], "MACD金叉成立"),
-        (technical_signals['rsi_oversold'], "RSI超卖且拐头向上"),
-        (technical_signals['bb_breakout'], "突破布林带中轨且带宽扩张")
-    ]
-    
-    tech_buy_count = sum([1 for condition, _ in tech_buy_conditions if condition])
-    
-    if tech_buy_count >= 2:
-        buy_signals += 1
-        recommendation['reasons'].extend([reason for condition, reason in tech_buy_conditions if condition])
-    
-    # 检查卖出条件
-    # 估值条件
-    if valuation_signals['overvalued'] or valuation_signals['pe_status'] == 'overvalued' or valuation_signals['pb_status'] == 'overvalued':
-        sell_signals += 1
-        recommendation['reasons'].append("估值处于高估区间")
-    
-    # 技术条件
-    tech_sell_conditions = [
-        (technical_signals['rsi_overbought'], "RSI超买"),
-        (technical_signals['macd_death_cross'], "MACD死叉"),
-        (technical_signals['volume_divergence'], "量价背离"),
-        (technical_signals['ma_death_cross'], "均线死叉")
-    ]
-    
-    tech_sell_count = sum([1 for condition, _ in tech_sell_conditions if condition])
-    
-    if tech_sell_count >= 2:
-        sell_signals += 1
-        recommendation['reasons'].extend([reason for condition, reason in tech_sell_conditions if condition])
-    
-    # 生成最终建议
-    if buy_signals >= 2:
-        recommendation['action'] = 'BUY'
-        recommendation['confidence'] = min(buy_signals * 30 + tech_buy_count * 10, 90)
-        
-        # 计算入场区间（当前价格的±2%）
-        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
-        
-        # 计算止损（-8%）
-        recommendation['stop_loss'] = current_price * 0.92
-        
-        # 计算止盈目标
-        if dcf_value and dcf_value > current_price:
-            # 如果有DCF估值，使用估值作为目标
-            recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
-        else:
-            # 否则使用技术目标（15%-25%）
-            recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
-        
-        # Kelly公式计算仓位
-        win_prob = 0.6 + (recommendation['confidence'] / 100) * 0.2
-        recommendation['position_size'] = calculate_kelly_criterion(win_prob, 2.0) * 100
-        
-    elif sell_signals >= 2:
-        recommendation['action'] = 'SELL'
-        recommendation['confidence'] = min(sell_signals * 30 + tech_sell_count * 10, 90)
-        recommendation['reasons'].insert(0, "建议减仓或清仓")
-        
-        # 卖出时也提供参考价位
-        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
-        recommendation['stop_loss'] = current_price * 1.08  # 反向止损
-        recommendation['take_profit'] = (current_price * 0.90, current_price * 0.85)  # 目标回调位
-        
-    else:
-        recommendation['action'] = 'HOLD'
-        recommendation['confidence'] = 50
-        recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
-        
-        # HOLD时也提供参考价位
-        recommendation['entry_range'] = (current_price * 0.95, current_price * 0.98)
-        recommendation['stop_loss'] = current_price * 0.92
-        if dcf_value and dcf_value > current_price:
-            recommendation['take_profit'] = (dcf_value * 0.90, dcf_value)
-        else:
-            recommendation['take_profit'] = (current_price * 1.10, current_price * 1.20)
-        
-        # 计算观望时的参考仓位
-        recommendation['position_size'] = 10.0  # 小仓位试探
-    
-    return recommendation
-
-# ==================== 主程序 ====================
-# 侧边栏输入
-with st.sidebar:
-    st.header("📊 分析参数设置")
-    
-    # 股票代码输入
-    ticker = st.text_input("股票代码", "AAPL", help="输入股票代码，如：AAPL")
-    
-    # 市场选择（预留扩展）
-    market = st.selectbox("市场选择", ["美股", "A股（待开发）"])
-    
-    # 分析按钮
-    analyze_button = st.button("🔍 开始分析", type="primary", use_container_width=True)
-    
-    st.markdown("---")
-    
-    # 新增：止盈止损模拟器
-    with st.expander("💰 止盈止损模拟器"):
-        st.markdown("### 持仓盈亏计算")
-        buy_price = st.number_input("买入价格 ($)", min_value=0.01, value=100.0, step=0.01)
-        position_size = st.number_input("持仓数量", min_value=1, value=100, step=1)
-        
-        calculate_pnl = st.button("计算盈亏")
-        
-        if calculate_pnl:
-            # 这里使用默认值，实际应该从data中获取
-            current_price = 105.0  # 示例价格
-            
-            # 计算盈亏
-            position_value = position_size * buy_price
-            current_value = position_size * current_price
-            pnl = current_value - position_value
-            pnl_pct = (pnl / position_value) * 100
-            
-            # 止盈止损点
-            stop_loss = buy_price * 0.9  # -10%
-            take_profit = buy_price * 1.15  # +15%
-            
-            # 显示结果
-            st.metric("当前盈亏", f"${pnl:.2f} ({pnl_pct:+.2f}%)")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("止损点 (-10%)", f"${stop_loss:.2f}")
-            with col2:
-                st.metric("止盈点 (+15%)", f"${take_profit:.2f}")
-            
-            # 根据盈亏给出建议
-            if pnl_pct <= -10:
-                st.error("⚠️ 已触及止损线！")
-            elif pnl_pct >= 15:
-                st.success("🎯 已达到止盈目标！")
-            elif pnl_pct > 0:
-                st.info(f"📈 盈利中，距离止盈还有 {15-pnl_pct:.1f}%")
-            else:
-                st.warning(f"📉 亏损中，距离止损还有 {-10-pnl_pct:.1f}%")
-    
-    st.markdown("---")
-    
-    # 新增：使用说明
-    with st.expander("📘 使用说明"):
-        st.markdown("""
-        ### 如何解读各项数值指标
-        
-        **1. 安全边际（Margin of Safety）**
-        - 正值：股价低于估值，存在低估
-        - 负值：股价高于估值，存在高估
-        - 建议：
-          - \> 50%：强买入
-          - 20-50%：买入
-          - 0-20%：观察
-          - < 0%：避免
-        
-        **2. 信心度（Confidence）**
-        - \> 70%：高信心度
-        - 50-70%：中等信心
-        - < 50%：低信心度
-        
-        **3. 技术信号**
-        - 金叉：买入信号
-        - 死叉：卖出信号
-        - RSI > 70：超买
-        - RSI < 30：超卖
-        
-        **4. Piotroski F-score**
-        - 7-9分：优秀
-        - 4-6分：中等
-        - 0-3分：较差
-        
-        **5. Altman Z-score**
-        - Z > 2.99：✅ 财务健康
-        - 1.81-2.99：⚠️ 临界风险
-        - Z < 1.81：🚨 高破产风险
-        """)
-    
-    # 联合建议表
-    with st.expander("📊 投资决策参考表"):
-        st.markdown("""
-        | 安全边际 | 信心度 | 操作建议 |
-        |---------|--------|----------|
-        | >30%    | >70%   | ✅ 强买入 |
-        | >0%     | >50%   | ⚠️ 观察  |
-        | <0%     | ≈50%   | 🔍 观望  |
-        | <0%     | <50%   | 🚫 回避  |
-        """)
-    
-    st.markdown("---")
-    st.markdown("### 说明")
-    st.markdown("- 输入股票代码后点击分析")
-    st.markdown("- 系统将自动获取数据并进行全面分析")
-    st.markdown("- 分析包含基本面、技术面和估值模型")
-
-# 主界面
-if analyze_button and ticker:
-    # 获取数据
-    with st.spinner(f"正在获取 {ticker} 的数据..."):
-        # 先尝试使用缓存版本
-        try:
-            data = fetch_stock_data(ticker)
-        except:
-            # 如果缓存失败，使用非缓存版本
-            data = fetch_stock_data_uncached(ticker)
-    
-    if data:
-        # 创建三列布局
-        col1, col2, col3 = st.columns([1, 2, 1.5])
-        
-        # 左栏：公司基本信息
-        with col1:
-            st.subheader("📌 公司基本信息")
-            info = data['info']
-            
-            # 公司信息卡片
-            with st.container():
-                st.metric("公司名称", info.get('longName', ticker))
-                st.metric("当前股价", f"${info.get('currentPrice', 0):.2f}")
-                st.metric("市值", f"${info.get('marketCap', 0)/1e9:.2f}B")
-                st.metric("行业", info.get('industry', 'N/A'))
-                st.metric("Beta", f"{info.get('beta', 0):.2f}")
-                
-                # 52周高低
-                st.markdown("---")
-                st.metric("52周最高", f"${info.get('fiftyTwoWeekHigh', 0):.2f}")
-                st.metric("52周最低", f"${info.get('fiftyTwoWeekLow', 0):.2f}")
-        
-        # 中栏：分析结果
-        with col2:
-            st.subheader("📈 综合分析结果")
-            
-            # Piotroski F-Score
-            with st.expander("🔍 Piotroski F-Score 分析", expanded=True):
-                f_score, reasons = calculate_piotroski_score(data)
-                
-                # 评分展示
-                score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
-                st.markdown(f"### 得分: <span style='color:{score_color}; font-size:24px'>{f_score}/9</span>", unsafe_allow_html=True)
-                
-                # 评分解释
-                for reason in reasons:
-                    st.write(reason)
-                
-                # 建议
-                if f_score >= 7:
-                    st.success("💡 建议: 财务健康状况良好，基本面强劲")
-                elif f_score >= 4:
-                    st.warning("💡 建议: 财务状况一般，需要谨慎评估")
-                else:
-                    st.error("💡 建议: 财务状况较差，投资风险较高")
-            
-            # 杜邦分析
-            with st.expander("📊 杜邦分析", expanded=True):
-                dupont = calculate_dupont_analysis(data)
-                if dupont:
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.metric("ROE", f"{dupont['roe']:.2f}%")
-                        st.metric("利润率", f"{dupont['profit_margin']:.2f}%")
-                    with col_b:
-                        st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
-                        st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
-                    
-                    st.write("📝 ROE = 利润率 × 资产周转率 × 权益乘数")
-            
-            # Altman Z-Score
-            with st.expander("💰 Altman Z-Score 财务健康度", expanded=True):
-                z_score, status, color = calculate_altman_z_score(data)
-                if z_score:
-                    st.markdown(f"### Z-Score: <span style='color:{color}; font-size:24px'>{z_score:.2f}</span>", unsafe_allow_html=True)
-                    st.markdown(f"**状态**: <span style='color:{color}'>{status}</span>", unsafe_allow_html=True)
-                    
-                    # 新增：简洁的风险等级展示
-                    if z_score > 2.99:
-                        st.success("✅ 财务健康 - 企业财务状况良好，破产风险极低")
-                    elif z_score >= 1.81:
-                        st.warning("⚠️ 临界风险 - 企业处于灰色地带，需要密切关注")
-                    else:
-                        st.error("🚨 高破产风险 - 企业财务状况堪忧，投资需谨慎")
-                    
-                    # 评分标准说明
-                    st.write("📊 评分标准:")
-                    st.write("- Z > 2.99: 安全区域")
-                    st.write("- 1.8 < Z < 2.99: 灰色区域")
-                    st.write("- Z < 1.8: 危险区域")
-            
-            # 估值分析
-            with st.expander("💎 估值分析", expanded=True):
-                # DCF估值
-                dcf_value, dcf_params = calculate_dcf_valuation(data)
-                current_price = info.get('currentPrice', 0)
-                
-                if dcf_value and current_price > 0:
-                    st.write("**DCF估值**")
-                    col_x, col_y = st.columns(2)
-                    with col_x:
-                        st.metric("合理价值", f"${dcf_value:.2f}")
-                        st.metric("当前价格", f"${current_price:.2f}")
-                    with col_y:
-                        margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
-                        st.metric("安全边际", f"{margin:.2f}%")
-                    
-                    # 新增：DCF模型参数展示
-                    if dcf_params:
-                        with st.expander("📊 DCF模型参数详情"):
-                            col_a, col_b, col_c = st.columns(3)
-                            with col_a:
-                                st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
-                                st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
-                            with col_b:
-                                st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
-                                st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
-                            with col_c:
-                                st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
-                                st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
-                            
-                            # 显示逐年现金流
-                            st.write("**预测期现金流（百万美元）**")
-                            fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
-                            fcf_df['fcf'] = fcf_df['fcf'] / 1e6
-                            fcf_df['pv'] = fcf_df['pv'] / 1e6
-                            fcf_df.columns = ['年份', '预测FCF', '现值']
-                            st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
-                            
-                            st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
-                            st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
-                else:
-                    st.info("DCF估值数据不足")
-                
-                # 相对估值
-                st.write("**相对估值**")
-                rel_val = calculate_relative_valuation(data)
-                if rel_val:
-                    col_m, col_n = st.columns(2)
-                    with col_m:
-                        pe_display = f"{rel_val['pe_ratio']:.2f}" if rel_val['pe_ratio'] > 0 else "N/A"
-                        pb_display = f"{rel_val['pb_ratio']:.2f}" if rel_val['pb_ratio'] > 0 else "N/A"
-                        st.metric("PE", pe_display)
-                        st.metric("PB", pb_display)
-                    with col_n:
-                        st.metric("行业PE", f"{rel_val['industry_pe']:.2f}")
-                        st.metric("行业PB", f"{rel_val['industry_pb']:.2f}")
-                    
-                    # 新增：历史估值分位图
-                    if rel_val['pe_ratio'] > 0:
-                        hist_val = calculate_historical_valuation_percentile(ticker, rel_val['pe_ratio'], rel_val['pb_ratio'])
-                        if hist_val:
-                            st.write("**历史估值分位**")
-                            fig_hist = go.Figure()
-                            
-                            # 添加价格历史线
-                            fig_hist.add_trace(go.Scatter(
-                                x=hist_val['hist_prices'].index,
-                                y=hist_val['hist_prices'].values,
-                                mode='lines',
-                                name='历史价格',
-                                line=dict(color='blue', width=2)
-                            ))
-                            
-                            # 添加当前价格标记
-                            fig_hist.add_hline(y=current_price, line_dash="dash", line_color="red", 
-                                             annotation_text=f"当前价格: ${current_price:.2f}")
-                            
-                            fig_hist.update_layout(
-                                title=f"5年价格走势及当前位置（分位数: {hist_val['pe_percentile']:.1f}%）",
-                                xaxis_title="日期",
-                                yaxis_title="价格 ($)",
-                                height=300
-                            )
-                            st.plotly_chart(fig_hist, use_container_width=True)
+st.plotly_chart(fig_hist, use_container_width=True)
             
             # 新增：财务趋势分析
             with st.expander("📊 财务趋势分析", expanded=False):
@@ -1502,4 +1100,395 @@ def analyze_technical_signals(hist_data):
     return signals
 
 def generate_trading_recommendation(valuation_signals, technical_signals, current_price, dcf_value):
-    """生成交易建议
+    """生成交易建议"""
+    recommendation = {
+        'action': 'HOLD',
+        'confidence': 0,
+        'reasons': [],
+        'entry_range': (0, 0),
+        'stop_loss': 0,
+        'take_profit': (0, 0),
+        'position_size': 0
+    }
+    
+    buy_signals = 0
+    sell_signals = 0
+    
+    # 检查买入条件
+    # 估值条件
+    if valuation_signals['undervalued'] or valuation_signals['pe_status'] == 'undervalued' or valuation_signals['pb_status'] == 'undervalued':
+        buy_signals += 1
+        recommendation['reasons'].append("估值处于低估区间")
+    
+    # 技术条件
+    tech_buy_conditions = [
+        (technical_signals['ma_golden_cross'], "10日均线上穿60日均线"),
+        (technical_signals['macd_golden_cross'], "MACD金叉成立"),
+        (technical_signals['rsi_oversold'], "RSI超卖且拐头向上"),
+        (technical_signals['bb_breakout'], "突破布林带中轨且带宽扩张")
+    ]
+    
+    tech_buy_count = sum([1 for condition, _ in tech_buy_conditions if condition])
+    
+    if tech_buy_count >= 2:
+        buy_signals += 1
+        recommendation['reasons'].extend([reason for condition, reason in tech_buy_conditions if condition])
+    
+    # 检查卖出条件
+    # 估值条件
+    if valuation_signals['overvalued'] or valuation_signals['pe_status'] == 'overvalued' or valuation_signals['pb_status'] == 'overvalued':
+        sell_signals += 1
+        recommendation['reasons'].append("估值处于高估区间")
+    
+    # 技术条件
+    tech_sell_conditions = [
+        (technical_signals['rsi_overbought'], "RSI超买"),
+        (technical_signals['macd_death_cross'], "MACD死叉"),
+        (technical_signals['volume_divergence'], "量价背离"),
+        (technical_signals['ma_death_cross'], "均线死叉")
+    ]
+    
+    tech_sell_count = sum([1 for condition, _ in tech_sell_conditions if condition])
+    
+    if tech_sell_count >= 2:
+        sell_signals += 1
+        recommendation['reasons'].extend([reason for condition, reason in tech_sell_conditions if condition])
+    
+    # 生成最终建议
+    if buy_signals >= 2:
+        recommendation['action'] = 'BUY'
+        recommendation['confidence'] = min(buy_signals * 30 + tech_buy_count * 10, 90)
+        
+        # 计算入场区间（当前价格的±2%）
+        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        
+        # 计算止损（-8%）
+        recommendation['stop_loss'] = current_price * 0.92
+        
+        # 计算止盈目标
+        if dcf_value and dcf_value > current_price:
+            # 如果有DCF估值，使用估值作为目标
+            recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
+        else:
+            # 否则使用技术目标（15%-25%）
+            recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
+        
+        # Kelly公式计算仓位
+        win_prob = 0.6 + (recommendation['confidence'] / 100) * 0.2
+        recommendation['position_size'] = calculate_kelly_criterion(win_prob, 2.0) * 100
+        
+    elif sell_signals >= 2:
+        recommendation['action'] = 'SELL'
+        recommendation['confidence'] = min(sell_signals * 30 + tech_sell_count * 10, 90)
+        recommendation['reasons'].insert(0, "建议减仓或清仓")
+        
+        # 卖出时也提供参考价位
+        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        recommendation['stop_loss'] = current_price * 1.08  # 反向止损
+        recommendation['take_profit'] = (current_price * 0.90, current_price * 0.85)  # 目标回调位
+        
+    else:
+        recommendation['action'] = 'HOLD'
+        recommendation['confidence'] = 50
+        recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
+        
+        # HOLD时也提供参考价位
+        recommendation['entry_range'] = (current_price * 0.95, current_price * 0.98)
+        recommendation['stop_loss'] = current_price * 0.92
+        if dcf_value and dcf_value > current_price:
+            recommendation['take_profit'] = (dcf_value * 0.90, dcf_value)
+        else:
+            recommendation['take_profit'] = (current_price * 1.10, current_price * 1.20)
+        
+        # 计算观望时的参考仓位
+        recommendation['position_size'] = 10.0  # 小仓位试探
+    
+    return recommendation
+
+# ==================== 主程序 ====================
+# 侧边栏输入
+with st.sidebar:
+    st.header("📊 分析参数设置")
+    
+    # 股票代码输入
+    ticker = st.text_input("股票代码", "AAPL", help="输入股票代码，如：AAPL")
+    
+    # 市场选择（预留扩展）
+    market = st.selectbox("市场选择", ["美股", "A股（待开发）"])
+    
+    # 分析按钮
+    analyze_button = st.button("🔍 开始分析", type="primary", use_container_width=True)
+    
+    st.markdown("---")
+    
+    # 新增：止盈止损模拟器
+    with st.expander("💰 止盈止损模拟器"):
+        st.markdown("### 持仓盈亏计算")
+        buy_price = st.number_input("买入价格 ($)", min_value=0.01, value=100.0, step=0.01)
+        position_size = st.number_input("持仓数量", min_value=1, value=100, step=1)
+        
+        calculate_pnl = st.button("计算盈亏")
+        
+        if calculate_pnl:
+            # 这里使用默认值，实际应该从data中获取
+            current_price = 105.0  # 示例价格
+            
+            # 计算盈亏
+            position_value = position_size * buy_price
+            current_value = position_size * current_price
+            pnl = current_value - position_value
+            pnl_pct = (pnl / position_value) * 100
+            
+            # 止盈止损点
+            stop_loss = buy_price * 0.9  # -10%
+            take_profit = buy_price * 1.15  # +15%
+            
+            # 显示结果
+            st.metric("当前盈亏", f"${pnl:.2f} ({pnl_pct:+.2f}%)")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("止损点 (-10%)", f"${stop_loss:.2f}")
+            with col2:
+                st.metric("止盈点 (+15%)", f"${take_profit:.2f}")
+            
+            # 根据盈亏给出建议
+            if pnl_pct <= -10:
+                st.error("⚠️ 已触及止损线！")
+            elif pnl_pct >= 15:
+                st.success("🎯 已达到止盈目标！")
+            elif pnl_pct > 0:
+                st.info(f"📈 盈利中，距离止盈还有 {15-pnl_pct:.1f}%")
+            else:
+                st.warning(f"📉 亏损中，距离止损还有 {-10-pnl_pct:.1f}%")
+    
+    st.markdown("---")
+    
+    # 新增：使用说明
+    with st.expander("📘 使用说明"):
+        st.markdown("""
+        ### 如何解读各项数值指标
+        
+        **1. 安全边际 (Margin of Safety)**
+        - 正值：股价低于估值，存在低估
+        - 负值：股价高于估值，存在高估
+        - 建议：
+          - > 50%：强买入
+          - 20-50%：买入
+          - 0-20%：观察
+          - < 0%：避免
+        
+        **2. 信心度 (Confidence)**
+        - > 70%：高信心度
+        - 50-70%：中等信心
+        - < 50%：低信心度
+        
+        **3. 技术信号**
+        - 金叉：买入信号
+        - 死叉：卖出信号
+        - RSI > 70：超买
+        - RSI < 30：超卖
+        
+        **4. Piotroski F-score**
+        - 7-9分：优秀
+        - 4-6分：中等
+        - 0-3分：较差
+        
+        **5. Altman Z-score**
+        - Z > 2.99：✅ 财务健康
+        - 1.81-2.99：⚠️ 临界风险
+        - Z < 1.81：🚨 高破产风险
+        """)
+    
+    # 联合建议表
+    with st.expander("📊 投资决策参考表"):
+        st.markdown("""
+        | 安全边际 | 信心度 | 操作建议 |
+        |---------|--------|----------|
+        | >30%    | >70%   | ✅ 强买入 |
+        | >0%     | >50%   | ⚠️ 观察  |
+        | <0%     | ≈50%   | 🔍 观望  |
+        | <0%     | <50%   | 🚫 回避  |
+        """)
+    
+    st.markdown("---")
+    st.markdown("### 说明")
+    st.markdown("- 输入股票代码后点击分析")
+    st.markdown("- 系统将自动获取数据并进行全面分析")
+    st.markdown("- 分析包含基本面、技术面和估值模型")
+
+# 主界面
+if analyze_button and ticker:
+    # 获取数据
+    with st.spinner(f"正在获取 {ticker} 的数据..."):
+        # 先尝试使用缓存版本
+        try:
+            data = fetch_stock_data(ticker)
+        except:
+            # 如果缓存失败，使用非缓存版本
+            data = fetch_stock_data_uncached(ticker)
+    
+    if data:
+        # 创建三列布局
+        col1, col2, col3 = st.columns([1, 2, 1.5])
+        
+        # 左栏：公司基本信息
+        with col1:
+            st.subheader("📌 公司基本信息")
+            info = data['info']
+            
+            # 公司信息卡片
+            with st.container():
+                st.metric("公司名称", info.get('longName', ticker))
+                st.metric("当前股价", f"${info.get('currentPrice', 0):.2f}")
+                st.metric("市值", f"${info.get('marketCap', 0)/1e9:.2f}B")
+                st.metric("行业", info.get('industry', 'N/A'))
+                st.metric("Beta", f"{info.get('beta', 0):.2f}")
+                
+                # 52周高低
+                st.markdown("---")
+                st.metric("52周最高", f"${info.get('fiftyTwoWeekHigh', 0):.2f}")
+                st.metric("52周最低", f"${info.get('fiftyTwoWeekLow', 0):.2f}")
+        
+        # 中栏：分析结果
+        with col2:
+            st.subheader("📈 综合分析结果")
+            
+            # Piotroski F-Score
+            with st.expander("🔍 Piotroski F-Score 分析", expanded=True):
+                f_score, reasons = calculate_piotroski_score(data)
+                
+                # 评分展示
+                score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
+                st.markdown(f"### 得分: <span style='color:{score_color}; font-size:24px'>{f_score}/9</span>", unsafe_allow_html=True)
+                
+                # 评分解释
+                for reason in reasons:
+                    st.write(reason)
+                
+                # 建议
+                if f_score >= 7:
+                    st.success("💡 建议: 财务健康状况良好，基本面强劲")
+                elif f_score >= 4:
+                    st.warning("💡 建议: 财务状况一般，需要谨慎评估")
+                else:
+                    st.error("💡 建议: 财务状况较差，投资风险较高")
+            
+            # 杜邦分析
+            with st.expander("📊 杜邦分析", expanded=True):
+                dupont = calculate_dupont_analysis(data)
+                if dupont:
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.metric("ROE", f"{dupont['roe']:.2f}%")
+                        st.metric("利润率", f"{dupont['profit_margin']:.2f}%")
+                    with col_b:
+                        st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
+                        st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
+                    
+                    st.write("📝 ROE = 利润率 × 资产周转率 × 权益乘数")
+            
+            # Altman Z-Score
+            with st.expander("💰 Altman Z-Score 财务健康度", expanded=True):
+                z_score, status, color = calculate_altman_z_score(data)
+                if z_score:
+                    st.markdown(f"### Z-Score: <span style='color:{color}; font-size:24px'>{z_score:.2f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**状态**: <span style='color:{color}'>{status}</span>", unsafe_allow_html=True)
+                    
+                    # 新增：简洁的风险等级展示
+                    if z_score > 2.99:
+                        st.success("✅ 财务健康 - 企业财务状况良好，破产风险极低")
+                    elif z_score >= 1.81:
+                        st.warning("⚠️ 临界风险 - 企业处于灰色地带，需要密切关注")
+                    else:
+                        st.error("🚨 高破产风险 - 企业财务状况堪忧，投资需谨慎")
+                    
+                    # 评分标准说明
+                    st.write("📊 评分标准:")
+                    st.write("- Z > 2.99: 安全区域")
+                    st.write("- 1.8 < Z < 2.99: 灰色区域")
+                    st.write("- Z < 1.8: 危险区域")
+            
+            # 估值分析
+            with st.expander("💎 估值分析", expanded=True):
+                # DCF估值
+                dcf_value, dcf_params = calculate_dcf_valuation(data)
+                current_price = info.get('currentPrice', 0)
+                
+                if dcf_value and current_price > 0:
+                    st.write("**DCF估值**")
+                    col_x, col_y = st.columns(2)
+                    with col_x:
+                        st.metric("合理价值", f"${dcf_value:.2f}")
+                        st.metric("当前价格", f"${current_price:.2f}")
+                    with col_y:
+                        margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
+                        st.metric("安全边际", f"{margin:.2f}%")
+                    
+                    # 新增：DCF模型参数展示
+                    if dcf_params:
+                        with st.expander("📊 DCF模型参数详情"):
+                            col_a, col_b, col_c = st.columns(3)
+                            with col_a:
+                                st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
+                                st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
+                            with col_b:
+                                st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
+                                st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
+                            with col_c:
+                                st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
+                                st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
+                            
+                            # 显示逐年现金流
+                            st.write("**预测期现金流（百万美元）**")
+                            fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
+                            fcf_df['fcf'] = fcf_df['fcf'] / 1e6
+                            fcf_df['pv'] = fcf_df['pv'] / 1e6
+                            fcf_df.columns = ['年份', '预测FCF', '现值']
+                            st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
+                            
+                            st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
+                            st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
+                else:
+                    st.info("DCF估值数据不足")
+                
+                # 相对估值
+                st.write("**相对估值**")
+                rel_val = calculate_relative_valuation(data)
+                if rel_val:
+                    col_m, col_n = st.columns(2)
+                    with col_m:
+                        pe_display = f"{rel_val['pe_ratio']:.2f}" if rel_val['pe_ratio'] > 0 else "N/A"
+                        pb_display = f"{rel_val['pb_ratio']:.2f}" if rel_val['pb_ratio'] > 0 else "N/A"
+                        st.metric("PE", pe_display)
+                        st.metric("PB", pb_display)
+                    with col_n:
+                        st.metric("行业PE", f"{rel_val['industry_pe']:.2f}")
+                        st.metric("行业PB", f"{rel_val['industry_pb']:.2f}")
+                    
+                    # 新增：历史估值分位图
+                    if rel_val['pe_ratio'] > 0:
+                        hist_val = calculate_historical_valuation_percentile(ticker, rel_val['pe_ratio'], rel_val['pb_ratio'])
+                        if hist_val:
+                            st.write("**历史估值分位**")
+                            fig_hist = go.Figure()
+                            
+                            # 添加价格历史线
+                            fig_hist.add_trace(go.Scatter(
+                                x=hist_val['hist_prices'].index,
+                                y=hist_val['hist_prices'].values,
+                                mode='lines',
+                                name='历史价格',
+                                line=dict(color='blue', width=2)
+                            ))
+                            
+                            # 添加当前价格标记
+                            fig_hist.add_hline(y=current_price, line_dash="dash", line_color="red", 
+                                             annotation_text=f"当前价格: ${current_price:.2f}")
+                            
+                            fig_hist.update_layout(
+                                title=f"5年价格走势及当前位置（分位数: {hist_val['pe_percentile']:.1f}%）",
+                                xaxis_title="日期",
+                                yaxis_title="价格 ($)",
+                                height=300
+                            )
