@@ -671,6 +671,29 @@ def generate_trading_recommendation(valuation_signals, technical_signals, curren
     if buy_signals >= 2:
         recommendation['action'] = 'BUY'
         recommendation['confidence'] = min(buy_signals * 30 + tech_buy_count * 10, 90)
+        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        recommendation['stop_loss'] = current_price * 0.92
+        
+        if dcf_value and dcf_value > current_price:
+            recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
+        else:
+            recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
+        
+        win_prob = 0.6 + (recommendation['confidence'] / 100) * 0.2
+        recommendation['position_size'] = calculate_kelly_criterion(win_prob, 2.0) * 100
+        
+    elif sell_signals >= 2:
+        recommendation['action'] = 'SELL'
+        recommendation['confidence'] = min(sell_signals * 30 + tech_sell_count * 10, 90)
+        recommendation['reasons'].insert(0, "建议减仓或清仓")
+        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+        recommendation['stop_loss'] = current_price * 1.08
+        recommendation['take_profit'] = (current_price * 0.90, current_price * 0.85)
+        
+    else:
+        recommendation['action'] = 'HOLD'
+        recommendation['confidence'] = 50
+        recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
         recommendation['entry_range'] = (current_price * 0.95, current_price * 0.98)
         recommendation['stop_loss'] = current_price * 0.92
         if dcf_value and dcf_value > current_price:
@@ -1020,11 +1043,8 @@ if analyze_button and ticker:
             st.markdown("---")
             st.subheader("💡 智能买卖点建议")
             
-            if 'dcf_value' not in locals():
-                dcf_value, _ = calculate_dcf_valuation(data)
-            
-            if 'z_score' not in locals():
-                z_score, _, _ = calculate_altman_z_score(data)
+            dcf_value, _ = calculate_dcf_valuation(data)
+            z_score, _, _ = calculate_altman_z_score(data)
             
             valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
             technical_signals = analyze_technical_signals(hist_data)
@@ -1285,27 +1305,4 @@ with col_footer2:
     if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
         st.rerun()
 
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")price * 0.98, current_price * 1.02)
-        recommendation['stop_loss'] = current_price * 0.92
-        
-        if dcf_value and dcf_value > current_price:
-            recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
-        else:
-            recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
-        
-        win_prob = 0.6 + (recommendation['confidence'] / 100) * 0.2
-        recommendation['position_size'] = calculate_kelly_criterion(win_prob, 2.0) * 100
-        
-    elif sell_signals >= 2:
-        recommendation['action'] = 'SELL'
-        recommendation['confidence'] = min(sell_signals * 30 + tech_sell_count * 10, 90)
-        recommendation['reasons'].insert(0, "建议减仓或清仓")
-        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
-        recommendation['stop_loss'] = current_price * 1.08
-        recommendation['take_profit'] = (current_price * 0.90, current_price * 0.85)
-        
-    else:
-        recommendation['action'] = 'HOLD'
-        recommendation['confidence'] = 50
-        recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
-        recommendation['entry_range'] = (current_
+st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
