@@ -899,27 +899,27 @@ if analyze_button and ticker:
                         st.metric("安全边际", f"{margin:.2f}%")
                     
                     if dcf_params:
-                        with st.expander("📊 DCF模型参数详情"):
-                            col_a, col_b, col_c = st.columns(3)
-                            with col_a:
-                                st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
-                                st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
-                            with col_b:
-                                st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
-                                st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
-                            with col_c:
-                                st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
-                                st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
-                            
-                            st.write("**预测期现金流（百万美元）**")
-                            fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
-                            fcf_df['fcf'] = fcf_df['fcf'] / 1e6
-                            fcf_df['pv'] = fcf_df['pv'] / 1e6
-                            fcf_df.columns = ['年份', '预测FCF', '现值']
-                            st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
-                            
-                            st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
-                            st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
+                        st.write("**📊 DCF模型参数详情**")
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
+                            st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
+                        with col_b:
+                            st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
+                            st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
+                        with col_c:
+                            st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
+                            st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
+                        
+                        st.write("**预测期现金流（百万美元）**")
+                        fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
+                        fcf_df['fcf'] = fcf_df['fcf'] / 1e6
+                        fcf_df['pv'] = fcf_df['pv'] / 1e6
+                        fcf_df.columns = ['年份', '预测FCF', '现值']
+                        st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
+                        
+                        st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
+                        st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
                 else:
                     st.info("DCF估值数据不足")
                 
