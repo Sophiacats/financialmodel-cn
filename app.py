@@ -410,7 +410,7 @@ def calculate_atr(hist_data, period=14):
 def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, custom_tp_pct=15, custom_sl_pct=10):
     """根据不同策略计算止盈止损位"""
     
-    if strategy == "固定比例法":
+            if strategy == "固定比例法":
         take_profit = buy_price * (1 + custom_tp_pct / 100)
         stop_loss = buy_price * (1 - custom_sl_pct / 100)
         strategy_info = f"止盈比例: +{custom_tp_pct}%, 止损比例: -{custom_sl_pct}%"
@@ -421,7 +421,7 @@ def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, cust
             ma20 = hist_data['MA20'].iloc[-1]
             ma60 = hist_data['MA60'].iloc[-1]
             
-            # 以MA20作为动态止损，MA60上方20%作为止盈
+            # 以MA20作为动态止损, MA60上方20%作为止盈
             stop_loss = max(ma20 * 0.98, buy_price * 0.92)  # 不低于8%止损
             take_profit = max(ma60 * 1.2, buy_price * 1.15)  # 不低于15%止盈
             
@@ -430,40 +430,40 @@ def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, cust
             # 回退到固定比例
             take_profit = buy_price * 1.15
             stop_loss = buy_price * 0.90
-            strategy_info = "技术指标数据不足，使用默认15%/10%"
+            strategy_info = "技术指标数据不足, 使用默认15%/10%"
     
     elif strategy == "波动率法(ATR)":
         atr = calculate_atr(hist_data)
         if atr > 0:
-            # ATR法：止盈=当前价+2倍ATR，止损=当前价-1倍ATR
+            # ATR法: 止盈=当前价+2倍ATR, 止损=当前价-1倍ATR
             take_profit = current_price + (2 * atr)
             stop_loss = current_price - (1 * atr)
             strategy_info = f"ATR: ${atr:.2f}, 止盈: +2×ATR, 止损: -1×ATR"
         else:
-            # ATR计算失败，回退
+            # ATR计算失败, 回退
             take_profit = buy_price * 1.15
             stop_loss = buy_price * 0.90
-            strategy_info = "ATR计算失败，使用默认比例"
+            strategy_info = "ATR计算失败, 使用默认比例"
     
     elif strategy == "成本加码法(跟踪止盈)":
-        # 跟踪止盈：盈利时逐步上移止损位
+        # 跟踪止盈: 盈利时逐步上移止损位
         current_pnl_pct = (current_price - buy_price) / buy_price * 100
         
         if current_pnl_pct > 20:
-            # 盈利超过20%，止损移至成本价上10%
+            # 盈利超过20%, 止损移至成本价上10%
             stop_loss = buy_price * 1.10
-            take_profit = current_price * 1.05  # 继续持有，小幅止盈
-            strategy_info = "盈利>20%，止损上移至成本+10%"
+            take_profit = current_price * 1.05  # 继续持有, 小幅止盈
+            strategy_info = "盈利>20%, 止损上移至成本+10%"
         elif current_pnl_pct > 10:
-            # 盈利10-20%，止损移至成本价
+            # 盈利10-20%, 止损移至成本价
             stop_loss = buy_price
             take_profit = buy_price * 1.25
-            strategy_info = "盈利10-20%，止损移至成本价"
+            strategy_info = "盈利10-20%, 止损移至成本价"
         else:
-            # 盈利<10%，正常止损
+            # 盈利<10%, 正常止损
             stop_loss = buy_price * 0.92
             take_profit = buy_price * 1.20
-            strategy_info = "盈利<10%，使用常规止损"
+            strategy_info = "盈利<10%, 使用常规止损"
     
     else:
         # 默认策略
@@ -1892,4 +1892,4 @@ with col_footer2:
     if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
         st.rerun()
 
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
+st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考, 投资需谨慎")
