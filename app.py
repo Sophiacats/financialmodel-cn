@@ -29,6 +29,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# 初始化 session state
+if 'current_ticker' not in st.session_state:
+    st.session_state.current_ticker = None
+if 'current_price' not in st.session_state:
+    st.session_state.current_price = 0
+if 'analysis_data' not in st.session_state:
+    st.session_state.analysis_data = None
+
 # 标题
 st.title("💹 智能投资分析系统 v2.0")
 st.markdown("---")
@@ -717,37 +725,83 @@ with st.sidebar:
     
     with st.expander("💰 止盈止损模拟器"):
         st.markdown("### 持仓盈亏计算")
-        buy_price = st.number_input("买入价格 ($)", min_value=0.01, value=100.0, step=0.01)
-        position_size = st.number_input("持仓数量", min_value=1, value=100, step=1)
         
-        calculate_pnl = st.button("计算盈亏")
-        
-        if calculate_pnl:
-            current_price = 105.0
-            position_value = position_size * buy_price
-            current_value = position_size * current_price
-            pnl = current_value - position_value
-            pnl_pct = (pnl / position_value) * 100
+        # 检查是否有当前分析的股票数据
+        if st.session_state.current_ticker and st.session_state.current_price > 0:
+            st.info(f"📊 当前分析股票：{st.session_state.current_ticker} | 当前价格：${st.session_state.current_price:.2f}")
             
-            stop_loss = buy_price * 0.9
-            take_profit = buy_price * 1.15
+            # 使用当前股票价格作为默认买入价格
+            default_buy_price = st.session_state.current_price * 0.95  # 默认比当前价格低5%
+            buy_price = st.number_input("买入价格 ($)", min_value=0.01, value=default_buy_price, step=0.01, key="buy_price_input")
+            position_size = st.number_input("持仓数量", min_value=1, value=100, step=1, key="position_size_input")
             
-            st.metric("当前盈亏", f"${pnl:.2f} ({pnl_pct:+.2f}%)")
+            # 使用当前股票的实时价格进行计算
+            current_market_price = st.session_state.current_price
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("止损点 (-10%)", f"${stop_loss:.2f}")
-            with col2:
-                st.metric("止盈点 (+15%)", f"${take_profit:.2f}")
+            if st.button("💡 计算盈亏", key="calc_pnl_btn"):
+                # 使用容器来显示结果，避免页面跳转
+                with st.container():
+                    position_value = position_size * buy_price
+                    current_value = position_size * current_market_price
+                    pnl = current_value - position_value
+                    pnl_pct = (pnl / position_value) * 100
+                    
+                    stop_loss = buy_price * 0.9
+                    take_profit = buy_price * 1.15
+                    
+                    st.metric("当前盈亏", f"${pnl:.2f} ({pnl_pct:+.2f}%)")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("止损点 (-10%)", f"${stop_loss:.2f}")
+                    with col2:
+                        st.metric("止盈点 (+15%)", f"${take_profit:.2f}")
+                    
+                    # 智能提示
+                    if pnl_pct <= -10:
+                        st.error("⚠️ 已触及止损线！建议立即止损")
+                    elif pnl_pct >= 15:
+                        st.success("🎯 已达到止盈目标！建议考虑获利了结")
+                    elif pnl_pct > 0:
+                        st.info(f"📈 盈利中，距离止盈还有 {15-pnl_pct:.1f}%")
+                    else:
+                        st.warning(f"📉 亏损中，距离止损还有 {abs(-10-pnl_pct):.1f}%")
+                        
+                    # 风险提示
+                    risk_amount = position_value * 0.1  # 10%风险金额
+                    st.caption(f"💡 风险提示：如触及止损，最大亏损约 ${risk_amount:.2f}")
+        else:
+            st.warning("⚠️ 请先分析一只股票，模拟器将自动获取当前价格")
+            # 提供基础版本的计算器
+            buy_price = st.number_input("买入价格 ($)", min_value=0.01, value=100.0, step=0.01)
+            position_size = st.number_input("持仓数量", min_value=1, value=100, step=1)
             
-            if pnl_pct <= -10:
-                st.error("⚠️ 已触及止损线！")
-            elif pnl_pct >= 15:
-                st.success("🎯 已达到止盈目标！")
-            elif pnl_pct > 0:
-                st.info(f"📈 盈利中，距离止盈还有 {15-pnl_pct:.1f}%")
-            else:
-                st.warning(f"📉 亏损中，距离止损还有 {-10-pnl_pct:.1f}%")
+            if st.button("计算盈亏"):
+                current_price = 105.0  # 示例价格
+                position_value = position_size * buy_price
+                current_value = position_size * current_price
+                pnl = current_value - position_value
+                pnl_pct = (pnl / position_value) * 100
+                
+                stop_loss = buy_price * 0.9
+                take_profit = buy_price * 1.15
+                
+                st.metric("当前盈亏", f"${pnl:.2f} ({pnl_pct:+.2f}%)")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("止损点 (-10%)", f"${stop_loss:.2f}")
+                with col2:
+                    st.metric("止盈点 (+15%)", f"${take_profit:.2f}")
+                
+                if pnl_pct <= -10:
+                    st.error("⚠️ 已触及止损线！")
+                elif pnl_pct >= 15:
+                    st.success("🎯 已达到止盈目标！")
+                elif pnl_pct > 0:
+                    st.info(f"📈 盈利中，距离止盈还有 {15-pnl_pct:.1f}%")
+                else:
+                    st.warning(f"📉 亏损中，距离止损还有 {-10-pnl_pct:.1f}%")
     
     st.markdown("---")
     
@@ -804,6 +858,9 @@ with st.sidebar:
 
 # 主界面
 if analyze_button and ticker:
+    # 更新 session state
+    st.session_state.current_ticker = ticker
+    
     with st.spinner(f"正在获取 {ticker} 的数据..."):
         try:
             data = fetch_stock_data(ticker)
@@ -811,6 +868,10 @@ if analyze_button and ticker:
             data = fetch_stock_data_uncached(ticker)
     
     if data:
+        # 更新当前价格到 session state
+        current_price = data['info'].get('currentPrice', 0)
+        st.session_state.current_price = current_price
+        st.session_state.analysis_data = data
         col1, col2, col3 = st.columns([1, 2, 1.5])
         
         # 左栏：公司基本信息
@@ -1039,6 +1100,83 @@ if analyze_button and ticker:
             plt.tight_layout()
             st.pyplot(fig2)
             
+            # 模块B：技术分析结论展示
+            st.markdown("---")
+            st.subheader("📊 技术指标快速解读")
+            
+            # 计算技术信号
+            valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
+            technical_signals = analyze_technical_signals(hist_data)
+            latest = hist_data.iloc[-1]
+            
+            # 技术指标状态卡片
+            tech_col1, tech_col2 = st.columns(2)
+            
+            with tech_col1:
+                # MACD 状态
+                if technical_signals['macd_golden_cross']:
+                    st.success("🔺 MACD：金叉（看涨信号）")
+                elif technical_signals['macd_death_cross']:
+                    st.error("🔻 MACD：死叉（看跌信号）")
+                else:
+                    macd_val = latest['MACD']
+                    signal_val = latest['Signal']
+                    if macd_val > signal_val:
+                        st.info("📈 MACD：多头排列")
+                    else:
+                        st.warning("📉 MACD：空头排列")
+                
+                # 均线状态
+                if technical_signals['ma_golden_cross']:
+                    st.success("🔺 均线：金叉突破")
+                elif technical_signals['ma_death_cross']:
+                    st.error("🔻 均线：死叉下破")
+                elif 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
+                    if latest['MA10'] > latest['MA60']:
+                        st.info("📈 均线：多头排列")
+                    else:
+                        st.warning("📉 均线：空头排列")
+            
+            with tech_col2:
+                # RSI 状态
+                if 'RSI' in hist_data.columns:
+                    rsi_value = latest['RSI']
+                    if rsi_value > 70:
+                        st.error(f"⚠️ RSI：{rsi_value:.1f} → 超买状态")
+                    elif rsi_value < 30:
+                        st.success(f"💡 RSI：{rsi_value:.1f} → 超卖状态")
+                    else:
+                        st.info(f"📊 RSI：{rsi_value:.1f} → 正常区间")
+                
+                # 布林带状态
+                if 'BB_Upper' in hist_data.columns and 'BB_Lower' in hist_data.columns:
+                    close_price = latest['Close']
+                    bb_upper = latest['BB_Upper']
+                    bb_lower = latest['BB_Lower']
+                    bb_middle = latest['BB_Middle']
+                    
+                    if close_price > bb_upper:
+                        st.warning("🔺 布林带：突破上轨")
+                    elif close_price < bb_lower:
+                        st.success("🔻 布林带：跌破下轨")
+                    elif close_price > bb_middle:
+                        st.info("📈 布林带：上半区运行")
+                    else:
+                        st.info("📉 布林带：下半区运行")
+            
+            # 模块C：Altman Z-score 简洁展示
+            st.markdown("---")
+            z_score, status, color = calculate_altman_z_score(data)
+            if z_score and z_score > 0:
+                if color == "green":
+                    st.success(f"📉 破产风险评分（Altman Z-score）：{z_score:.2f} ✅ {status}")
+                elif color == "orange":
+                    st.warning(f"📉 破产风险评分（Altman Z-score）：{z_score:.2f} ⚠️ {status}")
+                else:
+                    st.error(f"📉 破产风险评分（Altman Z-score）：{z_score:.2f} 🚨 {status}")
+            else:
+                st.info("📉 破产风险评分：数据不足，无法计算")
+            
             # 智能买卖点建议
             st.markdown("---")
             st.subheader("💡 智能买卖点建议")
@@ -1212,6 +1350,57 @@ if analyze_button and ticker:
             
             st.markdown(f"**风险等级**: <span style='color:{risk_color}'>{risk_level}</span>", unsafe_allow_html=True)
             st.caption(f"Beta: {info.get('beta', 'N/A')}")
+            
+            # 增强版止盈止损分析（基于当前股票）
+            if st.session_state.current_ticker == ticker:
+                st.markdown("---")
+                st.subheader("💰 智能止盈止损建议")
+                
+                with st.container():
+                    # 基于技术分析和估值的止盈止损建议
+                    dcf_value, _ = calculate_dcf_valuation(data)
+                    
+                    # 动态止损点计算
+                    if 'MA20' in hist_data.columns:
+                        ma20_support = hist_data['MA20'].iloc[-1]
+                        dynamic_stop_loss = min(current_price * 0.92, ma20_support * 0.98)
+                    else:
+                        dynamic_stop_loss = current_price * 0.92
+                    
+                    # 动态止盈点计算
+                    if dcf_value and dcf_value > current_price:
+                        target_profit = dcf_value * 0.95
+                    else:
+                        target_profit = current_price * 1.15
+                    
+                    col_sl, col_tp = st.columns(2)
+                    with col_sl:
+                        st.metric(
+                            "🛡️ 建议止损位", 
+                            f"${dynamic_stop_loss:.2f}",
+                            f"{((dynamic_stop_loss - current_price)/current_price*100):+.1f}%"
+                        )
+                    with col_tp:
+                        st.metric(
+                            "🎯 建议止盈位", 
+                            f"${target_profit:.2f}",
+                            f"{((target_profit - current_price)/current_price*100):+.1f}%"
+                        )
+                    
+                    # 风险收益比
+                    risk_amount = abs(current_price - dynamic_stop_loss)
+                    reward_amount = abs(target_profit - current_price)
+                    risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
+                    
+                    st.info(f"📊 风险收益比：1 : {risk_reward_ratio:.2f} {'(建议进场)' if risk_reward_ratio >= 2 else '(风险偏高)'}")
+                    
+                    # 基于技术指标的操作建议
+                    if technical_signals['rsi_oversold'] and technical_signals['macd_golden_cross']:
+                        st.success("💡 技术面显示超卖反弹机会，适合建仓")
+                    elif technical_signals['rsi_overbought'] and technical_signals['macd_death_cross']:
+                        st.warning("⚠️ 技术面显示超买风险，建议减仓")
+                    else:
+                        st.info("📊 技术面信号中性，建议观望或轻仓操作")
 
 else:
     st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
