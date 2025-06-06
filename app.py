@@ -432,7 +432,7 @@ def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, cust
             stop_loss = buy_price * 0.90
             strategy_info = "技术指标数据不足，使用默认15%/10%"
     
-    elif strategy == "波动率法（ATR）":
+    elif strategy == "波动率法(ATR)":
         atr = calculate_atr(hist_data)
         if atr > 0:
             # ATR法：止盈=当前价+2倍ATR，止损=当前价-1倍ATR
@@ -445,7 +445,7 @@ def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, cust
             stop_loss = buy_price * 0.90
             strategy_info = "ATR计算失败，使用默认比例"
     
-    elif strategy == "成本加码法（跟踪止盈）":
+    elif strategy == "成本加码法(跟踪止盈)":
         # 跟踪止盈：盈利时逐步上移止损位
         current_pnl_pct = (current_price - buy_price) / buy_price * 100
         
@@ -840,7 +840,7 @@ with st.sidebar:
             st.markdown("#### 🎯 选择止盈止损策略")
             strategy = st.selectbox(
                 "选择您偏好的止盈止损方法:",
-                ["固定比例法", "技术指标法", "波动率法（ATR）", "成本加码法（跟踪止盈）"],
+                ["固定比例法", "技术指标法", "波动率法(ATR)", "成本加码法(跟踪止盈)"],
                 key=f"strategy_select_{display_ticker}",
                 help="不同策略适合不同的投资风格和市场环境"
             )
@@ -907,9 +907,9 @@ with st.sidebar:
                         st.write("📊 **适用场景**: 趋势明确的股票，技术形态良好时")
                         take_profit_pct, stop_loss_pct = 15.0, 10.0  # 技术指标法不需要手动输入
                 
-                elif strategy == "波动率法（ATR）":
-                    with st.expander("📊 波动率法（ATR）说明", expanded=True):
-                        st.write("💡 **说明**: 根据股票历史波动率（ATR）动态设置止盈止损距离")
+                elif strategy == "波动率法(ATR)":
+                    with st.expander("📊 波动率法(ATR)说明", expanded=True):
+                        st.write("💡 **说明**: 根据股票历史波动率(ATR)动态设置止盈止损距离")
                         
                         # 获取历史数据计算ATR
                         if hasattr(st.session_state, 'analysis_data') and st.session_state.analysis_data:
@@ -926,8 +926,8 @@ with st.sidebar:
                                 st.warning("⚠️ ATR计算失败，将使用默认比例")
                         take_profit_pct, stop_loss_pct = 15.0, 10.0  # ATR法不需要手动输入比例
                 
-                elif strategy == "成本加码法（跟踪止盈）":
-                    with st.expander("📈 成本加码法（跟踪止盈）说明", expanded=True):
+                elif strategy == "成本加码法(跟踪止盈)":
+                    with st.expander("📈 成本加码法(跟踪止盈)说明", expanded=True):
                         st.write("💡 **说明**: 随着盈利增加，自动上移止损位，锁定利润避免回吐")
                         
                         current_pnl_pct = (display_price - buy_price) / buy_price * 100 if buy_price > 0 else 0
@@ -1034,7 +1034,7 @@ with st.sidebar:
             st.markdown("#### 🎯 策略选择预览")
             preview_strategy = st.selectbox(
                 "预览不同的止盈止损策略:",
-                ["固定比例法", "技术指标法", "波动率法（ATR）", "成本加码法（跟踪止盈）"],
+                ["固定比例法", "技术指标法", "波动率法(ATR)", "成本加码法(跟踪止盈)"],
                 key="preview_strategy_select",
                 help="选择策略查看详细说明"
             )
@@ -1054,13 +1054,13 @@ with st.sidebar:
                 st.write("• 🎯 止盈：MA60上方20%")
                 st.write("• 💡 适用场景：趋势明确的股票，技术形态良好时")
             
-            elif preview_strategy == "波动率法（ATR）":
-                st.write("📊 **波动率法（ATR）**: 根据股票波动率动态设置")
+            elif preview_strategy == "波动率法(ATR)":
+                st.write("📊 **波动率法(ATR)**: 根据股票波动率动态设置")
                 st.write("• 🎯 止盈：当前价 + 2×ATR")
                 st.write("• 🛡️ 止损：当前价 - 1×ATR")
                 st.write("• 💡 适用场景：波动大、剧烈涨跌的个股，如成长股、科技股")
             
-            elif preview_strategy == "成本加码法（跟踪止盈）":
+            elif preview_strategy == "成本加码法(跟踪止盈)":
                 st.write("📈 **跟踪止盈法**: 随盈利增加自动上移止损位")
                 st.write("• 🎯 盈利>20%：止损移至成本+10%")
                 st.write("• 📊 盈利10-20%：止损移至成本价")
