@@ -723,162 +723,6 @@ with st.sidebar:
     
     st.markdown("---")
     
-    with st.expander("💰 止盈止损模拟器"):
-        st.markdown("### 持仓盈亏计算")
-        
-        # 检查是否有当前分析的股票数据 - 修复检查逻辑
-        current_ticker = getattr(st.session_state, 'current_ticker', None)
-        current_price = getattr(st.session_state, 'current_price', 0)
-        
-        # 同时检查是否刚刚点击了分析按钮
-        if (current_ticker and current_price > 0) or (analyze_button and ticker):
-            # 如果刚点击分析按钮，显示分析中状态
-            if analyze_button and ticker:
-                display_ticker = ticker
-                display_price = current_price if current_price > 0 else 0
-            else:
-                display_ticker = current_ticker
-                display_price = current_price
-            
-            st.success(f"✅ 当前分析：{display_ticker}")
-            
-            # 如果有价格数据，显示完整计算器
-            if display_price > 0:
-                st.info(f"📊 系统自动获取当前股价：${display_price:.2f}")
-                
-                # 用户输入区域
-                st.markdown("#### 📝 输入参数")
-                
-                # 买入价输入
-                default_buy_price = display_price * 0.95  # 默认比当前价格低5%
-                buy_price = st.number_input(
-                    "💵 买入价格 ($)", 
-                    min_value=0.01, 
-                    value=default_buy_price, 
-                    step=0.01,
-                    key=f"sidebar_buy_price_{display_ticker}"
-                )
-                
-                # 仓位数量输入
-                position_qty = st.number_input(
-                    "📦 仓位数量", 
-                    min_value=1, 
-                    value=100, 
-                    step=1,
-                    key=f"sidebar_position_{display_ticker}"
-                )
-                
-                # 止盈止损比例设置
-                col_tp, col_sl = st.columns(2)
-                with col_tp:
-                    take_profit_pct = st.number_input(
-                        "🎯 止盈比例 (%)", 
-                        min_value=1.0, 
-                        value=15.0, 
-                        step=1.0,
-                        key=f"sidebar_tp_{display_ticker}"
-                    )
-                with col_sl:
-                    stop_loss_pct = st.number_input(
-                        "🛡️ 止损比例 (%)", 
-                        min_value=1.0, 
-                        value=10.0, 
-                        step=1.0,
-                        key=f"sidebar_sl_{display_ticker}"
-                    )
-                
-                # 计算核心指标
-                if buy_price > 0:
-                    # 1. 当前盈亏百分比
-                    current_pnl_pct = (display_price - buy_price) / buy_price * 100
-                    
-                    # 2. 止盈点和止损点
-                    take_profit_price = buy_price * (1 + take_profit_pct / 100)
-                    stop_loss_price = buy_price * (1 - stop_loss_pct / 100)
-                    
-                    # 3. 持仓价值和盈亏金额
-                    position_value = position_qty * buy_price
-                    current_value = position_qty * display_price
-                    pnl_amount = current_value - position_value
-                    
-                    # 显示计算结果
-                    st.markdown("#### 📊 计算结果")
-                    
-                    # 核心指标展示
-                    result_col1, result_col2 = st.columns(2)
-                    with result_col1:
-                        st.metric(
-                            "💰 当前盈亏", 
-                            f"${pnl_amount:.2f}",
-                            f"{current_pnl_pct:+.2f}%"
-                        )
-                    with result_col2:
-                        st.metric(
-                            "📈 持仓价值", 
-                            f"${current_value:.2f}",
-                            f"成本: ${position_value:.2f}"
-                        )
-                    
-                    # 止盈止损价位
-                    tp_col, sl_col = st.columns(2)
-                    with tp_col:
-                        distance_to_tp = (take_profit_price - display_price) / display_price * 100
-                        st.metric(
-                            "🎯 止盈价位", 
-                            f"${take_profit_price:.2f}",
-                            f"还需上涨 {distance_to_tp:.1f}%" if distance_to_tp > 0 else "已达到!"
-                        )
-                    with sl_col:
-                        distance_to_sl = (display_price - stop_loss_price) / display_price * 100
-                        st.metric(
-                            "🛡️ 止损价位", 
-                            f"${stop_loss_price:.2f}",
-                            f"安全边际 {distance_to_sl:.1f}%" if distance_to_sl > 0 else "已触发!"
-                        )
-                    
-                    # 智能提醒和建议
-                    st.markdown("#### 🚨 操作建议")
-                    
-                    if display_price >= take_profit_price:
-                        st.success("🎯 **已达到止盈目标！可考虑止盈**")
-                        profit_amount = position_qty * (take_profit_price - buy_price)
-                        st.success(f"💰 预期止盈收益：${profit_amount:.2f}")
-                    elif display_price <= stop_loss_price:
-                        st.error("🛡️ **已触及止损价位！应考虑止损**")
-                        loss_amount = position_qty * (buy_price - stop_loss_price)
-                        st.error(f"⚠️ 最大止损亏损：${loss_amount:.2f}")
-                    elif current_pnl_pct > 5:
-                        st.info(f"📈 **持续盈利中** ({current_pnl_pct:+.1f}%)")
-                        st.info(f"距离止盈目标还需上涨 {distance_to_tp:.1f}%")
-                    elif current_pnl_pct < -3:
-                        st.warning(f"📉 **注意风险** ({current_pnl_pct:+.1f}%)")
-                        st.warning(f"距离止损线还有 {distance_to_sl:.1f}% 安全边际")
-                    else:
-                        st.info("📊 **持仓正常，继续观察市场走势**")
-                    
-                    # 风险收益分析
-                    max_loss = position_qty * (buy_price - stop_loss_price)
-                    max_profit = position_qty * (take_profit_price - buy_price)
-                    risk_reward_ratio = max_profit / max_loss if max_loss > 0 else 0
-                    
-                    st.caption(f"💡 风险收益比：1:{risk_reward_ratio:.2f} | 最大风险：${max_loss:.2f} | 最大收益：${max_profit:.2f}")
-                
-            else:
-                st.info("📊 正在获取股票价格数据...")
-        else:
-            st.warning("⚠️ 请先分析一只股票")
-            st.info("💡 点击'开始分析'后，这里将显示该股票的完整止盈止损计算")
-            
-            # 功能预览
-            st.markdown("#### 📝 功能说明")
-            st.write("• 🔄 自动获取股票实时价格")
-            st.write("• 📝 输入买入价和仓位数量")
-            st.write("• 📊 计算当前盈亏百分比")
-            st.write("• 🎯 设置止盈止损比例")
-            st.write("• 🚨 智能操作提醒")
-    
-    st.markdown("---")
-    
     with st.expander("📘 使用说明"):
         st.markdown("""
         ### 如何解读各项数值指标
@@ -1425,7 +1269,7 @@ if analyze_button and ticker:
             st.markdown(f"**风险等级**: <span style='color:{risk_color}'>{risk_level}</span>", unsafe_allow_html=True)
             st.caption(f"Beta: {info.get('beta', 'N/A')}")
             
-            # 在这里直接添加止盈止损模拟器（确保能获取到数据）
+            # 智能止盈止损模拟器
             st.markdown("---")
             st.subheader("💰 智能止盈止损模拟器")
             
@@ -1541,7 +1385,7 @@ if analyze_button and ticker:
                         )
                     with col_tp:
                         st.metric(
-                            "🎯  建议止盈位", 
+                            "🎯 建议止盈位", 
                             f"${target_profit:.2f}",
                             f"{((target_profit - current_price)/current_price*100):+.1f}%"
                         )
@@ -1586,7 +1430,7 @@ else:
         - **财务趋势图**: 营收、利润、EPS趋势
         - **风险雷达图**: 多维度风险评估
         - **智能评分系统**: 价值面+技术面综合评分
-        - **止盈止损模拟器**: 计算盈亏和关键价位
+        - **智能止盈止损模拟器**: 计算盈亏和关键价位
         
         ### 注意事项
         - 本系统仅供参考，不构成投资建议
