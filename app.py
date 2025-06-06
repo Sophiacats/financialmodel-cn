@@ -389,7 +389,7 @@ def calculate_technical_indicators(hist_data):
         return hist_data
 
 def calculate_atr(hist_data, period=14):
-    """计算ATR（平均真实波幅）"""
+    """计算ATR(平均真实波幅)"""
     try:
         high = hist_data['High']
         low = hist_data['Low']
