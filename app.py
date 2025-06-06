@@ -836,18 +836,18 @@ with st.sidebar:
             
             st.success(f"✅ 当前分析：{display_ticker}")
             
+            # 策略选择下拉菜单 - 移到外层，确保始终显示
+            st.markdown("#### 🎯 选择止盈止损策略")
+            strategy = st.selectbox(
+                "选择您偏好的止盈止损方法:",
+                ["固定比例法", "技术指标法", "波动率法（ATR）", "成本加码法（跟踪止盈）"],
+                key=f"strategy_select_{display_ticker}",
+                help="不同策略适合不同的投资风格和市场环境"
+            )
+            
             # 如果有价格数据，显示完整计算器
             if display_price > 0:
                 st.info(f"📊 系统自动获取当前股价：${display_price:.2f}")
-                
-                # 策略选择下拉菜单
-                st.markdown("#### 🎯 选择止盈止损策略")
-                strategy = st.selectbox(
-                    "选择您偏好的止盈止损方法:",
-                    ["固定比例法", "技术指标法", "波动率法（ATR）", "成本加码法（跟踪止盈）"],
-                    key=f"strategy_select_{display_ticker}",
-                    help="不同策略适合不同的投资风格和市场环境"
-                )
                 
                 # 基础输入区域
                 st.markdown("#### 📝 基础参数")
@@ -1025,26 +1025,46 @@ with st.sidebar:
                 
             else:
                 st.info("📊 正在获取股票价格数据...")
+                st.write("**当前选择的策略**: " + strategy)
         else:
             st.warning("⚠️ 请先分析一只股票")
             st.info("💡 点击'开始分析'后，这里将显示多策略止盈止损计算")
             
+            # 即使没有分析股票，也显示策略选择预览
+            st.markdown("#### 🎯 策略选择预览")
+            preview_strategy = st.selectbox(
+                "预览不同的止盈止损策略:",
+                ["固定比例法", "技术指标法", "波动率法（ATR）", "成本加码法（跟踪止盈）"],
+                key="preview_strategy_select",
+                help="选择策略查看详细说明"
+            )
+            
             # 功能预览
-            st.markdown("#### 🎯 支持的策略类型")
-            strategy_preview_tabs = st.tabs(["固定比例法", "技术指标法", "波动率法", "跟踪止盈法"])
+            st.markdown("#### 📋 策略详情")
             
-            with strategy_preview_tabs[0]:
+            if preview_strategy == "固定比例法":
                 st.write("📊 **固定比例法**: 简单的百分比止盈止损")
-                st.write("• 适合新手投资者")
-                st.write("• 默认设置：+15% / -10%")
+                st.write("• ✅ 适合新手投资者")
+                st.write("• 📈 默认设置：+15% / -10%")
+                st.write("• 💡 特点：规则明确，执行简单，风险可控")
             
-            with strategy_preview_tabs[1]:
+            elif preview_strategy == "技术指标法":
                 st.write("📈 **技术指标法**: 基于MACD、均线的动态止盈止损")
-                st.write("• 止损：MA20支撑位")
-                st.write("• 止盈：MA60上方20%")
+                st.write("• 🛡️ 止损：MA20支撑位")
+                st.write("• 🎯 止盈：MA60上方20%")
+                st.write("• 💡 适用场景：趋势明确的股票，技术形态良好时")
             
-            with strategy_preview_tabs[2]:
+            elif preview_strategy == "波动率法（ATR）":
                 st.write("📊 **波动率法（ATR）**: 根据股票波动率动态设置")
+                st.write("• 🎯 止盈：当前价 + 2×ATR")
+                st.write("• 🛡️ 止损：当前价 - 1×ATR")
+                st.write("• 💡 适用场景：波动大、剧烈涨跌的个股，如成长股、科技股")
+            
+            elif preview_strategy == "成本加码法（跟踪止盈）":
+                st.write("📈 **跟踪止盈法**: 随盈利增加自动上移止损位")
+                st.write("• 🎯 盈利>20%：止损移至成本+10%")
+                st.write("• 📊 盈利10-20%：止损移至成本价")
+                st.write("• 💡 适用场景：长期趋势交易，成长性较好的股票")（ATR）**: 根据股票波动率动态设置")
                 st.write("• 止盈：当前价 + 2×ATR")
                 st.write("• 止损：当前价 - 1×ATR")
             
