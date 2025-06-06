@@ -821,9 +821,6 @@ if analyze_button and ticker:
         current_price = data['info'].get('currentPrice', 0)
         st.session_state.current_price = current_price
         st.session_state.analysis_data = data
-        
-        # 强制刷新侧边栏以显示更新后的数据
-        st.rerun() if current_price > 0 else None
         col1, col2, col3 = st.columns([1, 2, 1.5])
         
         # 左栏：公司基本信息
