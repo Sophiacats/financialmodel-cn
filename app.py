@@ -727,124 +727,30 @@ with st.sidebar:
         st.markdown("### 持仓盈亏计算")
         
         # 检查是否有当前分析的股票数据
-        if st.session_state.current_ticker and st.session_state.current_price > 0:
-            st.info(f"📊 当前分析股票：{st.session_state.current_ticker} | 实时价格：${st.session_state.current_price:.2f}")
+        if hasattr(st.session_state, 'current_ticker') and st.session_state.current_ticker and hasattr(st.session_state, 'current_price') and st.session_state.current_price > 0:
+            st.success(f"✅ 正在分析：{st.session_state.current_ticker}")
+            st.info("📍 完整的止盈止损分析请查看主页面右侧分析结果")
             
-            # 使用当前股票价格作为默认买入价格
-            default_buy_price = st.session_state.current_price * 0.95  # 默认比当前价格低5%
-            buy_price = st.number_input(
-                "买入价格 ($)", 
-                min_value=0.01, 
-                value=default_buy_price, 
-                step=0.01, 
-                help=f"默认设置为 {st.session_state.current_ticker} 当前价格的95%",
-                key=f"buy_price_{st.session_state.current_ticker}"
-            )
-            position_size = st.number_input(
-                "持仓数量", 
-                min_value=1, 
-                value=100, 
-                step=1,
-                key=f"position_size_{st.session_state.current_ticker}"
-            )
+            # 快速预览
+            st.write(f"💰 当前股价：${st.session_state.current_price:.2f}")
+            quick_stop_loss = st.session_state.current_price * 0.9
+            quick_take_profit = st.session_state.current_price * 1.15
             
-            # 实时计算模式（自动显示）
-            st.markdown("#### 📊 实时盈亏状况")
-            
-            # 使用当前股票的真实市场价格
-            market_price = st.session_state.current_price
-            position_value = position_size * buy_price
-            current_value = position_size * market_price
-            pnl = current_value - position_value
-            pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
-            
-            # 计算止盈止损点
-            stop_loss_price = buy_price * 0.9  # 10% 止损
-            take_profit_price = buy_price * 1.15  # 15% 止盈
-            
-            # 显示核心指标
-            metric_col1, metric_col2, metric_col3 = st.columns(3)
-            with metric_col1:
-                pnl_color = "normal"
-                if pnl_pct > 0:
-                    pnl_color = "normal"
-                elif pnl_pct < -5:
-                    pnl_color = "inverse"
-                st.metric(
-                    "💰 当前盈亏", 
-                    f"${pnl:.2f}",
-                    f"{pnl_pct:+.2f}%"
-                )
-            
-            with metric_col2:
-                st.metric(
-                    "🛡️ 止损价位", 
-                    f"${stop_loss_price:.2f}",
-                    f"{((stop_loss_price - market_price)/market_price*100):+.1f}%"
-                )
-            
-            with metric_col3:
-                st.metric(
-                    "🎯 止盈价位", 
-                    f"${take_profit_price:.2f}",
-                    f"{((take_profit_price - market_price)/market_price*100):+.1f}%"
-                )
-            
-            # 状态判断和建议
-            st.markdown("#### 🚨 操作建议")
-            if market_price <= stop_loss_price:
-                st.error("⚠️ **已触及止损线！建议立即止损出场**")
-                st.error(f"当前价格 ${market_price:.2f} ≤ 止损价 ${stop_loss_price:.2f}")
-            elif market_price >= take_profit_price:
-                st.success("🎯 **已达到止盈目标！建议考虑获利了结**")
-                st.success(f"当前价格 ${market_price:.2f} ≥ 止盈价 ${take_profit_price:.2f}")
-            elif pnl_pct > 5:
-                st.info(f"📈 **持续盈利中** | 距离止盈目标还有 {((take_profit_price - market_price)/market_price*100):.1f}%")
-            elif pnl_pct < -5:
-                distance_to_stop = ((market_price - stop_loss_price)/market_price*100)
-                st.warning(f"📉 **注意风险** | 距离止损线还有 {distance_to_stop:.1f}%")
-            else:
-                st.info("📊 **持仓正常** | 继续观察市场走势")
-            
-            # 风险分析
-            risk_amount = position_size * (buy_price - stop_loss_price)
-            reward_amount = position_size * (take_profit_price - buy_price)
-            risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
-            
-            st.caption(f"💡 最大风险金额：${risk_amount:.2f} | 预期收益：${reward_amount:.2f} | 风险收益比：1:{risk_reward_ratio:.2f}")
-            
-            # 模拟不同价格场景
-            if st.checkbox("📈 查看价格场景分析", key=f"scenario_{st.session_state.current_ticker}"):
-                st.markdown("#### 📊 价格场景模拟")
-                scenarios = [
-                    (market_price * 0.85, "跌15%"),
-                    (market_price * 0.90, "跌10%"),
-                    (market_price * 0.95, "跌5%"),
-                    (market_price, "当前"),
-                    (market_price * 1.05, "涨5%"),
-                    (market_price * 1.10, "涨10%"),
-                    (market_price * 1.15, "涨15%")
-                ]
-                
-                scenario_data = []
-                for price, label in scenarios:
-                    scenario_value = position_size * price
-                    scenario_pnl = scenario_value - position_value
-                    scenario_pnl_pct = (scenario_pnl / position_value) * 100
-                    scenario_data.append({
-                        "场景": label,
-                        "股价": f"${price:.2f}",
-                        "盈亏": f"${scenario_pnl:.2f}",
-                        "盈亏率": f"{scenario_pnl_pct:+.1f}%"
-                    })
-                
-                import pandas as pd
-                scenario_df = pd.DataFrame(scenario_data)
-                st.dataframe(scenario_df, use_container_width=True)
-        
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("参考止损", f"${quick_stop_loss:.2f}", "-10%")
+            with col2:
+                st.metric("参考止盈", f"${quick_take_profit:.2f}", "+15%")
         else:
-            st.warning("⚠️ 请先分析一只股票，模拟器将自动获取实时价格进行计算")
-            st.info("💡 点击左侧'开始分析'按钮后，此模块将显示基于实际股价的盈亏计算")
+            st.warning("⚠️ 请先分析一只股票")
+            st.info("💡 点击'开始分析'后，这里将显示该股票的止盈止损快速预览")
+            
+            # 基础示例
+            st.markdown("#### 📝 功能说明")
+            st.write("• 自动获取股票实时价格")
+            st.write("• 智能计算止盈止损位")
+            st.write("• 实时盈亏状况分析")
+            st.write("• 多种价格场景模拟")
     
     st.markdown("---")
     
@@ -901,7 +807,7 @@ with st.sidebar:
 
 # 主界面
 if analyze_button and ticker:
-    # 更新 session state
+    # 立即更新 session state
     st.session_state.current_ticker = ticker
     
     with st.spinner(f"正在获取 {ticker} 的数据..."):
@@ -911,10 +817,13 @@ if analyze_button and ticker:
             data = fetch_stock_data_uncached(ticker)
     
     if data:
-        # 更新当前价格到 session state
+        # 立即更新当前价格到 session state
         current_price = data['info'].get('currentPrice', 0)
         st.session_state.current_price = current_price
         st.session_state.analysis_data = data
+        
+        # 强制刷新侧边栏以显示更新后的数据
+        st.rerun() if current_price > 0 else None
         col1, col2, col3 = st.columns([1, 2, 1.5])
         
         # 左栏：公司基本信息
@@ -1394,6 +1303,91 @@ if analyze_button and ticker:
             st.markdown(f"**风险等级**: <span style='color:{risk_color}'>{risk_level}</span>", unsafe_allow_html=True)
             st.caption(f"Beta: {info.get('beta', 'N/A')}")
             
+            # 在这里直接添加止盈止损模拟器（确保能获取到数据）
+            st.markdown("---")
+            st.subheader("💰 智能止盈止损模拟器")
+            
+            with st.container():
+                st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
+                
+                # 输入参数
+                col_input1, col_input2 = st.columns(2)
+                with col_input1:
+                    default_buy_price = current_price * 0.95  # 默认比当前价格低5%
+                    buy_price = st.number_input(
+                        "买入价格 ($)", 
+                        min_value=0.01, 
+                        value=default_buy_price, 
+                        step=0.01, 
+                        help=f"默认设置为 {ticker} 当前价格的95%",
+                        key=f"main_buy_price_{ticker}"
+                    )
+                with col_input2:
+                    position_size = st.number_input(
+                        "持仓数量", 
+                        min_value=1, 
+                        value=100, 
+                        step=1,
+                        key=f"main_position_size_{ticker}"
+                    )
+                
+                # 实时计算
+                position_value = position_size * buy_price
+                current_value = position_size * current_price
+                pnl = current_value - position_value
+                pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
+                
+                # 计算止盈止损点
+                stop_loss_price = buy_price * 0.9  # 10% 止损
+                take_profit_price = buy_price * 1.15  # 15% 止盈
+                
+                # 显示核心指标
+                st.markdown("#### 📊 实时盈亏状况")
+                metric_col1, metric_col2, metric_col3 = st.columns(3)
+                with metric_col1:
+                    st.metric(
+                        "💰 当前盈亏", 
+                        f"${pnl:.2f}",
+                        f"{pnl_pct:+.2f}%"
+                    )
+                
+                with metric_col2:
+                    st.metric(
+                        "🛡️ 止损价位", 
+                        f"${stop_loss_price:.2f}",
+                        f"{((stop_loss_price - current_price)/current_price*100):+.1f}%"
+                    )
+                
+                with metric_col3:
+                    st.metric(
+                        "🎯 止盈价位", 
+                        f"${take_profit_price:.2f}",
+                        f"{((take_profit_price - current_price)/current_price*100):+.1f}%"
+                    )
+                
+                # 状态判断和建议
+                st.markdown("#### 🚨 操作建议")
+                if current_price <= stop_loss_price:
+                    st.error("⚠️ **已触及止损线！建议立即止损出场**")
+                    st.error(f"当前价格 ${current_price:.2f} ≤ 止损价 ${stop_loss_price:.2f}")
+                elif current_price >= take_profit_price:
+                    st.success("🎯 **已达到止盈目标！建议考虑获利了结**")
+                    st.success(f"当前价格 ${current_price:.2f} ≥ 止盈价 ${take_profit_price:.2f}")
+                elif pnl_pct > 5:
+                    st.info(f"📈 **持续盈利中** | 距离止盈目标还有 {((take_profit_price - current_price)/current_price*100):.1f}%")
+                elif pnl_pct < -5:
+                    distance_to_stop = ((current_price - stop_loss_price)/current_price*100)
+                    st.warning(f"📉 **注意风险** | 距离止损线还有 {distance_to_stop:.1f}%")
+                else:
+                    st.info("📊 **持仓正常** | 继续观察市场走势")
+                
+                # 风险分析
+                risk_amount = position_size * (buy_price - stop_loss_price)
+                reward_amount = position_size * (take_profit_price - buy_price)
+                risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
+                
+                st.caption(f"💡 最大风险金额：${risk_amount:.2f} | 预期收益：${reward_amount:.2f} | 风险收益比：1:{risk_reward_ratio:.2f}")
+            
             # 增强版止盈止损分析（基于当前股票）
             if st.session_state.current_ticker == ticker:
                 st.markdown("---")
@@ -1425,7 +1419,7 @@ if analyze_button and ticker:
                         )
                     with col_tp:
                         st.metric(
-                            "🎯 建议止盈位", 
+                            "🎯  建议止盈位", 
                             f"${target_profit:.2f}",
                             f"{((target_profit - current_price)/current_price*100):+.1f}%"
                         )
