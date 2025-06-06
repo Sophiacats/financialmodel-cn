@@ -726,21 +726,36 @@ with st.sidebar:
     with st.expander("💰 止盈止损模拟器"):
         st.markdown("### 持仓盈亏计算")
         
-        # 检查是否有当前分析的股票数据
-        if hasattr(st.session_state, 'current_ticker') and st.session_state.current_ticker and hasattr(st.session_state, 'current_price') and st.session_state.current_price > 0:
-            st.success(f"✅ 正在分析：{st.session_state.current_ticker}")
+        # 检查是否有当前分析的股票数据 - 修复检查逻辑
+        current_ticker = getattr(st.session_state, 'current_ticker', None)
+        current_price = getattr(st.session_state, 'current_price', 0)
+        
+        # 同时检查是否刚刚点击了分析按钮
+        if (current_ticker and current_price > 0) or (analyze_button and ticker):
+            # 如果刚点击分析按钮，显示分析中状态
+            if analyze_button and ticker:
+                display_ticker = ticker
+                display_price = current_price if current_price > 0 else "获取中..."
+            else:
+                display_ticker = current_ticker
+                display_price = f"${current_price:.2f}"
+            
+            st.success(f"✅ 正在分析：{display_ticker}")
             st.info("📍 完整的止盈止损分析请查看主页面右侧分析结果")
             
-            # 快速预览
-            st.write(f"💰 当前股价：${st.session_state.current_price:.2f}")
-            quick_stop_loss = st.session_state.current_price * 0.9
-            quick_take_profit = st.session_state.current_price * 1.15
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("参考止损", f"${quick_stop_loss:.2f}", "-10%")
-            with col2:
-                st.metric("参考止盈", f"${quick_take_profit:.2f}", "+15%")
+            # 如果有价格数据，显示快速预览
+            if current_price > 0:
+                st.write(f"💰 当前股价：${current_price:.2f}")
+                quick_stop_loss = current_price * 0.9
+                quick_take_profit = current_price * 1.15
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("参考止损", f"${quick_stop_loss:.2f}", "-10%")
+                with col2:
+                    st.metric("参考止盈", f"${quick_take_profit:.2f}", "+15%")
+            else:
+                st.info("📊 正在获取股票价格数据...")
         else:
             st.warning("⚠️ 请先分析一只股票")
             st.info("💡 点击'开始分析'后，这里将显示该股票的止盈止损快速预览")
