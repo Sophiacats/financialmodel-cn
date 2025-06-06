@@ -1,1148 +1,4 @@
-if f_score >= 7:
-                    st.success("💡 建议: 财务健康状况良好，基本面强劲")
-                elif f_score >= 4:
-                    st.warning("💡 建议: 财务状况一般，需要谨慎评估")
-                else:
-                    st.error("💡 建议: 财务状况较差，投资风险较高")
-            
-            # 杜邦分析
-            with st.expander("📊 杜邦分析", expanded=True):
-                dupont = calculate_dupont_analysis(data)
-                if dupont:
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.metric("ROE", f"{dupont['roe']:.2f}%")
-                        st.metric("利润率", f"{dupont['profit_margin']:.2f}%")
-                    with col_b:
-                        st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
-                        st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
-                    
-                    st.write("📝 ROE = 利润率 × 资产周转率 × 权益乘数")
-            
-            # Altman Z-Score
-            with st.expander("💰 Altman Z-Score 财务健康度", expanded=True):
-                z_score, status, color = calculate_altman_z_score(data)
-                if z_score:
-                    st.markdown(f"### Z-Score: <span style='color:{color}; font-size:24px'>{z_score:.2f}</span>", unsafe_allow_html=True)
-                    st.markdown(f"**状态**: <span style='color:{color}'>{status}</span>", unsafe_allow_html=True)
-                    
-                    if z_score > 2.99:
-                        st.success("✅ 财务健康 - 企业财务状况良好，破产风险极低")
-                    elif z_score >= 1.81:
-                        st.warning("⚠️ 临界风险 - 企业处于灰色地带，需要密切关注")
-                    else:
-                        st.error("🚨 高破产风险 - 企业财务状况堪忧，投资需谨慎")
-                    
-                    st.write("📊 评分标准:")
-                    st.write("- Z > 2.99: 安全区域")
-                    st.write("- 1.8 < Z < 2.99: 灰色区域")
-                    st.write("- Z < 1.8: 危险区域")
-            
-            # 估值分析
-            with st.expander("💎 估值分析", expanded=True):
-                dcf_value, dcf_params = calculate_dcf_valuation(data)
-                current_price = info.get('currentPrice', 0)
-                
-                if dcf_value and current_price > 0:
-                    st.write("**DCF估值**")
-                    col_x, col_y = st.columns(2)
-                    with col_x:
-                        st.metric("合理价值", f"${dcf_value:.2f}")
-                        st.metric("当前价格", f"${current_price:.2f}")
-                    with col_y:
-                        margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
-                        st.metric("安全边际", f"{margin:.2f}%")
-                    
-                    if dcf_params:
-                        st.write("**📊 DCF模型参数详情**")
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
-                            st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
-                        with col_b:
-                            st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
-                            st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
-                        with col_c:
-                            st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
-                            st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
-                        
-                        st.write("**预测期现金流（百万美元）**")
-                        fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
-                        fcf_df['fcf'] = fcf_df['fcf'] / 1e6
-                        fcf_df['pv'] = fcf_df['pv'] / 1e6
-                        fcf_df.columns = ['年份', '预测FCF', '现值']
-                        st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
-                        
-                        st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
-                        st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
-                else:
-                    st.info("DCF估值数据不足")
-                
-                st.write("**相对估值**")
-                rel_val = calculate_relative_valuation(data)
-                if rel_val:
-                    col_m, col_n = st.columns(2)
-                    with col_m:
-                        pe_display = f"{rel_val['pe_ratio']:.2f}" if rel_val['pe_ratio'] > 0 else "N/A"
-                        pb_display = f"{rel_val['pb_ratio']:.2f}" if rel_val['pb_ratio'] > 0 else "N/A"
-                        st.metric("PE", pe_display)
-                        st.metric("PB", pb_display)
-                    with col_n:
-                        st.metric("行业PE", f"{rel_val['industry_pe']:.2f}")
-                        st.metric("行业PB", f"{rel_val['industry_pb']:.2f}")
-                    
-                    if rel_val['pe_ratio'] > 0:
-                        hist_val = calculate_historical_valuation_percentile(ticker, rel_val['pe_ratio'], rel_val['pb_ratio'])
-                        if hist_val:
-                            st.write("**历史估值分位**")
-                            fig_hist = go.Figure()
-                            
-                            fig_hist.add_trace(go.Scatter(
-                                x=hist_val['hist_prices'].index,
-                                y=hist_val['hist_prices'].values,
-                                mode='lines',
-                                name='历史价格',
-                                line=dict(color='blue', width=2)
-                            ))
-                            
-                            fig_hist.add_hline(y=current_price, line_dash="dash", line_color="red", 
-                                             annotation_text=f"当前价格: ${current_price:.2f}")
-                            
-                            fig_hist.update_layout(
-                                title=f"5年价格走势及当前位置（分位数: {hist_val['pe_percentile']:.1f}%）",
-                                xaxis_title="日期",
-                                yaxis_title="价格 ($)",
-                                height=300
-                            )
-                            st.plotly_chart(fig_hist, use_container_width=True)
-            
-            # 财务趋势分析
-            with st.expander("📊 财务趋势分析", expanded=False):
-                fin_trends = calculate_financial_trends(data)
-                if fin_trends:
-                    fig_trends = go.Figure()
-                    
-                    fig_trends.add_trace(go.Bar(
-                        name='营业收入',
-                        x=fin_trends['years'],
-                        y=[x/1e9 for x in fin_trends['revenues']],
-                        yaxis='y',
-                        marker_color='lightblue'
-                    ))
-                    
-                    fig_trends.add_trace(go.Bar(
-                        name='净利润',
-                        x=fin_trends['years'],
-                        y=[x/1e9 for x in fin_trends['net_incomes']],
-                        yaxis='y',
-                        marker_color='lightgreen'
-                    ))
-                    
-                    fig_trends.add_trace(go.Scatter(
-                        name='每股收益(EPS)',
-                        x=fin_trends['years'],
-                        y=fin_trends['eps'],
-                        yaxis='y2',
-                        mode='lines+markers',
-                        line=dict(color='red', width=3)
-                    ))
-                    
-                    fig_trends.update_layout(
-                        title='近3年财务趋势',
-                        xaxis=dict(title='年份'),
-                        yaxis=dict(title='金额（十亿美元）', side='left'),
-                        yaxis2=dict(title='EPS ($)', overlaying='y', side='right'),
-                        hovermode='x',
-                        barmode='group',
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig_trends, use_container_width=True)
-                else:
-                    st.info("财务趋势数据不足")
-        
-        # 右栏：图表和建议
-        with col3:
-            st.subheader("📉 技术分析与建议")
-            
-            hist_data = data['hist_data'].copy()
-            hist_data = calculate_technical_indicators(hist_data)
-            
-            # 价格走势图
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(hist_data.index[-180:], hist_data['Close'][-180:], label='Close', linewidth=2)
-            ax.plot(hist_data.index[-180:], hist_data['MA20'][-180:], label='MA20', alpha=0.7)
-            ax.plot(hist_data.index[-180:], hist_data['MA60'][-180:], label='MA60', alpha=0.7)
-            ax.set_title(f'{ticker} Price Trend (Last 180 Days)')
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Price ($)')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # MACD图
-            fig2, ax2 = plt.subplots(figsize=(10, 4))
-            ax2.plot(hist_data.index[-90:], hist_data['MACD'][-90:], label='MACD', color='blue')
-            ax2.plot(hist_data.index[-90:], hist_data['Signal'][-90:], label='Signal', color='red')
-            ax2.bar(hist_data.index[-90:], hist_data['MACD_Histogram'][-90:], label='Histogram', alpha=0.3)
-            ax2.set_title('MACD Indicator')
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            st.pyplot(fig2)
-            
-            # 模块B：技术分析结论展示
-            st.markdown("---")
-            st.subheader("📊 技术指标快速解读")
-            
-            # 计算技术信号
-            valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
-            technical_signals = analyze_technical_signals(hist_data)
-            latest = hist_data.iloc[-1]
-            
-            # 技术指标状态卡片
-            tech_col1, tech_col2 = st.columns(2)
-            
-            with tech_col1:
-                # MACD 状态
-                if technical_signals['macd_golden_cross']:
-                    st.success("🔺 MACD：金叉（看涨信号）")
-                elif technical_signals['macd_death_cross']:
-                    st.error("🔻 MACD：死叉（看跌信号）")
-                else:
-                    macd_val = latest['MACD']
-                    signal_val = latest['Signal']
-                    if macd_val > signal_val:
-                        st.info("📈 MACD：多头排列")
-                    else:
-                        st.warning("📉 MACD：空头排列")
-                
-                # 均线状态
-                if technical_signals['ma_golden_cross']:
-                    st.success("🔺 均线：金叉突破")
-                elif technical_signals['ma_death_cross']:
-                    st.error("🔻 均线：死叉下破")
-                elif 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
-                    if latest['MA10'] > latest['MA60']:
-                        st.info("📈 均线：多头排列")
-                    else:
-                        st.warning("📉 均线：空头排列")
-            
-            with tech_col2:
-                # RSI 状态
-                if 'RSI' in hist_data.columns:
-                    rsi_value = latest['RSI']
-                    if rsi_value > 70:
-                        st.error(f"⚠️ RSI：{rsi_value:.1f} → 超买状态")
-                    elif rsi_value < 30:
-                        st.success(f"💡 RSI：{rsi_value:.1f} → 超卖状态")
-                    else:
-                        st.info(f"📊 RSI：{rsi_value:.1f} → 正常区间")
-                
-                # 布林带状态
-                if 'BB_Upper' in hist_data.columns and 'BB_Lower' in hist_data.columns:
-                    close_price = latest['Close']
-                    bb_upper = latest['BB_Upper']
-                    bb_lower = latest['BB_Lower']
-                    bb_middle = latest['BB_Middle']
-                    
-                    if close_price > bb_upper:
-                        st.warning("🔺 布林带：突破上轨")
-                    elif close_price < bb_lower:
-                        st.success("🔻 布林带：跌破下轨")
-                    elif close_price > bb_middle:
-                        st.info("📈 布林带：上半区运行")
-                    else:
-                        st.info("📉 布林带：下半区运行")
-            
-            # 模块C：Altman Z-score 简洁展示
-            st.markdown("---")
-            z_score, status, color = calculate_altman_z_score(data)
-            if z_score and z_score > 0:
-                if color == "green":
-                    st.success(f"📉 破产风险评分（Altman Z-score）：{z_score:.2f} ✅ {status}")
-                elif color == "orange":
-                    st.warning(f"📉 破产风险评分（Altman Z-score）：{z_score:.2f} ⚠️ {status}")
-                else:
-                    st.error(f"📉 破产风险评分（Altman Z-score）：{z_score:.2f} 🚨 {status}")
-            else:
-                st.info("📉 破产风险评分：数据不足，无法计算")
-            
-            # 智能买卖点建议
-            st.markdown("---")
-            st.subheader("💡 智能买卖点建议")
-            
-            dcf_value, _ = calculate_dcf_valuation(data)
-            z_score, _, _ = calculate_altman_z_score(data)
-            
-            valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
-            technical_signals = analyze_technical_signals(hist_data)
-            
-            recommendation = generate_trading_recommendation(
-                valuation_signals, 
-                technical_signals, 
-                current_price,
-                dcf_value
-            )
-            
-            if recommendation['action'] == 'BUY':
-                st.success(f"🟢 **强烈建议：{recommendation['action']}**")
-                color_style = "background-color: #d4edda; padding: 15px; border-radius: 10px; border: 1px solid #c3e6cb;"
-            elif recommendation['action'] == 'SELL':
-                st.error(f"🔴 **强烈建议：{recommendation['action']}**")
-                color_style = "background-color: #f8d7da; padding: 15px; border-radius: 10px; border: 1px solid #f5c6cb;"
-            else:
-                st.info(f"🔵 **建议：{recommendation['action']}**")
-                color_style = "background-color: #d1ecf1; padding: 15px; border-radius: 10px; border: 1px solid #bee5eb;"
-            
-            with st.container():
-                st.markdown(f'<div style="{color_style}">', unsafe_allow_html=True)
-                
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.metric("当前价格", f"${current_price:.2f}")
-                    if dcf_value:
-                        st.metric("合理估值", f"${dcf_value:.2f}")
-                with col_b:
-                    st.metric("安全边际", f"{valuation_signals['margin']:.1f}%")
-                    st.metric("信心度", f"{recommendation['confidence']}%")
-                
-                st.markdown("**📊 判断依据：**")
-                for reason in recommendation['reasons']:
-                    st.write(f"• {reason}")
-                
-                st.markdown("**📍 操作建议：**")
-                
-                if recommendation['action'] == 'BUY':
-                    st.write(f"• 🎯 建仓区间：${recommendation['entry_range'][0]:.2f} - ${recommendation['entry_range'][1]:.2f}")
-                    st.write(f"• 🛡️ 止损价位：${recommendation['stop_loss']:.2f} (下跌{((current_price - recommendation['stop_loss'])/current_price*100):.1f}%)")
-                    st.write(f"• 💰 止盈目标：${recommendation['take_profit'][0]:.2f} - ${recommendation['take_profit'][1]:.2f} (上涨{((recommendation['take_profit'][0] - current_price)/current_price*100):.1f}%-{((recommendation['take_profit'][1] - current_price)/current_price*100):.1f}%)")
-                    st.write(f"• 📊 推荐仓位：{recommendation['position_size']:.1f}%")
-                elif recommendation['action'] == 'SELL':
-                    st.write(f"• 🔴 建议清仓或减仓")
-                    st.write(f"• 📉 当前处于高估区域")
-                    st.write(f"• ⚠️ 建议等待回调后再考虑")
-                else:
-                    st.write(f"• 🔵 建议继续持有观望")
-                    st.write(f"• 📊 等待更明确的信号")
-                    if dcf_value and current_price < dcf_value * 0.85:
-                        buy_zone = (dcf_value * 0.75, dcf_value * 0.85)
-                        st.write(f"• 💡 参考买入区间：${buy_zone[0]:.2f} - ${buy_zone[1]:.2f}")
-                    if current_price > 0:
-                        st.write(f"• 🛡️ 参考止损：${current_price * 0.92:.2f}")
-                
-                st.markdown("**📈 技术指标状态：**")
-                latest = hist_data.iloc[-1]
-                
-                col_x, col_y = st.columns(2)
-                with col_x:
-                    if 'RSI' in hist_data.columns:
-                        rsi_value = latest['RSI']
-                        rsi_status = "超卖" if rsi_value < 30 else "超买" if rsi_value > 70 else "中性"
-                        st.write(f"• RSI: {rsi_value:.1f} ({rsi_status})")
-                    
-                    if 'MACD' in hist_data.columns:
-                        macd_status = "金叉" if technical_signals['macd_golden_cross'] else "死叉" if technical_signals['macd_death_cross'] else "中性"
-                        st.write(f"• MACD: {macd_status}")
-                
-                with col_y:
-                    if 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
-                        ma_status = "多头" if latest['MA10'] > latest['MA60'] else "空头"
-                        st.write(f"• 均线: {ma_status}")
-                    
-                    trend_status = "上升" if technical_signals['trend'] == 'bullish' else "下降"
-                    st.write(f"• 趋势: {trend_status}")
-                
-                st.markdown("---")
-                st.caption(f"⏰ 更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # 在这里直接添加止盈止损模拟器（确保能获取到数据）
-            st.markdown("---")
-            st.subheader("💰 智能止盈止损模拟器")
-            
-            with st.container():
-                st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
-                
-                # 输入参数
-                col_input1, col_input2 = st.columns(2)
-                with col_input1:
-                    default_buy_price = current_price * 0.95  # 默认比当前价格低5%
-                    buy_price = st.number_input(
-                        "买入价格 ($)", 
-                        min_value=0.01, 
-                        value=default_buy_price, 
-                        step=0.01, 
-                        help=f"默认设置为 {ticker} 当前价格的95%",
-                        key=f"main_buy_price_{ticker}"
-                    )
-                with col_input2:
-                    position_size = st.number_input(
-                        "持仓数量", 
-                        min_value=1, 
-                        value=100, 
-                        step=1,
-                        key=f"main_position_size_{ticker}"
-                    )
-                
-                # 实时计算
-                position_value = position_size * buy_price
-                current_value = position_size * current_price
-                pnl = current_value - position_value
-                pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
-                
-                # 计算止盈止损点
-                stop_loss_price = buy_price * 0.9  # 10% 止损
-                take_profit_price = buy_price * 1.15  # 15% 止盈
-                
-                # 显示核心指标
-                st.markdown("#### 📊 实时盈亏状况")
-                metric_col1, metric_col2, metric_col3 = st.columns(3)
-                with metric_col1:
-                    st.metric(
-                        "💰 当前盈亏", 
-                        f"${pnl:.2f}",
-                        f"{pnl_pct:+.2f}%"
-                    )
-                
-                with metric_col2:
-                    st.metric(
-                        "🛡️ 止损价位", 
-                        f"${stop_loss_price:.2f}",
-                        f"{((stop_loss_price - current_price)/current_price*100):+.1f}%"
-                    )
-                
-                with metric_col3:
-                    st.metric(
-                        "🎯 止盈价位", 
-                        f"${take_profit_price:.2f}",
-                        f"{((take_profit_price - current_price)/current_price*100):+.1f}%"
-                    )
-                
-                # 状态判断和建议
-                st.markdown("#### 🚨 操作建议")
-                if current_price <= stop_loss_price:
-                    st.error("⚠️ **已触及止损线！建议立即止损出场**")
-                    st.error(f"当前价格 ${current_price:.2f} ≤ 止损价 ${stop_loss_price:.2f}")
-                elif current_price >= take_profit_price:
-                    st.success("🎯 **已达到止盈目标！建议考虑获利了结**")
-                    st.success(f"当前价格 ${current_price:.2f} ≥ 止盈价 ${take_profit_price:.2f}")
-                elif pnl_pct > 5:
-                    st.info(f"📈 **持续盈利中** | 距离止盈目标还有 {((take_profit_price - current_price)/current_price*100):.1f}%")
-                elif pnl_pct < -5:
-                    distance_to_stop = ((current_price - stop_loss_price)/current_price*100)
-                    st.warning(f"📉 **注意风险** | 距离止损线还有 {distance_to_stop:.1f}%")
-                else:
-                    st.info("📊 **持仓正常** | 继续观察市场走势")
-                
-                # 风险分析
-                risk_amount = position_size * (buy_price - stop_loss_price)
-                reward_amount = position_size * (take_profit_price - buy_price)
-                risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
-                
-                st.caption(f"💡 最大风险金额：${risk_amount:.2f} | 预期收益：${reward_amount:.2f} | 风险收益比：1:{risk_reward_ratio:.2f}")
-            
-            # 综合评分
-            comprehensive = calculate_comprehensive_score(
-                f_score, 
-                z_score if z_score else 0,
-                valuation_signals['margin'],
-                technical_signals
-            )
-            
-            st.markdown("---")
-            st.subheader("🎯 智能投资评分")
-            
-            col_score1, col_score2, col_score3 = st.columns(3)
-            with col_score1:
-                st.metric("价值得分", f"{comprehensive['value_score']}/50")
-            with col_score2:
-                st.metric("技术得分", f"{comprehensive['tech_score']}/50")
-            with col_score3:
-                st.metric("综合得分", f"{comprehensive['total_score']}/100")
-            
-            if comprehensive['recommendation'] == 'BUY':
-                st.success(f"🟢 **最终建议：{comprehensive['recommendation']}**")
-            elif comprehensive['recommendation'] == 'SELL':
-                st.error(f"🔴 **最终建议：{comprehensive['recommendation']}**")
-            else:
-                st.info(f"🔵 **最终建议：{comprehensive['recommendation']}**")
-            
-            # 风险雷达图
-            st.markdown("---")
-            st.subheader("🎯 风险评估雷达图")
-            
-            risk_metrics = calculate_risk_metrics(data)
-            if risk_metrics:
-                categories = ['偿债能力', '波动性控制', '财务杠杆', '现金流增长', '盈利能力']
-                values = [
-                    risk_metrics['interest_coverage'],
-                    risk_metrics['beta_score'],
-                    risk_metrics['leverage_score'],
-                    risk_metrics['fcf_growth_score'],
-                    risk_metrics['profitability_score']
-                ]
-                
-                fig_radar = go.Figure(data=go.Scatterpolar(
-                    r=values,
-                    theta=categories,
-                    fill='toself',
-                    name='风险评分'
-                ))
-                
-                fig_radar.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True,
-                            range=[0, 10]
-                        )
-                    ),
-                    showlegend=False,
-                    title="风险指标评分（10分制）",
-                    height=400
-                )
-                
-                st.plotly_chart(fig_radar, use_container_width=True)
-                
-                avg_risk_score = sum(values) / len(values)
-                if avg_risk_score >= 7:
-                    st.success("✅ 总体风险等级：低")
-                elif avg_risk_score >= 5:
-                    st.warning("⚠️ 总体风险等级：中")
-                else:
-                    st.error("🚨 总体风险等级：高")
-            
-            st.markdown("---")
-            if info.get('beta', 1) > 1.5:
-                risk_level = "高风险"
-                risk_color = "red"
-            elif info.get('beta', 1) > 1.0:
-                risk_level = "中风险"
-                risk_color = "orange"
-            else:
-                risk_level = "低风险"
-                risk_color = "green"
-            
-            st.markdown(f"**风险等级**: <span style='color:{risk_color}'>{risk_level}</span>", unsafe_allow_html=True)
-            st.caption(f"Beta: {info.get('beta', 'N/A')}")
-
-else:
-    st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
-    
-    with st.expander("📖 使用说明"):
-        st.markdown("""
-        ### 系统功能
-        1. **自动数据获取**: 输入股票代码后，系统自动获取最新财务数据和历史价格
-        2. **多维度分析**: 包含基本面、技术面、估值等多个维度的综合分析
-        3. **智能建议**: 基于多个模型的评分，给出买入/卖出建议和仓位建议
-        
-        ### 分析模型说明
-        - **Piotroski F-Score**: 评估公司财务健康状况（9分制）
-        - **杜邦分析**: 分解ROE，了解盈利能力来源
-        - **Altman Z-Score**: 预测企业破产风险
-        - **DCF估值**: 基于现金流的内在价值评估
-        - **相对估值**: PE、PB等指标与行业对比
-        - **技术分析**: 均线、MACD等技术指标
-        - **Kelly公式**: 科学计算最优投资仓位
-        
-        ### 新增功能 (v2.0)
-        - **DCF参数详情**: 展示估值模型的详细参数
-        - **历史估值分位**: 当前估值在历史中的位置
-        - **财务趋势图**: 营收、利润、EPS趋势
-        - **风险雷达图**: 多维度风险评估
-        - **智能评分系统**: 价值面+技术面综合评分
-        - **止盈止损模拟器**: 计算盈亏和关键价位
-        
-        ### 注意事项
-        - 本系统仅供参考，不构成投资建议
-        - 请结合其他信息进行综合判断
-        - 投资有风险，入市需谨慎
-        """)
-    
-    with st.expander("🆕 新功能展示"):
-        st.markdown("### v2.0 新增功能预览")
-        
-        st.subheader("风险雷达图示例")
-        categories = ['偿债能力', '波动性控制', '财务杠杆', '现金流增长', '盈利能力']
-        values = [8, 7, 6, 5, 8]
-        
-        fig_demo = go.Figure(data=go.Scatterpolar(
-            r=values,
-            theta=categories,
-            fill='toself',
-            name='风险评分'
-        ))
-        
-        fig_demo.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 10]
-                )
-            ),
-            showlegend=False,
-            title="风险指标评分示例（10分制）",
-            height=300
-        )
-        
-        st.plotly_chart(fig_demo, use_container_width=True)
-        
-        st.subheader("智能评分示例")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("价值得分", "35/50")
-        with col2:
-            st.metric("技术得分", "40/50")
-        with col3:
-            st.metric("综合得分", "75/100")
-        
-        st.info("输入股票代码后即可查看完整分析结果")
-    
-    with st.expander("🚀 未来功能规划"):
-        st.markdown("""
-        - [ ] A股市场支持（集成tushare）
-        - [ ] 一键导出PDF分析报告
-        - [ ] 多股票对比分析
-        - [ ] 自定义分析模型参数
-        - [ ] 实时数据推送提醒
-        - [ ] AI智能投资助手
-        - [ ] 投资组合优化建议
-        - [ ] 新闻情绪分析
-        - [ ] 期权策略建议
-        """)
-
-# 页脚
-st.markdown("---")
-col_footer1, col_footer2, col_footer3 = st.columns([1, 2, 1])
-with col_footer2:
-    if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
-        st.rerun()
-
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考 投资需谨慎")        if 'BB_Middle' in hist_data.columns:
-            if latest['Close'] > latest['BB_Middle'] and prev['Close'] <= prev['BB_Middle']:
-                bb_width_change = (latest['BB_Width'] - hist_data['BB_Width'].iloc[-5]) / hist_data['BB_Width'].iloc[-5]
-                if bb_width_change > 0.1:
-                    signals['bb_breakout'] = True
-        
-        if 'Volume_MA' in hist_data.columns:
-            recent_prices = hist_data['Close'].iloc[-5:]
-            recent_volumes = hist_data['Volume'].iloc[-5:]
-            
-            if recent_prices.iloc[-1] > recent_prices.iloc[0] and recent_volumes.iloc[-1] < recent_volumes.iloc[0]:
-                signals['volume_divergence'] = True
-        
-        if latest['Close'] > latest['MA60']:
-            signals['trend'] = 'bullish'
-        else:
-            signals['trend'] = 'bearish'
-            
-    except Exception as e:
-        st.warning(f"技术信号分析失败: {str(e)}")
-    
-    return signals
-
-def generate_trading_recommendation(valuation_signals, technical_signals, current_price, dcf_value):
-    """生成交易建议"""
-    recommendation = {
-        'action': 'HOLD',
-        'confidence': 0,
-        'reasons': [],
-        'entry_range': (0, 0),
-        'stop_loss': 0,
-        'take_profit': (0, 0),
-        'position_size': 0
-    }
-    
-    buy_signals = 0
-    sell_signals = 0
-    
-    # 检查买入条件
-    if valuation_signals['undervalued'] or valuation_signals['pe_status'] == 'undervalued' or valuation_signals['pb_status'] == 'undervalued':
-        buy_signals += 1
-        recommendation['reasons'].append("估值处于低估区间")
-    
-    tech_buy_conditions = [
-        (technical_signals['ma_golden_cross'], "10日均线上穿60日均线"),
-        (technical_signals['macd_golden_cross'], "MACD金叉成立"),
-        (technical_signals['rsi_oversold'], "RSI超卖且拐头向上"),
-        (technical_signals['bb_breakout'], "突破布林带中轨且带宽扩张")
-    ]
-    
-    tech_buy_count = sum([1 for condition, _ in tech_buy_conditions if condition])
-    
-    if tech_buy_count >= 2:
-        buy_signals += 1
-        recommendation['reasons'].extend([reason for condition, reason in tech_buy_conditions if condition])
-    
-    # 检查卖出条件
-    if valuation_signals['overvalued'] or valuation_signals['pe_status'] == 'overvalued' or valuation_signals['pb_status'] == 'overvalued':
-        sell_signals += 1
-        recommendation['reasons'].append("估值处于高估区间")
-    
-    tech_sell_conditions = [
-        (technical_signals['rsi_overbought'], "RSI超买"),
-        (technical_signals['macd_death_cross'], "MACD死叉"),
-        (technical_signals['volume_divergence'], "量价背离"),
-        (technical_signals['ma_death_cross'], "均线死叉")
-    ]
-    
-    tech_sell_count = sum([1 for condition, _ in tech_sell_conditions if condition])
-    
-    if tech_sell_count >= 2:
-        sell_signals += 1
-        recommendation['reasons'].extend([reason for condition, reason in tech_sell_conditions if condition])
-    
-    # 生成最终建议
-    if buy_signals >= 2:
-        recommendation['action'] = 'BUY'
-        recommendation['confidence'] = min(buy_signals * 30 + tech_buy_count * 10, 90)
-        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
-        recommendation['stop_loss'] = current_price * 0.92
-        
-        if dcf_value and dcf_value > current_price:
-            recommendation['take_profit'] = (dcf_value * 0.95, dcf_value * 1.05)
-        else:
-            recommendation['take_profit'] = (current_price * 1.15, current_price * 1.25)
-        
-        win_prob = 0.6 + (recommendation['confidence'] / 100) * 0.2
-        recommendation['position_size'] = calculate_kelly_criterion(win_prob, 2.0) * 100
-        
-    elif sell_signals >= 2:
-        recommendation['action'] = 'SELL'
-        recommendation['confidence'] = min(sell_signals * 30 + tech_sell_count * 10, 90)
-        recommendation['reasons'].insert(0, "建议减仓或清仓")
-        recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
-        recommendation['stop_loss'] = current_price * 1.08
-        recommendation['take_profit'] = (current_price * 0.90, current_price * 0.85)
-        
-    else:
-        recommendation['action'] = 'HOLD'
-        recommendation['confidence'] = 50
-        recommendation['reasons'] = ["估值和技术信号不明确", "建议继续观察"]
-        recommendation['entry_range'] = (current_price * 0.95, current_price * 0.98)
-        recommendation['stop_loss'] = current_price * 0.92
-        if dcf_value and dcf_value > current_price:
-            recommendation['take_profit'] = (dcf_value * 0.90, dcf_value)
-        else:
-            recommendation['take_profit'] = (current_price * 1.10, current_price * 1.20)
-        recommendation['position_size'] = 10.0
-    
-    return recommendation
-
-# ==================== 主程序 ====================
-# 侧边栏输入
-with st.sidebar:
-    st.header("📊 分析参数设置")
-    
-    ticker = st.text_input("股票代码", "AAPL", help="输入股票代码，如：AAPL")
-    market = st.selectbox("市场选择", ["美股", "A股（待开发）"])
-    analyze_button = st.button("🔍 开始分析", type="primary", use_container_width=True)
-    
-    st.markdown("---")
-    
-    with st.expander("💰 智能止盈止损模拟器"):
-        st.markdown("### 多策略持仓盈亏计算")
-        
-        # 检查是否有当前分析的股票数据
-        current_ticker = getattr(st.session_state, 'current_ticker', None)
-        current_price = getattr(st.session_state, 'current_price', 0)
-        
-        # 同时检查是否刚刚点击了分析按钮
-        if (current_ticker and current_price > 0) or (analyze_button and ticker):
-            # 如果刚点击分析按钮，显示分析中状态
-            if analyze_button and ticker:
-                display_ticker = ticker
-                display_price = current_price if current_price > 0 else 0
-            else:
-                display_ticker = current_ticker
-                display_price = current_price
-            
-            st.success(f"✅ 当前分析：{display_ticker}")
-            
-            # 策略选择下拉菜单 - 移到外层，确保始终显示
-            st.markdown("#### 🎯 选择止盈止损策略")
-            strategy = st.selectbox(
-                "选择您偏好的止盈止损方法:",
-                ["固定比例法", "技术指标法", "波动率法(ATR)", "成本加码法(跟踪止盈)"],
-                key=f"strategy_select_{display_ticker}",
-                help="不同策略适合不同的投资风格和市场环境"
-            )
-            
-            # 如果有价格数据，显示完整计算器
-            if display_price > 0:
-                st.info(f"📊 系统自动获取当前股价：${display_price:.2f}")
-                
-                # 基础输入区域
-                st.markdown("#### 📝 基础参数")
-                input_col1, input_col2 = st.columns(2)
-                
-                with input_col1:
-                    # 买入价输入
-                    default_buy_price = display_price * 0.95
-                    buy_price = st.number_input(
-                        "💵 买入价格 ($)", 
-                        min_value=0.01, 
-                        value=default_buy_price, 
-                        step=0.01,
-                        key=f"sidebar_buy_price_{display_ticker}"
-                    )
-                
-                with input_col2:
-                    # 仓位数量输入
-                    position_qty = st.number_input(
-                        "📦 仓位数量", 
-                        min_value=1, 
-                        value=100, 
-                        step=1,
-                        key=f"sidebar_position_{display_ticker}"
-                    )
-                
-                # 根据策略显示不同的输入区域
-                st.markdown("#### ⚙️ 策略参数设置")
-                
-                if strategy == "固定比例法":
-                    with st.expander("📊 固定比例法参数", expanded=True):
-                        st.write("💡 **说明**: 简单直观的固定百分比止盈止损，适合新手投资者")
-                        
-                        param_col1, param_col2 = st.columns(2)
-                        with param_col1:
-                            take_profit_pct = st.number_input(
-                                "🎯 止盈比例 (%)", 
-                                min_value=1.0, 
-                                value=15.0, 
-                                step=1.0,
-                                key=f"sidebar_tp_{display_ticker}"
-                            )
-                        with param_col2:
-                            stop_loss_pct = st.number_input(
-                                "🛡️ 止损比例 (%)", 
-                                min_value=1.0, 
-                                value=10.0, 
-                                step=1.0,
-                                key=f"sidebar_sl_{display_ticker}"
-                            )
-                
-                elif strategy == "技术指标法":
-                    with st.expander("📈 技术指标法说明", expanded=True):
-                        st.write("💡 **说明**: 基于MACD、均线等技术指标动态设定止盈止损位")
-                        st.info("🔍 **止损逻辑**: MA20均线支撑位作为动态止损")
-                        st.info("🎯 **止盈逻辑**: MA60均线上方20%作为目标位")
-                        st.write("📊 **适用场景**: 趋势明确的股票，技术形态良好时")
-                        take_profit_pct, stop_loss_pct = 15.0, 10.0  # 技术指标法不需要手动输入
-                
-                elif strategy == "波动率法(ATR)":
-                    with st.expander("📊 波动率法(ATR)说明", expanded=True):
-                        st.write("💡 **说明**: 根据股票历史波动率(ATR)动态设置止盈止损距离")
-                        
-                        # 获取历史数据计算ATR
-                        if hasattr(st.session_state, 'analysis_data') and st.session_state.analysis_data:
-                            hist_data = st.session_state.analysis_data['hist_data']
-                            hist_data = calculate_technical_indicators(hist_data)
-                            atr_value = calculate_atr(hist_data)
-                            
-                            if atr_value > 0:
-                                st.success(f"📊 **当前ATR**: ${atr_value:.2f}")
-                                st.info("🎯 **止盈设置**: 当前价 + 2×ATR")
-                                st.info("🛡️ **止损设置**: 当前价 - 1×ATR")
-                                st.write("📈 **适用场景**: 波动较大的股票，能更好适应个股特性")
-                            else:
-                                st.warning("⚠️ ATR计算失败，将使用默认比例")
-                        take_profit_pct, stop_loss_pct = 15.0, 10.0  # ATR法不需要手动输入比例
-                
-                elif strategy == "成本加码法(跟踪止盈)":
-                    with st.expander("📈 成本加码法(跟踪止盈)说明", expanded=True):
-                        st.write("💡 **说明**: 随着盈利增加，自动上移止损位，锁定利润避免回吐")
-                        
-                        current_pnl_pct = (display_price - buy_price) / buy_price * 100 if buy_price > 0 else 0
-                        
-                        if current_pnl_pct > 20:
-                            st.success("🎯 **当前状态**: 盈利>20%，止损移至成本价+10%")
-                        elif current_pnl_pct > 10:
-                            st.info("📊 **当前状态**: 盈利10-20%，止损移至成本价")
-                        else:
-                            st.warning("⚠️ **当前状态**: 盈利<10%，使用常规止损-8%")
-                        
-                        st.write("📈 **适用场景**: 长期趋势交易，适合成长性较好的股票")
-                        take_profit_pct, stop_loss_pct = 15.0, 10.0  # 跟踪止盈法动态计算
-                
-                # 获取历史数据用于策略计算
-                hist_data = None
-                if hasattr(st.session_state, 'analysis_data') and st.session_state.analysis_data:
-                    hist_data = st.session_state.analysis_data['hist_data']
-                    hist_data = calculate_technical_indicators(hist_data)
-                
-                # 根据选择的策略计算止盈止损位
-                if hist_data is not None and buy_price > 0:
-                    take_profit_price, stop_loss_price, strategy_info = calculate_dynamic_levels(
-                        strategy, hist_data, display_price, buy_price, take_profit_pct, stop_loss_pct
-                    )
-                    
-                    # 计算盈亏相关数据
-                    current_pnl_pct = (display_price - buy_price) / buy_price * 100
-                    position_value = position_qty * buy_price
-                    current_value = position_qty * display_price
-                    pnl_amount = current_value - position_value
-                    
-                    # 显示计算结果
-                    st.markdown("#### 📊 策略计算结果")
-                    st.info(f"🔧 **策略详情**: {strategy_info}")
-                    
-                    # 核心指标展示
-                    result_col1, result_col2 = st.columns(2)
-                    with result_col1:
-                        st.metric(
-                            "💰 当前持仓盈亏", 
-                            f"${pnl_amount:.2f}",
-                            f"{current_pnl_pct:+.2f}%"
-                        )
-                    with result_col2:
-                        st.metric(
-                            "📈 持仓价值", 
-                            f"${current_value:.2f}",
-                            f"成本: ${position_value:.2f}"
-                        )
-                    
-                    # 止盈止损价位
-                    tp_col, sl_col = st.columns(2)
-                    with tp_col:
-                        distance_to_tp = (take_profit_price - display_price) / display_price * 100
-                        st.metric(
-                            "🎯 建议止盈价", 
-                            f"${take_profit_price:.2f}",
-                            f"还需 {distance_to_tp:+.1f}%" if distance_to_tp != 0 else "已达到!"
-                        )
-                    with sl_col:
-                        distance_to_sl = (display_price - stop_loss_price) / display_price * 100
-                        st.metric(
-                            "🛡️ 建议止损价", 
-                            f"${stop_loss_price:.2f}",
-                            f"安全边际 {distance_to_sl:.1f}%" if distance_to_sl > 0 else "已触发!"
-                        )
-                    
-                    # 智能提醒和建议
-                    st.markdown("#### 🚨 智能操作建议")
-                    
-                    if display_price >= take_profit_price:
-                        st.success(f"🎯 **[{strategy}] 已达到止盈目标！可考虑止盈**")
-                        profit_amount = position_qty * (take_profit_price - buy_price)
-                        st.success(f"💰 预期止盈收益：${profit_amount:.2f}")
-                    elif display_price <= stop_loss_price:
-                        st.error(f"🛡️ **[{strategy}] 已触及止损价位！应考虑止损**")
-                        loss_amount = position_qty * (buy_price - stop_loss_price)
-                        st.error(f"⚠️ 预期止损亏损：${loss_amount:.2f}")
-                    elif current_pnl_pct > 5:
-                        st.info(f"📈 **持续盈利中** ({current_pnl_pct:+.1f}%)")
-                        st.info(f"距离 [{strategy}] 止盈目标还需 {distance_to_tp:+.1f}%")
-                    elif current_pnl_pct < -3:
-                        st.warning(f"📉 **注意风险** ({current_pnl_pct:+.1f}%)")
-                        st.warning(f"距离 [{strategy}] 止损线还有 {distance_to_sl:.1f}% 安全边际")
-                    else:
-                        st.info(f"📊 **持仓正常** [{strategy}]，继续观察市场走势")
-                    
-                    # 风险收益分析
-                    max_loss = position_qty * abs(buy_price - stop_loss_price)
-                    max_profit = position_qty * abs(take_profit_price - buy_price)
-                    risk_reward_ratio = max_profit / max_loss if max_loss > 0 else 0
-                    
-                    st.caption(f"💡 [{strategy}] 风险收益比：1:{risk_reward_ratio:.2f} | 最大风险：${max_loss:.2f} | 最大收益：${max_profit:.2f}")
-                
-            else:
-                st.info("📊 正在获取股票价格数据...")
-                st.write("**当前选择的策略**: " + strategy)
-        else:
-            st.warning("⚠️ 请先分析一只股票")
-            st.info("💡 点击'开始分析'后，这里将显示多策略止盈止损计算")
-            
-            # 即使没有分析股票，也显示策略选择预览
-            st.markdown("#### 🎯 策略选择预览")
-            preview_strategy = st.selectbox(
-                "预览不同的止盈止损策略:",
-                ["固定比例法", "技术指标法", "波动率法(ATR)", "成本加码法(跟踪止盈)"],
-                key="preview_strategy_select",
-                help="选择策略查看详细说明"
-            )
-            
-            # 功能预览
-            st.markdown("#### 📋 策略详情")
-            
-            if preview_strategy == "固定比例法":
-                st.write("📊 **固定比例法**: 简单的百分比止盈止损")
-                st.write("• ✅ 适合新手投资者")
-                st.write("• 📈 默认设置：+15% / -10%")
-                st.write("• 💡 特点：规则明确，执行简单，风险可控")
-            
-            elif preview_strategy == "技术指标法":
-                st.write("📈 **技术指标法**: 基于MACD、均线的动态止盈止损")
-                st.write("• 🛡️ 止损：MA20支撑位")
-                st.write("• 🎯 止盈：MA60上方20%")
-                st.write("• 💡 适用场景：趋势明确的股票，技术形态良好时")
-            
-            elif preview_strategy == "波动率法(ATR)":
-                st.write("📊 **波动率法(ATR)**: 根据股票波动率动态设置")
-                st.write("• 🎯 止盈：当前价 + 2×ATR")
-                st.write("• 🛡️ 止损：当前价 - 1×ATR")
-                st.write("• 💡 适用场景：波动大、剧烈涨跌的个股，如成长股、科技股")
-            
-            elif preview_strategy == "成本加码法(跟踪止盈)":
-                st.write("📈 **跟踪止盈法**: 随盈利增加自动上移止损位")
-                st.write("• 🎯 盈利>20%：止损移至成本+10%")
-                st.write("• 📊 盈利10-20%：止损移至成本价")
-                st.write("• 💡 适用场景：长期趋势交易，成长性较好的股票")
-    
-    st.markdown("---")
-    
-    with st.expander("📘 使用说明"):
-        st.markdown("""
-        ### 如何解读各项数值指标
-        
-        **1. 安全边际 (Margin of Safety)**
-        - 正值: 股价低于估值 存在低估
-        - 负值: 股价高于估值 存在高估
-        - 建议:
-          - > 50%: 强买入
-          - 20-50%: 买入
-          - 0-20%: 观察
-          - < 0%: 避免
-        
-        **2. 信心度 (Confidence)**
-        - > 70%: 高信心度
-        - 50-70%: 中等信心
-        - < 50%: 低信心度
-        
-        **3. 技术信号**
-        - 金叉: 买入信号
-        - 死叉: 卖出信号
-        - RSI > 70: 超买
-        - RSI < 30: 超卖
-        
-        **4. Piotroski F-score**
-        - 7-9分: 优秀
-        - 4-6分: 中等
-        - 0-3分: 较差
-        
-        **5. Altman Z-score**
-        - Z > 2.99: 财务健康
-        - 1.81-2.99: 临界风险 
-        - Z < 1.81: 高破产风险
-        
-        ---
-        
-        ### 止盈止损策略介绍
-        
-        为了满足不同投资偏好的用户 我们提供以下4种止盈止损策略 供你在分析过程中自由切换:
-        
-        **1. 固定比例法(默认推荐)**
-        - 简单直观 适合新手投资者
-        - 默认设置: 止盈 +15% 止损 -10%
-        - 特点: 规则明确 执行简单 风险可控
-        
-        **2. 技术指标法**
-        - 结合 MACD 均线等技术图形判断趋势反转
-        - 止盈逻辑: MA60均线上方20%作为目标位
-        - 止损逻辑: MA20均线支撑位作为动态止损
-        - 适用场景: 趋势明确的股票 技术形态良好时
-        
-        **3. 波动率法(ATR)**
-        - 动态识别个股的价格波动 自动设定合理止盈/止损距离
-        - 止盈设置: 当前价 + 2×ATR(适应个股波动特性)
-        - 止损设置: 当前价 - 1×ATR(控制风险敞口)
-        - 适用场景: 波动大 剧烈涨跌的个股 如成长股 科技股
-        
-        **4. 成本加码法(跟踪止盈)**
-        - 利润区间自动上移止损价位 避免回吐利润
-        - 策略逻辑:
-          - 盈利 > 20%: 止损移至成本价 + 10%
-          - 盈利 10-20%: 止损移至成本价
-          - 盈利 < 10%: 使用常规止损 -8%
-        - 适用场景: 长期趋势交易 成长性较好的股票
-        
-        ### 策略选择建议
-        
-        | 投资者类型 | 推荐策略 | 适用场景 |
-        |------------|----------|----------|
-        | 新手投资者 | 固定比例法 | 所有股票类型 |
-        | 技术分析者 | 技术指标法 | 趋势明确的股票 |
-        | 量化交易者 | 波动率法(ATR) | 高波动股票 |
-        | 长期投资者 | 跟踪止盈法 | 成长股 价值股 |
-        
-        **温馨提示**: 可根据不同股票特性和市场环境灵活切换策略 提高投资效果.
-        """)
-    
-    with st.expander("📊 投资决策参考表"):
-        st.markdown("""
-        | 安全边际 | 信心度 | 操作建议 |
-        |---------|--------|----------|
-        | >30%    | >70%   | ✅ 强买入 |
-        | >0%     | >50%   | ⚠️ 观察  |
-        | <0%     | ≈50%   | 🔍 观望  |
-        | <0%     | <50%   | 🚫 回避  |
-        """)
-    
-    st.markdown("---")
-    st.markdown("### 说明")
-    st.markdown("- 输入股票代码后点击分析")
-    st.markdown("- 系统将自动获取数据并进行全面分析")
-    st.markdown("- 分析包含基本面、技术面和估值模型")
-    st.markdown("- 支持4种止盈止损策略 适应不同投资风格")
-
-# 主界面
-if analyze_button and ticker:
-    # 立即更新 session state
-    st.session_state.current_ticker = ticker
-    
-    with st.spinner(f"正在获取 {ticker} 的数据..."):
-        try:
-            data = fetch_stock_data(ticker)
-        except:
-            data = fetch_stock_data_uncached(ticker)
-    
-    if data:
-        # 立即更新当前价格到 session state
-        current_price = data['info'].get('currentPrice', 0)
-        st.session_state.current_price = current_price
-        st.session_state.analysis_data = data
-        
-        col1, col2, col3 = st.columns([1, 2, 1.5])
-        
-        # 左栏：公司基本信息
-        with col1:
-            st.subheader("📌 公司基本信息")
-            info = data['info']
-            
-            with st.container():
-                st.metric("公司名称", info.get('longName', ticker))
-                st.metric("当前股价", f"${info.get('currentPrice', 0):.2f}")
-                st.metric("市值", f"${info.get('marketCap', 0)/1e9:.2f}B")
-                st.metric("行业", info.get('industry', 'N/A'))
-                st.metric("Beta", f"{info.get('beta', 0):.2f}")
-                
-                st.markdown("---")
-                st.metric("52周最高", f"${info.get('fiftyTwoWeekHigh', 0):.2f}")
-                st.metric("52周最低", f"${info.get('fiftyTwoWeekLow', 0):.2f}")
-        
-        # 中栏：分析结果
-        with col2:
-            st.subheader("📈 综合分析结果")
-            
-            # Piotroski F-Score
-            with st.expander("🔍 Piotroski F-Score 分析", expanded=True):
-                f_score, reasons = calculate_piotroski_score(data)
-                
-                score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
-                st.markdown(f"### 得分: <span style='color:{score_color}; font-size:24px'>{f_score}/9</span>", unsafe_allow_html=True)
-                
-                for reason in reasons:
-                    st.write(reason)
-                
-                if f_score >= 7:
-                    st.success("💡 建议: 财务健康状况良好，基本面强劲")
-                elif f_score >= 4:
-                    st.warning("💡 建议: 财务状况一般，需要谨慎评估")
-                elseimport streamlit as st
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -1154,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 warnings.filterwarnings('ignore')
 
-# 技术分析库（如果没有安装，系统会自动使用备用方案）
+# 技术分析库
 try:
     import pandas_ta as ta
     TA_AVAILABLE = True
@@ -1250,25 +106,25 @@ def calculate_piotroski_score(data):
         cash_flow = data['cash_flow']
         
         if financials.empty or balance_sheet.empty or cash_flow.empty:
-            return 0, ["❌ 财务数据不完整"]
+            return 0, ["财务数据不完整"]
         
         # 1. 盈利能力
         if len(financials.columns) >= 2 and 'Net Income' in financials.index:
             net_income = financials.loc['Net Income'].iloc[0]
             if net_income > 0:
                 score += 1
-                reasons.append("✅ 净利润为正")
+                reasons.append("净利润为正")
             else:
-                reasons.append("❌ 净利润为负")
+                reasons.append("净利润为负")
         
         # 2. 经营现金流
         if len(cash_flow.columns) >= 1 and 'Operating Cash Flow' in cash_flow.index:
             ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
             if ocf > 0:
                 score += 1
-                reasons.append("✅ 经营现金流为正")
+                reasons.append("经营现金流为正")
             else:
-                reasons.append("❌ 经营现金流为负")
+                reasons.append("经营现金流为负")
         
         # 3. ROA增长
         if (len(financials.columns) >= 2 and len(balance_sheet.columns) >= 2 and 
@@ -1282,24 +138,24 @@ def calculate_piotroski_score(data):
             
             if roa_current > roa_prev:
                 score += 1
-                reasons.append("✅ ROA同比增长")
+                reasons.append("ROA同比增长")
             else:
-                reasons.append("❌ ROA同比下降")
+                reasons.append("ROA同比下降")
         
         # 4. 现金流质量
         if 'net_income' in locals() and 'ocf' in locals() and net_income != 0 and ocf > net_income:
             score += 1
-            reasons.append("✅ 经营现金流大于净利润")
+            reasons.append("经营现金流大于净利润")
         else:
-            reasons.append("❌ 经营现金流小于净利润")
+            reasons.append("经营现金流小于净利润")
         
-        # 5-9. 其他财务指标（简化版本）
+        # 5-9. 其他财务指标
         score += 3
-        reasons.append("📊 财务结构基础分: 3分")
+        reasons.append("财务结构基础分: 3分")
         
     except Exception as e:
         st.warning(f"Piotroski Score计算部分指标失败: {str(e)}")
-        return 0, ["❌ 计算过程出现错误"]
+        return 0, ["计算过程出现错误"]
     
     return score, reasons
 
@@ -1400,7 +256,6 @@ def calculate_atr(hist_data, period=14):
         low = hist_data['Low']
         close = hist_data['Close']
         
-        # 计算真实波幅TR
         tr1 = high - low
         tr2 = abs(high - close.shift(1))
         tr3 = abs(low - close.shift(1))
@@ -1421,18 +276,15 @@ def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, cust
         strategy_info = f"止盈比例: +{custom_tp_pct}% 止损比例: -{custom_sl_pct}%"
         
     elif strategy == "技术指标法":
-        # 基于技术指标的动态止盈止损
         if 'MA20' in hist_data.columns and 'MA60' in hist_data.columns:
             ma20 = hist_data['MA20'].iloc[-1]
             ma60 = hist_data['MA60'].iloc[-1]
             
-            # 以MA20作为动态止损 MA60上方20%作为止盈
-            stop_loss = max(ma20 * 0.98, buy_price * 0.92)  # 不低于8%止损
-            take_profit = max(ma60 * 1.2, buy_price * 1.15)  # 不低于15%止盈
+            stop_loss = max(ma20 * 0.98, buy_price * 0.92)
+            take_profit = max(ma60 * 1.2, buy_price * 1.15)
             
             strategy_info = f"止损位: MA20支撑 ${ma20:.2f} 止盈位: MA60+20% ${ma60*1.2:.2f}"
         else:
-            # 回退到固定比例
             take_profit = buy_price * 1.15
             stop_loss = buy_price * 0.90
             strategy_info = "技术指标数据不足 使用默认15%/10%"
@@ -1440,38 +292,31 @@ def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, cust
     elif strategy == "波动率法(ATR)":
         atr = calculate_atr(hist_data)
         if atr > 0:
-            # ATR法: 止盈=当前价+2倍ATR 止损=当前价-1倍ATR
             take_profit = current_price + (2 * atr)
             stop_loss = current_price - (1 * atr)
             strategy_info = f"ATR: ${atr:.2f} 止盈: +2×ATR 止损: -1×ATR"
         else:
-            # ATR计算失败 回退
             take_profit = buy_price * 1.15
             stop_loss = buy_price * 0.90
             strategy_info = "ATR计算失败 使用默认比例"
     
     elif strategy == "成本加码法(跟踪止盈)":
-        # 跟踪止盈: 盈利时逐步上移止损位
         current_pnl_pct = (current_price - buy_price) / buy_price * 100
         
         if current_pnl_pct > 20:
-            # 盈利超过20% 止损移至成本价上10%
             stop_loss = buy_price * 1.10
-            take_profit = current_price * 1.05  # 继续持有 小幅止盈
+            take_profit = current_price * 1.05
             strategy_info = "盈利>20% 止损上移至成本+10%"
         elif current_pnl_pct > 10:
-            # 盈利10-20% 止损移至成本价
             stop_loss = buy_price
             take_profit = buy_price * 1.25
             strategy_info = "盈利10-20% 止损移至成本价"
         else:
-            # 盈利<10% 正常止损
             stop_loss = buy_price * 0.92
             take_profit = buy_price * 1.20
             strategy_info = "盈利<10% 使用常规止损"
     
     else:
-        # 默认策略
         take_profit = buy_price * 1.15
         stop_loss = buy_price * 0.90
         strategy_info = "默认固定比例策略"
@@ -1832,4 +677,1023 @@ def analyze_technical_signals(hist_data):
         
         if 'BB_Middle' in hist_data.columns:
             if latest['Close'] > latest['BB_Middle'] and prev['Close'] <= prev['BB_Middle']:
-                bb_width_change =
+                bb_width_change = (latest['BB_Width'] - hist_data['BB_Width'].iloc[-5]) / hist_data['BB_Width'].iloc[-5]
+                if bb_width_change > 0.1:
+                    signals['bb_breakout'] = True
+        
+        if 'Volume_MA' in hist_data.columns:
+            recent_prices = hist_data['Close'].iloc[-5:]
+            recent_volumes = hist_data['Volume'].iloc[-5:]
+            
+            if recent_prices.iloc[-1] > recent_prices.iloc[0] and recent_volumes.iloc[-1] < recent_volumes.iloc[0]:
+                signals['volume_divergence'] = True
+        
+        if latest['Close'] > latest['MA60']:
+            signals['trend'] = 'bullish'
+        else:
+            signals['trend'] = 'bearish'
+            
+    except Exception as e:
+        st.warning(f"技术信号分析失败: {str(e)}")
+    
+    return signals
+
+def generate_trading_recommendation(valuation_signals, technical_signals, current_price, dcf_value):
+    """生成交易建议"""
+    recommendation = {
+        'action': 'HOLD',
+        'confidence': 0,
+        'reasons': [],
+        'entry_range': (0, 0),
+        'stop_loss': 0,
+        'take_profit': 0,
+        'position_size': 0
+    }
+    
+    try:
+        # 基于估值和技术信号生成建议
+        bullish_signals = 0
+        bearish_signals = 0
+        
+        # 估值信号
+        if valuation_signals['undervalued']:
+            bullish_signals += 2
+            recommendation['reasons'].append("估值被低估")
+        elif valuation_signals['overvalued']:
+            bearish_signals += 2
+            recommendation['reasons'].append("估值过高")
+        
+        # 技术信号
+        if technical_signals['ma_golden_cross']:
+            bullish_signals += 1
+            recommendation['reasons'].append("均线金叉")
+        if technical_signals['macd_golden_cross']:
+            bullish_signals += 1
+            recommendation['reasons'].append("MACD金叉")
+        if technical_signals['rsi_oversold']:
+            bullish_signals += 1
+            recommendation['reasons'].append("RSI超卖")
+        if technical_signals['bb_breakout']:
+            bullish_signals += 1
+            recommendation['reasons'].append("布林带突破")
+        
+        if technical_signals['ma_death_cross']:
+            bearish_signals += 1
+            recommendation['reasons'].append("均线死叉")
+        if technical_signals['macd_death_cross']:
+            bearish_signals += 1
+            recommendation['reasons'].append("MACD死叉")
+        if technical_signals['rsi_overbought']:
+            bearish_signals += 1
+            recommendation['reasons'].append("RSI超买")
+        
+        # 生成最终建议
+        net_signals = bullish_signals - bearish_signals
+        
+        if net_signals >= 2:
+            recommendation['action'] = 'BUY'
+            recommendation['confidence'] = min(90, 50 + net_signals * 10)
+            recommendation['entry_range'] = (current_price * 0.98, current_price * 1.02)
+            recommendation['stop_loss'] = current_price * 0.92
+            recommendation['take_profit'] = current_price * 1.15
+            
+            # Kelly公式计算仓位
+            win_prob = 0.6 + (net_signals * 0.05)
+            win_loss_ratio = 1.5
+            kelly_position = calculate_kelly_criterion(win_prob, win_loss_ratio)
+            recommendation['position_size'] = kelly_position
+            
+        elif net_signals <= -2:
+            recommendation['action'] = 'SELL'
+            recommendation['confidence'] = min(90, 50 + abs(net_signals) * 10)
+            recommendation['reasons'].append("多个负面信号")
+            
+        else:
+            recommendation['action'] = 'HOLD'
+            recommendation['confidence'] = 30
+            recommendation['reasons'].append("信号不明确，建议观望")
+    
+    except Exception as e:
+        st.warning(f"交易建议生成失败: {str(e)}")
+    
+    return recommendation
+
+# ==================== UI界面 ====================
+
+# 侧边栏
+st.sidebar.header("🔍 股票查询")
+ticker = st.sidebar.text_input("输入股票代码 (如: AAPL, TSLA, MSFT):", value="AAPL")
+
+# 分析选项
+st.sidebar.header("📊 分析选项")
+analysis_options = st.sidebar.multiselect(
+    "选择分析模块:",
+    ["基本信息", "技术分析", "财务分析", "估值分析", "风险分析", "交易建议"],
+    default=["基本信息", "技术分析", "财务分析"]
+)
+
+# 更新按钮
+if st.sidebar.button("🔄 获取最新数据", type="primary"):
+    st.session_state.current_ticker = ticker
+    with st.spinner("正在获取数据..."):
+        data = fetch_stock_data_uncached(ticker)
+        if data:
+            st.session_state.analysis_data = data
+            st.session_state.current_price = data['hist_data']['Close'].iloc[-1] if not data['hist_data'].empty else 0
+            st.success("数据更新成功!")
+        else:
+            st.error("数据获取失败，请检查股票代码!")
+
+# 主界面
+if ticker and (st.session_state.current_ticker != ticker or st.session_state.analysis_data is None):
+    st.session_state.current_ticker = ticker
+    with st.spinner("正在加载数据..."):
+        data = fetch_stock_data(ticker)
+        if data:
+            st.session_state.analysis_data = data
+            st.session_state.current_price = data['hist_data']['Close'].iloc[-1] if not data['hist_data'].empty else 0
+
+if st.session_state.analysis_data:
+    data = st.session_state.analysis_data
+    
+    # ==================== 基本信息 ====================
+    if "基本信息" in analysis_options:
+        st.header("📈 基本信息")
+        info = data['info']
+        hist_data = data['hist_data']
+        
+        if not hist_data.empty:
+            current_price = hist_data['Close'].iloc[-1]
+            prev_close = hist_data['Close'].iloc[-2]
+            change = current_price - prev_close
+            change_pct = (change / prev_close) * 100
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.metric("当前价格", f"${current_price:.2f}", f"{change:+.2f} ({change_pct:+.2f}%)")
+            
+            with col2:
+                market_cap = info.get('marketCap', 0)
+                if market_cap > 1e9:
+                    market_cap_str = f"${market_cap/1e9:.1f}B"
+                else:
+                    market_cap_str = f"${market_cap/1e6:.1f}M"
+                st.metric("市值", market_cap_str)
+            
+            with col3:
+                pe_ratio = info.get('trailingPE', 0)
+                st.metric("P/E比率", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
+            
+            with col4:
+                volume = hist_data['Volume'].iloc[-1]
+                volume_str = f"{volume/1e6:.1f}M" if volume > 1e6 else f"{volume/1e3:.1f}K"
+                st.metric("成交量", volume_str)
+            
+            with col5:
+                year_high = hist_data['High'].max()
+                year_low = hist_data['Low'].min()
+                st.metric("52周区间", f"${year_low:.2f} - ${year_high:.2f}")
+        
+        # 公司信息
+        if info:
+            st.subheader("📋 公司信息")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write(f"**公司名称:** {info.get('longName', 'N/A')}")
+                st.write(f"**行业:** {info.get('industry', 'N/A')}")
+                st.write(f"**板块:** {info.get('sector', 'N/A')}")
+                st.write(f"**员工数:** {info.get('fullTimeEmployees', 'N/A'):,}" if info.get('fullTimeEmployees') else "**员工数:** N/A")
+            
+            with col2:
+                st.write(f"**总部:** {info.get('city', '')}, {info.get('country', '')}")
+                st.write(f"**网站:** {info.get('website', 'N/A')}")
+                st.write(f"**Beta系数:** {info.get('beta', 'N/A')}")
+                dividend_yield = info.get('dividendYield', 0)
+                st.write(f"**股息率:** {dividend_yield*100:.2f}%" if dividend_yield else "**股息率:** N/A")
+        
+        st.markdown("---")
+    
+    # ==================== 技术分析 ====================
+    if "技术分析" in analysis_options:
+        st.header("📊 技术分析")
+        
+        hist_data = data['hist_data'].copy()
+        if not hist_data.empty:
+            # 计算技术指标
+            hist_data = calculate_technical_indicators(hist_data)
+            
+            # 价格图表
+            fig = go.Figure()
+            
+            # K线图
+            fig.add_trace(go.Candlestick(
+                x=hist_data.index,
+                open=hist_data['Open'],
+                high=hist_data['High'],
+                low=hist_data['Low'],
+                close=hist_data['Close'],
+                name="价格"
+            ))
+            
+            # 移动平均线
+            if 'MA10' in hist_data.columns:
+                fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA10'], 
+                                       name="MA10", line=dict(color='orange', width=1)))
+            if 'MA20' in hist_data.columns:
+                fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA20'], 
+                                       name="MA20", line=dict(color='blue', width=1)))
+            if 'MA60' in hist_data.columns:
+                fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MA60'], 
+                                       name="MA60", line=dict(color='red', width=1)))
+            
+            # 布林带
+            if 'BB_Upper' in hist_data.columns:
+                fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['BB_Upper'], 
+                                       name="BB上轨", line=dict(color='gray', width=1, dash='dot')))
+                fig.add_trace(go.Scatter(x=hist_data.index, y=hist_data['BB_Lower'], 
+                                       name="BB下轨", line=dict(color='gray', width=1, dash='dot'),
+                                       fill='tonexty', fillcolor='rgba(128,128,128,0.1)'))
+            
+            fig.update_layout(
+                title=f"{ticker} 价格走势图",
+                xaxis_title="日期",
+                yaxis_title="价格 ($)",
+                height=500,
+                xaxis_rangeslider_visible=False
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # 技术指标面板
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # MACD图
+                if 'MACD' in hist_data.columns:
+                    fig_macd = go.Figure()
+                    fig_macd.add_trace(go.Scatter(x=hist_data.index, y=hist_data['MACD'], 
+                                                name="MACD", line=dict(color='blue')))
+                    fig_macd.add_trace(go.Scatter(x=hist_data.index, y=hist_data['Signal'], 
+                                                name="Signal", line=dict(color='red')))
+                    fig_macd.add_trace(go.Bar(x=hist_data.index, y=hist_data['MACD_Histogram'], 
+                                            name="Histogram"))
+                    
+                    fig_macd.update_layout(title="MACD指标", height=300)
+                    st.plotly_chart(fig_macd, use_container_width=True)
+            
+            with col2:
+                # RSI图
+                if 'RSI' in hist_data.columns:
+                    fig_rsi = go.Figure()
+                    fig_rsi.add_trace(go.Scatter(x=hist_data.index, y=hist_data['RSI'], 
+                                               name="RSI", line=dict(color='purple')))
+                    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="超买线")
+                    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="超卖线")
+                    
+                    fig_rsi.update_layout(title="RSI指标", height=300, yaxis=dict(range=[0, 100]))
+                    st.plotly_chart(fig_rsi, use_container_width=True)
+            
+            # 技术信号分析
+            technical_signals = analyze_technical_signals(hist_data)
+            
+            st.subheader("🎯 技术信号")
+            signal_cols = st.columns(4)
+            
+            signals_info = [
+                ("均线金叉", technical_signals['ma_golden_cross'], "🟢"),
+                ("MACD金叉", technical_signals['macd_golden_cross'], "🟢"),
+                ("RSI超卖", technical_signals['rsi_oversold'], "🟡"),
+                ("布林带突破", technical_signals['bb_breakout'], "🔵")
+            ]
+            
+            for i, (signal_name, signal_value, emoji) in enumerate(signals_info):
+                with signal_cols[i]:
+                    if signal_value:
+                        st.success(f"{emoji} {signal_name}")
+                    else:
+                        st.info(f"⚪ {signal_name}")
+        
+        st.markdown("---")
+    
+    # ==================== 财务分析 ====================
+    if "财务分析" in analysis_options:
+        st.header("💰 财务分析")
+        
+        # Piotroski F-Score
+        f_score, f_reasons = calculate_piotroski_score(data)
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("📊 Piotroski F-Score")
+            score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
+            st.markdown(f"<h2 style='color: {score_color}'>{f_score}/9</h2>", unsafe_allow_html=True)
+            
+            if f_score >= 7:
+                st.success("优秀财务质量")
+            elif f_score >= 4:
+                st.warning("中等财务质量")
+            else:
+                st.error("较差财务质量")
+        
+        with col2:
+            st.subheader("📋 评分详情")
+            for reason in f_reasons:
+                if "为正" in reason or "增长" in reason or "大于" in reason:
+                    st.success(f"✅ {reason}")
+                elif "基础分" in reason:
+                    st.info(f"ℹ️ {reason}")
+                else:
+                    st.error(f"❌ {reason}")
+        
+        # 杜邦分析
+        dupont = calculate_dupont_analysis(data)
+        if dupont:
+            st.subheader("🔍 杜邦分析")
+            dup_col1, dup_col2, dup_col3, dup_col4 = st.columns(4)
+            
+            with dup_col1:
+                st.metric("ROE", f"{dupont['roe']:.2f}%")
+            with dup_col2:
+                st.metric("净利润率", f"{dupont['profit_margin']:.2f}%")
+            with dup_col3:
+                st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
+            with dup_col4:
+                st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
+        
+        # Altman Z-Score
+        z_score, z_status, z_color = calculate_altman_z_score(data)
+        
+        st.subheader("⚖️ Altman Z-Score (破产风险)")
+        z_col1, z_col2 = st.columns(2)
+        
+        with z_col1:
+            st.markdown(f"<h3 style='color: {z_color}'>{z_score:.2f}</h3>", unsafe_allow_html=True)
+        
+        with z_col2:
+            if z_color == "green":
+                st.success(f"🟢 {z_status}")
+            elif z_color == "orange":
+                st.warning(f"🟡 {z_status}")
+            else:
+                st.error(f"🔴 {z_status}")
+        
+        # 财务趋势
+        trends = calculate_financial_trends(data)
+        if trends:
+            st.subheader("📈 财务趋势 (近3年)")
+            
+            fig_trends = go.Figure()
+            
+            # 营收趋势
+            fig_trends.add_trace(go.Scatter(
+                x=trends['years'], 
+                y=[r/1e9 for r in trends['revenues']], 
+                name="营收 (十亿)", 
+                line=dict(color='blue'),
+                yaxis='y1'
+            ))
+            
+            # 净利润趋势
+            fig_trends.add_trace(go.Scatter(
+                x=trends['years'], 
+                y=[ni/1e9 for ni in trends['net_incomes']], 
+                name="净利润 (十亿)", 
+                line=dict(color='green'),
+                yaxis='y1'
+            ))
+            
+            fig_trends.update_layout(
+                title="财务趋势",
+                xaxis_title="年份",
+                yaxis_title="金额 (十亿美元)",
+                height=400
+            )
+            
+            st.plotly_chart(fig_trends, use_container_width=True)
+        
+        st.markdown("---")
+    
+    # ==================== 估值分析 ====================
+    if "估值分析" in analysis_options:
+        st.header("💎 估值分析")
+        
+        # DCF估值
+        dcf_value, dcf_params = calculate_dcf_valuation(data)
+        current_price = st.session_state.current_price
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🎯 DCF估值模型")
+            if dcf_value:
+                valuation_margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
+                
+                st.metric("DCF公允价值", f"${dcf_value:.2f}")
+                st.metric("当前价格", f"${current_price:.2f}")
+                
+                if valuation_margin > 20:
+                    st.success(f"🟢 被低估 {valuation_margin:.1f}%")
+                elif valuation_margin > 0:
+                    st.warning(f"🟡 略被低估 {valuation_margin:.1f}%")
+                elif valuation_margin > -20:
+                    st.warning(f"🟡 略被高估 {abs(valuation_margin):.1f}%")
+                else:
+                    st.error(f"🔴 被高估 {abs(valuation_margin):.1f}%")
+                
+                # DCF参数
+                if dcf_params:
+                    with st.expander("📊 DCF模型参数"):
+                        st.write(f"**初始自由现金流:** ${dcf_params['initial_fcf']/1e6:.1f}M")
+                        st.write(f"**增长率:** {dcf_params['growth_rate']*100:.1f}%")
+                        st.write(f"**折现率:** {dcf_params['discount_rate']*100:.1f}%")
+                        st.write(f"**终值增长率:** {dcf_params['terminal_growth']*100:.1f}%")
+                        st.write(f"**企业价值:** ${dcf_params['enterprise_value']/1e9:.2f}B")
+            else:
+                st.warning("DCF估值数据不足")
+        
+        with col2:
+            # 相对估值
+            relative_val = calculate_relative_valuation(data)
+            if relative_val:
+                st.subheader("📏 相对估值")
+                
+                val_metrics = [
+                    ("P/E比率", relative_val['pe_ratio'], relative_val['industry_pe']),
+                    ("P/B比率", relative_val['pb_ratio'], relative_val['industry_pb']),
+                    ("EV/EBITDA", relative_val['ev_ebitda'], relative_val['industry_ev_ebitda'])
+                ]
+                
+                for metric_name, current_val, industry_avg in val_metrics:
+                    if current_val and current_val > 0:
+                        premium = ((current_val - industry_avg) / industry_avg * 100)
+                        
+                        if premium > 20:
+                            status = f"🔴 溢价 {premium:.1f}%"
+                        elif premium > 0:
+                            status = f"🟡 溢价 {premium:.1f}%"
+                        elif premium > -20:
+                            status = f"🟡 折价 {abs(premium):.1f}%"
+                        else:
+                            status = f"🟢 折价 {abs(premium):.1f}%"
+                        
+                        st.metric(
+                            metric_name,
+                            f"{current_val:.2f}",
+                            f"行业均值: {industry_avg:.2f}"
+                        )
+                        st.write(status)
+                    else:
+                        st.metric(metric_name, "N/A")
+        
+        # 历史估值分位
+        hist_valuation = calculate_historical_valuation_percentile(
+            ticker, 
+            data['info'].get('trailingPE', 0), 
+            data['info'].get('priceToBook', 0)
+        )
+        
+        if hist_valuation:
+            st.subheader("📊 历史估值分位")
+            
+            hist_col1, hist_col2 = st.columns(2)
+            
+            with hist_col1:
+                pe_percentile = hist_valuation['pe_percentile']
+                st.metric("价格历史分位", f"{pe_percentile:.1f}%")
+                
+                if pe_percentile < 20:
+                    st.success("🟢 处于历史低位")
+                elif pe_percentile < 40:
+                    st.info("🔵 处于相对低位")
+                elif pe_percentile < 60:
+                    st.warning("🟡 处于中等位置")
+                elif pe_percentile < 80:
+                    st.warning("🟠 处于相对高位")
+                else:
+                    st.error("🔴 处于历史高位")
+            
+            with hist_col2:
+                # 历史价格分布图
+                if 'hist_prices' in hist_valuation:
+                    fig_hist = go.Figure()
+                    fig_hist.add_trace(go.Histogram(
+                        x=hist_valuation['hist_prices'],
+                        nbinsx=20,
+                        name="价格分布"
+                    ))
+                    fig_hist.add_vline(
+                        x=current_price,
+                        line_dash="dash",
+                        line_color="red",
+                        annotation_text=f"当前价格: ${current_price:.2f}"
+                    )
+                    
+                    fig_hist.update_layout(
+                        title="5年价格分布",
+                        xaxis_title="价格 ($)",
+                        yaxis_title="频次",
+                        height=300
+                    )
+                    
+                    st.plotly_chart(fig_hist, use_container_width=True)
+        
+        st.markdown("---")
+    
+    # ==================== 风险分析 ====================
+    if "风险分析" in analysis_options:
+        st.header("⚠️ 风险分析")
+        
+        risk_metrics = calculate_risk_metrics(data)
+        
+        if risk_metrics:
+            st.subheader("🎯 风险评分 (10分制)")
+            
+            risk_cols = st.columns(5)
+            
+            risk_items = [
+                ("利息覆盖", risk_metrics['interest_coverage'], "偿债能力"),
+                ("Beta风险", risk_metrics['beta_score'], "系统性风险"),
+                ("杠杆风险", risk_metrics['leverage_score'], "财务杠杆"),
+                ("现金流", risk_metrics['fcf_growth_score'], "现金流稳定性"),
+                ("盈利能力", risk_metrics['profitability_score'], "盈利稳定性")
+            ]
+            
+            total_risk_score = 0
+            
+            for i, (risk_name, score, description) in enumerate(risk_items):
+                with risk_cols[i]:
+                    if score >= 7:
+                        st.success(f"🟢 {risk_name}\n{score:.1f}/10")
+                    elif score >= 4:
+                        st.warning(f"🟡 {risk_name}\n{score:.1f}/10")
+                    else:
+                        st.error(f"🔴 {risk_name}\n{score:.1f}/10")
+                    
+                    st.caption(description)
+                
+                total_risk_score += score
+            
+            # 总体风险评级
+            avg_risk_score = total_risk_score / len(risk_items)
+            
+            st.subheader("📊 综合风险评级")
+            
+            if avg_risk_score >= 7:
+                st.success(f"🟢 低风险 ({avg_risk_score:.1f}/10)")
+                risk_description = "该股票整体风险较低，财务状况稳健"
+            elif avg_risk_score >= 5:
+                st.warning(f"🟡 中等风险 ({avg_risk_score:.1f}/10)")
+                risk_description = "该股票存在一定风险，需要密切关注"
+            else:
+                st.error(f"🔴 高风险 ({avg_risk_score:.1f}/10)")
+                risk_description = "该股票风险较高，投资需谨慎"
+            
+            st.write(risk_description)
+        
+        # 波动率分析
+        if not data['hist_data'].empty:
+            st.subheader("📈 波动率分析")
+            
+            returns = data['hist_data']['Close'].pct_change().dropna()
+            
+            vol_col1, vol_col2, vol_col3 = st.columns(3)
+            
+            with vol_col1:
+                daily_vol = returns.std() * 100
+                st.metric("日波动率", f"{daily_vol:.2f}%")
+            
+            with vol_col2:
+                annual_vol = daily_vol * np.sqrt(252)
+                st.metric("年化波动率", f"{annual_vol:.2f}%")
+            
+            with vol_col3:
+                max_drawdown = ((data['hist_data']['Close'].cummax() - data['hist_data']['Close']) / data['hist_data']['Close'].cummax()).max() * 100
+                st.metric("最大回撤", f"{max_drawdown:.2f}%")
+            
+            # 波动率图表
+            rolling_vol = returns.rolling(window=30).std() * np.sqrt(252) * 100
+            
+            fig_vol = go.Figure()
+            fig_vol.add_trace(go.Scatter(
+                x=rolling_vol.index,
+                y=rolling_vol,
+                name="30日滚动年化波动率",
+                line=dict(color='red')
+            ))
+            
+            fig_vol.update_layout(
+                title="波动率走势",
+                xaxis_title="日期",
+                yaxis_title="年化波动率 (%)",
+                height=300
+            )
+            
+            st.plotly_chart(fig_vol, use_container_width=True)
+        
+        st.markdown("---")
+    
+    # ==================== 交易建议 ====================
+    if "交易建议" in analysis_options:
+        st.header("🎯 交易建议")
+        
+        # 获取估值和技术信号
+        dcf_value, _ = calculate_dcf_valuation(data)
+        current_price = st.session_state.current_price
+        
+        hist_data = data['hist_data'].copy()
+        hist_data = calculate_technical_indicators(hist_data)
+        
+        valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
+        technical_signals = analyze_technical_signals(hist_data)
+        
+        # 生成交易建议
+        recommendation = generate_trading_recommendation(
+            valuation_signals, technical_signals, current_price, dcf_value
+        )
+        
+        # 显示建议
+        rec_col1, rec_col2 = st.columns([1, 2])
+        
+        with rec_col1:
+            action = recommendation['action']
+            confidence = recommendation['confidence']
+            
+            if action == "BUY":
+                st.success(f"🟢 {action}")
+                action_color = "green"
+            elif action == "SELL":
+                st.error(f"🔴 {action}")
+                action_color = "red"
+            else:
+                st.warning(f"🟡 {action}")
+                action_color = "orange"
+            
+            st.metric("置信度", f"{confidence}%")
+            
+            # 推荐仓位
+            if recommendation['position_size'] > 0:
+                st.metric("建议仓位", f"{recommendation['position_size']*100:.1f}%")
+        
+        with rec_col2:
+            st.subheader("📋 建议理由")
+            for reason in recommendation['reasons']:
+                st.write(f"• {reason}")
+            
+            if action == "BUY" and recommendation['entry_range'][0] > 0:
+                st.subheader("💰 交易参数")
+                st.write(f"**建议买入区间:** ${recommendation['entry_range'][0]:.2f} - ${recommendation['entry_range'][1]:.2f}")
+                st.write(f"**止损位:** ${recommendation['stop_loss']:.2f}")
+                st.write(f"**止盈位:** ${recommendation['take_profit']:.2f}")
+        
+        # 计算综合评分
+        f_score, _ = calculate_piotroski_score(data)
+        z_score, _, _ = calculate_altman_z_score(data)
+        
+        valuation_margin = valuation_signals.get('margin', 0)
+        
+        comprehensive_score = calculate_comprehensive_score(
+            f_score, z_score, valuation_margin, technical_signals
+        )
+        
+        st.subheader("🏆 综合评分")
+        
+        score_col1, score_col2, score_col3, score_col4 = st.columns(4)
+        
+        with score_col1:
+            st.metric("价值评分", f"{comprehensive_score['value_score']}/50")
+        
+        with score_col2:
+            st.metric("技术评分", f"{comprehensive_score['tech_score']}/50")
+        
+        with score_col3:
+            st.metric("总评分", f"{comprehensive_score['total_score']}/100")
+        
+        with score_col4:
+            final_rec = comprehensive_score['recommendation']
+            if final_rec == "BUY":
+                st.success(f"🟢 {final_rec}")
+            elif final_rec == "SELL":
+                st.error(f"🔴 {final_rec}")
+            else:
+                st.warning(f"🟡 {final_rec}")
+        
+        # 动态止盈止损策略
+        st.subheader("⚙️ 止盈止损策略")
+        
+        strategy_options = [
+            "固定比例法",
+            "技术指标法", 
+            "波动率法(ATR)",
+            "成本加码法(跟踪止盈)"
+        ]
+        
+        strategy_col1, strategy_col2 = st.columns(2)
+        
+        with strategy_col1:
+            selected_strategy = st.selectbox("选择策略:", strategy_options)
+            buy_price = st.number_input("买入成本价:", value=current_price, step=0.01)
+        
+        with strategy_col2:
+            if selected_strategy == "固定比例法":
+                custom_tp = st.slider("止盈比例 (%)", 5, 50, 15)
+                custom_sl = st.slider("止损比例 (%)", 5, 30, 10)
+            else:
+                custom_tp = 15
+                custom_sl = 10
+        
+        # 计算动态止盈止损
+        take_profit, stop_loss, strategy_info = calculate_dynamic_levels(
+            selected_strategy, hist_data, current_price, buy_price, custom_tp, custom_sl
+        )
+        
+        st.info(f"📊 {strategy_info}")
+        
+        level_col1, level_col2, level_col3 = st.columns(3)
+        
+        with level_col1:
+            current_pnl = ((current_price - buy_price) / buy_price * 100) if buy_price > 0 else 0
+            pnl_color = "green" if current_pnl > 0 else "red"
+            st.markdown(f"**当前盈亏:** <span style='color: {pnl_color}'>{current_pnl:+.2f}%</span>", unsafe_allow_html=True)
+        
+        with level_col2:
+            tp_pct = ((take_profit - buy_price) / buy_price * 100) if buy_price > 0 else 0
+            st.success(f"🎯 止盈位: ${take_profit:.2f} (+{tp_pct:.1f}%)")
+        
+        with level_col3:
+            sl_pct = ((stop_loss - buy_price) / buy_price * 100) if buy_price > 0 else 0
+            st.error(f"🛑 止损位: ${stop_loss:.2f} ({sl_pct:.1f}%)")
+        
+        # 风险回报比
+        if take_profit > current_price and current_price > stop_loss:
+            potential_gain = take_profit - current_price
+            potential_loss = current_price - stop_loss
+            risk_reward_ratio = potential_gain / potential_loss if potential_loss > 0 else 0
+            
+            st.subheader("⚖️ 风险回报分析")
+            rr_col1, rr_col2, rr_col3 = st.columns(3)
+            
+            with rr_col1:
+                st.metric("潜在收益", f"${potential_gain:.2f}")
+            
+            with rr_col2:
+                st.metric("潜在损失", f"${potential_loss:.2f}")
+            
+            with rr_col3:
+                if risk_reward_ratio >= 2:
+                    st.success(f"🟢 风险回报比: {risk_reward_ratio:.2f}")
+                elif risk_reward_ratio >= 1:
+                    st.warning(f"🟡 风险回报比: {risk_reward_ratio:.2f}")
+                else:
+                    st.error(f"🔴 风险回报比: {risk_reward_ratio:.2f}")
+        
+        st.markdown("---")
+    
+    # ==================== 投资组合建议 ====================
+    st.header("📁 投资组合建议")
+    
+    # 基于Kelly公式的仓位建议
+    if recommendation.get('position_size', 0) > 0:
+        kelly_position = recommendation['position_size']
+        
+        port_col1, port_col2 = st.columns(2)
+        
+        with port_col1:
+            st.subheader("📊 Kelly公式仓位建议")
+            st.metric("理论最优仓位", f"{kelly_position*100:.1f}%")
+            
+            # 保守仓位建议
+            conservative_position = kelly_position * 0.5  # Kelly的一半
+            moderate_position = kelly_position * 0.75     # Kelly的75%
+            
+            st.write("**风险调整建议:**")
+            st.write(f"• 保守型: {conservative_position*100:.1f}%")
+            st.write(f"• 平衡型: {moderate_position*100:.1f}%")
+            st.write(f"• 激进型: {kelly_position*100:.1f}%")
+        
+        with port_col2:
+            st.subheader("🎯 分批建仓策略")
+            
+            total_investment = st.number_input("总投资金额 ($):", value=10000, step=100)
+            
+            if total_investment > 0:
+                batch_1 = total_investment * 0.4
+                batch_2 = total_investment * 0.35
+                batch_3 = total_investment * 0.25
+                
+                entry_1 = current_price
+                entry_2 = current_price * 0.95  # 下跌5%时加仓
+                entry_3 = current_price * 0.90  # 下跌10%时加仓
+                
+                st.write("**建议分批方案:**")
+                st.write(f"• 第一批: ${batch_1:.0f} @ ${entry_1:.2f}")
+                st.write(f"• 第二批: ${batch_2:.0f} @ ${entry_2:.2f}")
+                st.write(f"• 第三批: ${batch_3:.0f} @ ${entry_3:.2f}")
+                
+                avg_cost = (batch_1*entry_1 + batch_2*entry_2 + batch_3*entry_3) / total_investment
+                st.info(f"平均成本: ${avg_cost:.2f}")
+    
+    # 相关性分析（如果有多只股票）
+    st.subheader("🔗 相关性分析")
+    
+    correlation_tickers = st.text_input(
+        "输入其他股票代码进行相关性分析 (用逗号分隔):",
+        placeholder="MSFT,GOOGL,AMZN"
+    )
+    
+    if correlation_tickers:
+        tickers_list = [ticker.strip().upper() for ticker in correlation_tickers.split(',')]
+        tickers_list.append(ticker.upper())
+        
+        if st.button("🔍 分析相关性"):
+            with st.spinner("正在计算相关性..."):
+                correlation_data = {}
+                
+                for t in tickers_list:
+                    try:
+                        stock = yf.Ticker(t)
+                        hist = stock.history(period="1y")
+                        if not hist.empty:
+                            correlation_data[t] = hist['Close'].pct_change().dropna()
+                    except:
+                        continue
+                
+                if len(correlation_data) > 1:
+                    corr_df = pd.DataFrame(correlation_data)
+                    correlation_matrix = corr_df.corr()
+                    
+                    # 热力图
+                    fig_corr = px.imshow(
+                        correlation_matrix,
+                        text_auto=True,
+                        aspect="auto",
+                        color_continuous_scale="RdBu_r",
+                        title="股票相关性矩阵"
+                    )
+                    
+                    fig_corr.update_layout(height=500)
+                    st.plotly_chart(fig_corr, use_container_width=True)
+                    
+                    # 相关性解读
+                    main_ticker = ticker.upper()
+                    if main_ticker in correlation_matrix.columns:
+                        correlations = correlation_matrix[main_ticker].drop(main_ticker)
+                        
+                        st.subheader(f"📊 {main_ticker} 相关性分析")
+                        
+                        for other_ticker, corr_value in correlations.items():
+                            if abs(corr_value) > 0.7:
+                                corr_level = "高度相关"
+                                corr_color = "red"
+                            elif abs(corr_value) > 0.3:
+                                corr_level = "中等相关"
+                                corr_color = "orange"
+                            else:
+                                corr_level = "低相关"
+                                corr_color = "green"
+                            
+                            st.write(f"• **{other_ticker}**: {corr_value:.3f} ({corr_level})")
+                        
+                        st.info("💡 提示: 相关性过高的股票不适合同时持有，会增加投资组合风险")
+
+else:
+    st.info("👆 请在左侧输入股票代码开始分析")
+
+# ==================== 页脚信息 ====================
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: gray;'>
+    <p>💹 智能投资分析系统 v2.0 | 
+    数据来源: Yahoo Finance | 
+    ⚠️ 投资有风险，入市需谨慎</p>
+    <p>本系统仅供参考，不构成投资建议。请结合个人情况和专业意见做出投资决策。</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ==================== 快捷操作 ====================
+st.sidebar.markdown("---")
+st.sidebar.header("🚀 快捷操作")
+
+# 热门股票快速选择
+popular_stocks = {
+    "🍎 苹果": "AAPL",
+    "🚗 特斯拉": "TSLA", 
+    "💻 微软": "MSFT",
+    "🔍 谷歌": "GOOGL",
+    "📦 亚马逊": "AMZN",
+    "🎬 奈飞": "NFLX",
+    "💳 Visa": "V",
+    "🏦 摩根大通": "JPM",
+    "🥤 可口可乐": "KO",
+    "💊 强生": "JNJ"
+}
+
+selected_stock = st.sidebar.selectbox("选择热门股票:", list(popular_stocks.keys()))
+
+if st.sidebar.button("📈 快速分析"):
+    selected_ticker = popular_stocks[selected_stock]
+    st.session_state.current_ticker = selected_ticker
+    
+    with st.spinner(f"正在分析 {selected_stock}..."):
+        data = fetch_stock_data_uncached(selected_ticker)
+        if data:
+            st.session_state.analysis_data = data
+            st.session_state.current_price = data['hist_data']['Close'].iloc[-1] if not data['hist_data'].empty else 0
+            st.experimental_rerun()
+
+# 市场概览
+st.sidebar.header("📊 市场概览")
+
+try:
+    # 获取主要指数
+    indices = {
+        "S&P 500": "^GSPC",
+        "纳斯达克": "^IXIC", 
+        "道琼斯": "^DJI"
+    }
+    
+    for index_name, index_symbol in indices.items():
+        try:
+            index_data = yf.Ticker(index_symbol).history(period="2d")
+            if not index_data.empty and len(index_data) >= 2:
+                current = index_data['Close'].iloc[-1]
+                previous = index_data['Close'].iloc[-2]
+                change = current - previous
+                change_pct = (change / previous) * 100
+                
+                st.sidebar.metric(
+                    index_name,
+                    f"{current:.0f}",
+                    f"{change:+.0f} ({change_pct:+.2f}%)"
+                )
+        except:
+            st.sidebar.metric(index_name, "数据获取失败")
+            
+except Exception as e:
+    st.sidebar.warning("市场数据获取失败")
+
+# 使用说明
+with st.sidebar.expander("📖 使用说明"):
+    st.write("""
+    **功能模块:**
+    • 基本信息: 股价、市值、财务概况
+    • 技术分析: K线图、技术指标、信号
+    • 财务分析: F-Score、杜邦分析、Z-Score
+    • 估值分析: DCF模型、相对估值
+    • 风险分析: 风险评分、波动率
+    • 交易建议: 买卖信号、止盈止损
+    
+    **操作提示:**
+    1. 输入股票代码(如AAPL)
+    2. 选择分析模块
+    3. 点击"获取最新数据"更新
+    4. 查看分析结果和建议
+    
+    **注意事项:**
+    • 数据有延迟，仅供参考
+    • 投资决策需结合多方面因素
+    • 建议咨询专业投资顾问
+    """)
+
+# 导出功能
+st.sidebar.header("💾 数据导出")
+
+if st.session_state.analysis_data and st.sidebar.button("📊 导出分析报告"):
+    try:
+        # 创建分析报告
+        report_data = {
+            "股票代码": ticker,
+            "分析时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "当前价格": st.session_state.current_price,
+            "Piotroski F-Score": calculate_piotroski_score(st.session_state.analysis_data)[0],
+            "Altman Z-Score": calculate_altman_z_score(st.session_state.analysis_data)[0]
+        }
+        
+        # DCF估值
+        dcf_value, _ = calculate_dcf_valuation(st.session_state.analysis_data)
+        if dcf_value:
+            report_data["DCF公允价值"] = dcf_value
+            report_data["估值偏差"] = ((dcf_value - st.session_state.current_price) / dcf_value * 100)
+        
+        # 转换为DataFrame并提供下载
+        report_df = pd.DataFrame([report_data])
+        csv = report_df.to_csv(index=False, encoding='utf-8-sig')
+        
+        st.sidebar.download_button(
+            label="📥 下载CSV报告",
+            data=csv,
+            file_name=f"{ticker}_analysis_report_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+        
+        st.sidebar.success("报告准备完成!")
+        
+    except Exception as e:
+        st.sidebar.error(f"报告生成失败: {str(e)}")
+
+# 版本信息
+st.sidebar.markdown("---")
+st.sidebar.caption("🔄 最后更新: 2024年6月")
+st.sidebar.caption("📧 问题反馈: support@example.com")
