@@ -816,6 +816,17 @@ if ticker and (st.session_state.current_ticker != ticker or st.session_state.ana
 if st.session_state.analysis_data:
     data = st.session_state.analysis_data
     
+    # Initialize recommendation variable for use across sections
+    recommendation = {
+        'action': 'HOLD',
+        'confidence': 0,
+        'reasons': [],
+        'entry_range': (0, 0),
+        'stop_loss': 0,
+        'take_profit': 0,
+        'position_size': 0
+    }
+    
     # ==================== 基本信息 ====================
     if "基本信息" in analysis_options:
         st.header("📈 基本信息")
@@ -1309,7 +1320,7 @@ if st.session_state.analysis_data:
         valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
         technical_signals = analyze_technical_signals(hist_data)
         
-        # 生成交易建议
+        # 生成交易建议 - Update the global recommendation variable
         recommendation = generate_trading_recommendation(
             valuation_signals, technical_signals, current_price, dcf_value
         )
@@ -1453,6 +1464,23 @@ if st.session_state.analysis_data:
     
     # ==================== 投资组合建议 ====================
     st.header("📁 投资组合建议")
+    
+    # Generate recommendation if not already done (when trading recommendation module is not selected)
+    if "交易建议" not in analysis_options:
+        # 获取估值和技术信号
+        dcf_value, _ = calculate_dcf_valuation(data)
+        current_price = st.session_state.current_price
+        
+        hist_data = data['hist_data'].copy()
+        hist_data = calculate_technical_indicators(hist_data)
+        
+        valuation_signals = analyze_valuation_signals(data, dcf_value, current_price)
+        technical_signals = analyze_technical_signals(hist_data)
+        
+        # 生成交易建议
+        recommendation = generate_trading_recommendation(
+            valuation_signals, technical_signals, current_price, dcf_value
+        )
     
     # 基于Kelly公式的仓位建议
     if recommendation.get('position_size', 0) > 0:
