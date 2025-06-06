@@ -1,15 +1,4 @@
-with st.expander("📘 使用说明"):
-        st.markdown("""
-        ### 如何解读各项数值指标
-        
-        **1. 安全边际 (Margin of Safety)**
-        - 正值：股价低于估值，存在低估
-        - 负值：股价高于估值，存在高估
-        - 建议：
-          - > 50%：强买入
-          - 20-50%：买入
-          - 0-20%：观察
-          - < 0%：避免import streamlit as st
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -388,95 +377,12 @@ def calculate_technical_indicators(hist_data):
         st.warning(f"技术指标计算失败: {str(e)}")
         return hist_data
 
-def calculate_atr(hist_data, period=14):
-    """计算ATR（平均真实波幅）"""
-    try:
-        high = hist_data['High']
-        low = hist_data['Low']
-        close = hist_data['Close']
-        
-        # 计算真实波幅TR
-        tr1 = high - low
-        tr2 = abs(high - close.shift(1))
-        tr3 = abs(low - close.shift(1))
-        
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window=period).mean()
-        
-        return atr.iloc[-1] if not pd.isna(atr.iloc[-1]) else 0
-    except:
-        return 0
-
-def calculate_dynamic_levels(strategy, hist_data, current_price, buy_price, custom_tp_pct=15, custom_sl_pct=10):
-    """根据不同策略计算止盈止损位"""
-    
-    if strategy == "固定比例法":
-        take_profit = buy_price * (1 + custom_tp_pct / 100)
-        stop_loss = buy_price * (1 - custom_sl_pct / 100)
-        strategy_info = f"止盈比例: +{custom_tp_pct}%, 止损比例: -{custom_sl_pct}%"
-        
-    elif strategy == "技术指标法":
-        # 基于技术指标的动态止盈止损
-        if 'MA20' in hist_data.columns and 'MA60' in hist_data.columns:
-            ma20 = hist_data['MA20'].iloc[-1]
-            ma60 = hist_data['MA60'].iloc[-1]
-            
-            # 以MA20作为动态止损，MA60上方20%作为止盈
-            stop_loss = max(ma20 * 0.98, buy_price * 0.92)  # 不低于8%止损
-            take_profit = max(ma60 * 1.2, buy_price * 1.15)  # 不低于15%止盈
-            
-            strategy_info = f"止损位: MA20支撑 ${ma20:.2f}, 止盈位: MA60+20% ${ma60*1.2:.2f}"
-        else:
-            # 回退到固定比例
-            take_profit = buy_price * 1.15
-            stop_loss = buy_price * 0.90
-            strategy_info = "技术指标数据不足，使用默认15%/10%"
-    
-    elif strategy == "波动率法（ATR）":
-        atr = calculate_atr(hist_data)
-        if atr > 0:
-            # ATR法：止盈=当前价+2倍ATR，止损=当前价-1倍ATR
-            take_profit = current_price + (2 * atr)
-            stop_loss = current_price - (1 * atr)
-            strategy_info = f"ATR: ${atr:.2f}, 止盈: +2×ATR, 止损: -1×ATR"
-        else:
-            # ATR计算失败，回退
-            take_profit = buy_price * 1.15
-            stop_loss = buy_price * 0.90
-            strategy_info = "ATR计算失败，使用默认比例"
-    
-    elif strategy == "成本加码法（跟踪止盈）":
-        # 跟踪止盈：盈利时逐步上移止损位
-        current_pnl_pct = (current_price - buy_price) / buy_price * 100
-        
-        if current_pnl_pct > 20:
-            # 盈利超过20%，止损移至成本价上10%
-            stop_loss = buy_price * 1.10
-            take_profit = current_price * 1.05  # 继续持有，小幅止盈
-            strategy_info = "盈利>20%，止损上移至成本+10%"
-        elif current_pnl_pct > 10:
-            # 盈利10-20%，止损移至成本价
-            stop_loss = buy_price
-            take_profit = buy_price * 1.25
-            strategy_info = "盈利10-20%，止损移至成本价"
-        else:
-            # 盈利<10%，正常止损
-            stop_loss = buy_price * 0.92
-            take_profit = buy_price * 1.20
-            strategy_info = "盈利<10%，使用常规止损"
-    
-    else:
-        # 默认策略
-        take_profit = buy_price * 1.15
-        stop_loss = buy_price * 0.90
-        strategy_info = "默认固定比例策略"
-    
-    return take_profit, stop_loss, strategy_info
-
 def calculate_kelly_criterion(win_prob, win_loss_ratio):
     """Kelly公式计算推荐仓位"""
     f = (win_prob * win_loss_ratio - (1 - win_prob)) / win_loss_ratio
     return max(0, min(f, 0.25))
+
+def calculate_historical_valuation_percentile(ticker, current_pe, current_pb):
     """计算历史估值分位"""
     try:
         end_date = datetime.now()
@@ -817,10 +723,10 @@ with st.sidebar:
     
     st.markdown("---")
     
-    with st.expander("💰 智能止盈止损模拟器"):
-        st.markdown("### 多策略持仓盈亏计算")
+    with st.expander("💰 止盈止损模拟器"):
+        st.markdown("### 持仓盈亏计算")
         
-        # 检查是否有当前分析的股票数据
+        # 检查是否有当前分析的股票数据 - 修复检查逻辑
         current_ticker = getattr(st.session_state, 'current_ticker', None)
         current_price = getattr(st.session_state, 'current_price', 0)
         
@@ -840,135 +746,69 @@ with st.sidebar:
             if display_price > 0:
                 st.info(f"📊 系统自动获取当前股价：${display_price:.2f}")
                 
-                # 策略选择下拉菜单
-                st.markdown("#### 🎯 选择止盈止损策略")
-                strategy = st.selectbox(
-                    "选择您偏好的止盈止损方法:",
-                    ["固定比例法", "技术指标法", "波动率法（ATR）", "成本加码法（跟踪止盈）"],
-                    key=f"strategy_select_{display_ticker}",
-                    help="不同策略适合不同的投资风格和市场环境"
+                # 用户输入区域
+                st.markdown("#### 📝 输入参数")
+                
+                # 买入价输入
+                default_buy_price = display_price * 0.95  # 默认比当前价格低5%
+                buy_price = st.number_input(
+                    "💵 买入价格 ($)", 
+                    min_value=0.01, 
+                    value=default_buy_price, 
+                    step=0.01,
+                    key=f"sidebar_buy_price_{display_ticker}"
                 )
                 
-                # 基础输入区域
-                st.markdown("#### 📝 基础参数")
-                input_col1, input_col2 = st.columns(2)
+                # 仓位数量输入
+                position_qty = st.number_input(
+                    "📦 仓位数量", 
+                    min_value=1, 
+                    value=100, 
+                    step=1,
+                    key=f"sidebar_position_{display_ticker}"
+                )
                 
-                with input_col1:
-                    # 买入价输入
-                    default_buy_price = display_price * 0.95
-                    buy_price = st.number_input(
-                        "💵 买入价格 ($)", 
-                        min_value=0.01, 
-                        value=default_buy_price, 
-                        step=0.01,
-                        key=f"sidebar_buy_price_{display_ticker}"
+                # 止盈止损比例设置
+                col_tp, col_sl = st.columns(2)
+                with col_tp:
+                    take_profit_pct = st.number_input(
+                        "🎯 止盈比例 (%)", 
+                        min_value=1.0, 
+                        value=15.0, 
+                        step=1.0,
+                        key=f"sidebar_tp_{display_ticker}"
+                    )
+                with col_sl:
+                    stop_loss_pct = st.number_input(
+                        "🛡️ 止损比例 (%)", 
+                        min_value=1.0, 
+                        value=10.0, 
+                        step=1.0,
+                        key=f"sidebar_sl_{display_ticker}"
                     )
                 
-                with input_col2:
-                    # 仓位数量输入
-                    position_qty = st.number_input(
-                        "📦 仓位数量", 
-                        min_value=1, 
-                        value=100, 
-                        step=1,
-                        key=f"sidebar_position_{display_ticker}"
-                    )
-                
-                # 根据策略显示不同的输入区域
-                st.markdown("#### ⚙️ 策略参数设置")
-                
-                if strategy == "固定比例法":
-                    with st.expander("📊 固定比例法参数", expanded=True):
-                        st.write("💡 **说明**: 简单直观的固定百分比止盈止损，适合新手投资者")
-                        
-                        param_col1, param_col2 = st.columns(2)
-                        with param_col1:
-                            take_profit_pct = st.number_input(
-                                "🎯 止盈比例 (%)", 
-                                min_value=1.0, 
-                                value=15.0, 
-                                step=1.0,
-                                key=f"sidebar_tp_{display_ticker}"
-                            )
-                        with param_col2:
-                            stop_loss_pct = st.number_input(
-                                "🛡️ 止损比例 (%)", 
-                                min_value=1.0, 
-                                value=10.0, 
-                                step=1.0,
-                                key=f"sidebar_sl_{display_ticker}"
-                            )
-                
-                elif strategy == "技术指标法":
-                    with st.expander("📈 技术指标法说明", expanded=True):
-                        st.write("💡 **说明**: 基于MACD、均线等技术指标动态设定止盈止损位")
-                        st.info("🔍 **止损逻辑**: MA20均线支撑位作为动态止损")
-                        st.info("🎯 **止盈逻辑**: MA60均线上方20%作为目标位")
-                        st.write("📊 **适用场景**: 趋势明确的股票，技术形态良好时")
-                        take_profit_pct, stop_loss_pct = 15.0, 10.0  # 技术指标法不需要手动输入
-                
-                elif strategy == "波动率法（ATR）":
-                    with st.expander("📊 波动率法（ATR）说明", expanded=True):
-                        st.write("💡 **说明**: 根据股票历史波动率（ATR）动态设置止盈止损距离")
-                        
-                        # 获取历史数据计算ATR
-                        if hasattr(st.session_state, 'analysis_data') and st.session_state.analysis_data:
-                            hist_data = st.session_state.analysis_data['hist_data']
-                            hist_data = calculate_technical_indicators(hist_data)
-                            atr_value = calculate_atr(hist_data)
-                            
-                            if atr_value > 0:
-                                st.success(f"📊 **当前ATR**: ${atr_value:.2f}")
-                                st.info("🎯 **止盈设置**: 当前价 + 2×ATR")
-                                st.info("🛡️ **止损设置**: 当前价 - 1×ATR")
-                                st.write("📈 **适用场景**: 波动较大的股票，能更好适应个股特性")
-                            else:
-                                st.warning("⚠️ ATR计算失败，将使用默认比例")
-                        take_profit_pct, stop_loss_pct = 15.0, 10.0  # ATR法不需要手动输入比例
-                
-                elif strategy == "成本加码法（跟踪止盈）":
-                    with st.expander("📈 成本加码法（跟踪止盈）说明", expanded=True):
-                        st.write("💡 **说明**: 随着盈利增加，自动上移止损位，锁定利润避免回吐")
-                        
-                        current_pnl_pct = (display_price - buy_price) / buy_price * 100 if buy_price > 0 else 0
-                        
-                        if current_pnl_pct > 20:
-                            st.success("🎯 **当前状态**: 盈利>20%，止损移至成本价+10%")
-                        elif current_pnl_pct > 10:
-                            st.info("📊 **当前状态**: 盈利10-20%，止损移至成本价")
-                        else:
-                            st.warning("⚠️ **当前状态**: 盈利<10%，使用常规止损-8%")
-                        
-                        st.write("📈 **适用场景**: 长期趋势交易，适合成长性较好的股票")
-                        take_profit_pct, stop_loss_pct = 15.0, 10.0  # 跟踪止盈法动态计算
-                
-                # 获取历史数据用于策略计算
-                hist_data = None
-                if hasattr(st.session_state, 'analysis_data') and st.session_state.analysis_data:
-                    hist_data = st.session_state.analysis_data['hist_data']
-                    hist_data = calculate_technical_indicators(hist_data)
-                
-                # 根据选择的策略计算止盈止损位
-                if hist_data is not None and buy_price > 0:
-                    take_profit_price, stop_loss_price, strategy_info = calculate_dynamic_levels(
-                        strategy, hist_data, display_price, buy_price, take_profit_pct, stop_loss_pct
-                    )
-                    
-                    # 计算盈亏相关数据
+                # 计算核心指标
+                if buy_price > 0:
+                    # 1. 当前盈亏百分比
                     current_pnl_pct = (display_price - buy_price) / buy_price * 100
+                    
+                    # 2. 止盈点和止损点
+                    take_profit_price = buy_price * (1 + take_profit_pct / 100)
+                    stop_loss_price = buy_price * (1 - stop_loss_pct / 100)
+                    
+                    # 3. 持仓价值和盈亏金额
                     position_value = position_qty * buy_price
                     current_value = position_qty * display_price
                     pnl_amount = current_value - position_value
                     
                     # 显示计算结果
-                    st.markdown("#### 📊 策略计算结果")
-                    st.info(f"🔧 **策略详情**: {strategy_info}")
+                    st.markdown("#### 📊 计算结果")
                     
                     # 核心指标展示
                     result_col1, result_col2 = st.columns(2)
                     with result_col1:
                         st.metric(
-                            "💰 当前持仓盈亏", 
+                            "💰 当前盈亏", 
                             f"${pnl_amount:.2f}",
                             f"{current_pnl_pct:+.2f}%"
                         )
@@ -984,74 +824,58 @@ with st.sidebar:
                     with tp_col:
                         distance_to_tp = (take_profit_price - display_price) / display_price * 100
                         st.metric(
-                            "🎯 建议止盈价", 
+                            "🎯 止盈价位", 
                             f"${take_profit_price:.2f}",
-                            f"还需 {distance_to_tp:+.1f}%" if distance_to_tp != 0 else "已达到!"
+                            f"还需上涨 {distance_to_tp:.1f}%" if distance_to_tp > 0 else "已达到!"
                         )
                     with sl_col:
                         distance_to_sl = (display_price - stop_loss_price) / display_price * 100
                         st.metric(
-                            "🛡️ 建议止损价", 
+                            "🛡️ 止损价位", 
                             f"${stop_loss_price:.2f}",
                             f"安全边际 {distance_to_sl:.1f}%" if distance_to_sl > 0 else "已触发!"
                         )
                     
                     # 智能提醒和建议
-                    st.markdown("#### 🚨 智能操作建议")
+                    st.markdown("#### 🚨 操作建议")
                     
                     if display_price >= take_profit_price:
-                        st.success(f"🎯 **[{strategy}] 已达到止盈目标！可考虑止盈**")
+                        st.success("🎯 **已达到止盈目标！可考虑止盈**")
                         profit_amount = position_qty * (take_profit_price - buy_price)
                         st.success(f"💰 预期止盈收益：${profit_amount:.2f}")
                     elif display_price <= stop_loss_price:
-                        st.error(f"🛡️ **[{strategy}] 已触及止损价位！应考虑止损**")
+                        st.error("🛡️ **已触及止损价位！应考虑止损**")
                         loss_amount = position_qty * (buy_price - stop_loss_price)
-                        st.error(f"⚠️ 预期止损亏损：${loss_amount:.2f}")
+                        st.error(f"⚠️ 最大止损亏损：${loss_amount:.2f}")
                     elif current_pnl_pct > 5:
                         st.info(f"📈 **持续盈利中** ({current_pnl_pct:+.1f}%)")
-                        st.info(f"距离 [{strategy}] 止盈目标还需 {distance_to_tp:+.1f}%")
+                        st.info(f"距离止盈目标还需上涨 {distance_to_tp:.1f}%")
                     elif current_pnl_pct < -3:
                         st.warning(f"📉 **注意风险** ({current_pnl_pct:+.1f}%)")
-                        st.warning(f"距离 [{strategy}] 止损线还有 {distance_to_sl:.1f}% 安全边际")
+                        st.warning(f"距离止损线还有 {distance_to_sl:.1f}% 安全边际")
                     else:
-                        st.info(f"📊 **持仓正常** [{strategy}]，继续观察市场走势")
+                        st.info("📊 **持仓正常，继续观察市场走势**")
                     
                     # 风险收益分析
-                    max_loss = position_qty * abs(buy_price - stop_loss_price)
-                    max_profit = position_qty * abs(take_profit_price - buy_price)
+                    max_loss = position_qty * (buy_price - stop_loss_price)
+                    max_profit = position_qty * (take_profit_price - buy_price)
                     risk_reward_ratio = max_profit / max_loss if max_loss > 0 else 0
                     
-                    st.caption(f"💡 [{strategy}] 风险收益比：1:{risk_reward_ratio:.2f} | 最大风险：${max_loss:.2f} | 最大收益：${max_profit:.2f}")
+                    st.caption(f"💡 风险收益比：1:{risk_reward_ratio:.2f} | 最大风险：${max_loss:.2f} | 最大收益：${max_profit:.2f}")
                 
             else:
                 st.info("📊 正在获取股票价格数据...")
         else:
             st.warning("⚠️ 请先分析一只股票")
-            st.info("💡 点击'开始分析'后，这里将显示多策略止盈止损计算")
+            st.info("💡 点击'开始分析'后，这里将显示该股票的完整止盈止损计算")
             
             # 功能预览
-            st.markdown("#### 🎯 支持的策略类型")
-            strategy_preview_tabs = st.tabs(["固定比例法", "技术指标法", "波动率法", "跟踪止盈法"])
-            
-            with strategy_preview_tabs[0]:
-                st.write("📊 **固定比例法**: 简单的百分比止盈止损")
-                st.write("• 适合新手投资者")
-                st.write("• 默认设置：+15% / -10%")
-            
-            with strategy_preview_tabs[1]:
-                st.write("📈 **技术指标法**: 基于MACD、均线的动态止盈止损")
-                st.write("• 止损：MA20支撑位")
-                st.write("• 止盈：MA60上方20%")
-            
-            with strategy_preview_tabs[2]:
-                st.write("📊 **波动率法（ATR）**: 根据股票波动率动态设置")
-                st.write("• 止盈：当前价 + 2×ATR")
-                st.write("• 止损：当前价 - 1×ATR")
-            
-            with strategy_preview_tabs[3]:
-                st.write("📈 **跟踪止盈法**: 随盈利增加自动上移止损位")
-                st.write("• 盈利>20%：止损移至成本+10%")
-                st.write("• 盈利10-20%：止损移至成本价")
+            st.markdown("#### 📝 功能说明")
+            st.write("• 🔄 自动获取股票实时价格")
+            st.write("• 📝 输入买入价和仓位数量")
+            st.write("• 📊 计算当前盈亏百分比")
+            st.write("• 🎯 设置止盈止损比例")
+            st.write("• 🚨 智能操作提醒")
     
     st.markdown("---")
     
@@ -1088,48 +912,6 @@ with st.sidebar:
         - Z > 2.99：✅ 财务健康
         - 1.81-2.99：⚠️ 临界风险
         - Z < 1.81：🚨 高破产风险
-        
-        ---
-        
-        ### 🎯 止盈止损策略介绍
-        
-        为了满足不同投资偏好的用户，我们提供以下4种止盈止损策略，供你在分析过程中自由切换：
-        
-        **1. 固定比例法（默认推荐）**
-        - 🔰 简单直观，适合新手投资者
-        - 📊 默认设置：止盈 +15%，止损 -10%
-        - 💡 特点：规则明确，执行简单，风险可控
-        
-        **2. 技术指标法**
-        - 📈 结合 MACD、均线等技术图形判断趋势反转
-        - 🎯 止盈逻辑：MA60均线上方20%作为目标位
-        - 🛡️ 止损逻辑：MA20均线支撑位作为动态止损
-        - 💡 适用场景：趋势明确的股票，技术形态良好时
-        
-        **3. 波动率法（ATR）**
-        - 📊 动态识别个股的价格波动，自动设定合理止盈/止损距离
-        - 🎯 止盈设置：当前价 + 2×ATR（适应个股波动特性）
-        - 🛡️ 止损设置：当前价 - 1×ATR（控制风险敞口）
-        - 💡 适用场景：波动大、剧烈涨跌的个股，如成长股、科技股
-        
-        **4. 成本加码法（跟踪止盈）**
-        - 📈 利润区间自动上移止损价位，避免回吐利润
-        - 🎯 策略逻辑：
-          - 盈利 > 20%：止损移至成本价 + 10%
-          - 盈利 10-20%：止损移至成本价
-          - 盈利 < 10%：使用常规止损 -8%
-        - 💡 适用场景：长期趋势交易，成长性较好的股票
-        
-        ### 📚 策略选择建议
-        
-        | 投资者类型 | 推荐策略 | 适用场景 |
-        |------------|----------|----------|
-        | 新手投资者 | 固定比例法 | 所有股票类型 |
-        | 技术分析者 | 技术指标法 | 趋势明确的股票 |
-        | 量化交易者 | 波动率法(ATR) | 高波动股票 |
-        | 长期投资者 | 跟踪止盈法 | 成长股、价值股 |
-        
-        💡 **温馨提示**: 可根据不同股票特性和市场环境灵活切换策略，提高投资效果。
         """)
     
     with st.expander("📊 投资决策参考表"):
@@ -1147,7 +929,6 @@ with st.sidebar:
     st.markdown("- 输入股票代码后点击分析")
     st.markdown("- 系统将自动获取数据并进行全面分析")
     st.markdown("- 分析包含基本面、技术面和估值模型")
-    st.markdown("- 💰 支持4种止盈止损策略，适应不同投资风格")
 
 # 主界面
 if analyze_button and ticker:
