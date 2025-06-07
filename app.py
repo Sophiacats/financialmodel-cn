@@ -99,7 +99,7 @@ def fetch_financial_news(target_ticker=None):
                 ticker = yf.Ticker(target_ticker)
                 news = ticker.news
                 if news and len(news) > 0:
-                    for article in news[:3]:  # 目标股票取3条新闻
+                    for article in news[:4]:  # 目标股票取4条新闻
                         if article.get('title') and article.get('providerPublishTime'):
                             news_data.append({
                                 "title": article.get('title', ''),
@@ -120,7 +120,7 @@ def fetch_financial_news(target_ticker=None):
                     ticker = yf.Ticker(ticker_symbol)
                     news = ticker.news
                     if news and len(news) > 0:
-                        for article in news[:1]:  # 每个指数取1条
+                        for article in news[:2]:  # 每个指数取2条
                             if article.get('title') and article.get('providerPublishTime'):
                                 news_data.append({
                                     "title": article.get('title', ''),
@@ -136,7 +136,7 @@ def fetch_financial_news(target_ticker=None):
             pass
         
         # 方法3: 如果真实新闻不够，补充模拟新闻
-        if len(news_data) < 4:
+        if len(news_data) < 8:
             current_time = datetime.now()
             
             # 获取公司信息用于生成相关新闻
@@ -175,13 +175,29 @@ def fetch_financial_news(target_ticker=None):
                     "url": "",
                     "source": "全球经济",
                     "category": "market_wide"
+                },
+                {
+                    "title": "地缘政治局势缓解，市场避险情绪降温",
+                    "summary": "近期国际地缘政治紧张局势有所缓解，投资者避险情绪降温，资金重新流入股市等风险资产，黄金等避险资产回落。",
+                    "published": current_time - timedelta(hours=10),
+                    "url": "",
+                    "source": "国际政治",
+                    "category": "market_wide"
+                },
+                {
+                    "title": "经济数据显示复苏势头良好，市场信心增强",
+                    "summary": "最新发布的一系列经济指标显示经济复苏势头良好，就业市场稳定，消费支出增长，投资者对经济前景的信心进一步增强。",
+                    "published": current_time - timedelta(hours=14),
+                    "url": "",
+                    "source": "经济数据",
+                    "category": "market_wide"
                 }
             ]
             news_data.extend(market_wide_news)
         
         # 处理新闻数据，添加关键词和情绪分析
         processed_news = []
-        for news in news_data[:6]:  # 最多显示6条新闻
+        for news in news_data[:10]:  # 提高至10条新闻
             # 确保新闻内容不为空
             if not news.get('title'):
                 continue
@@ -265,6 +281,14 @@ def generate_company_specific_news(company_info, current_time):
                 "url": "",
                 "source": f"医药行业",
                 "category": "company_specific"
+            },
+            {
+                "title": f"生物技术领域投资热度不减，{ticker}等企业受益",
+                "summary": f"生物技术和医疗创新持续受到投资者青睐，{company_name}等医药企业在研发投入和产品创新方面的努力获得市场认可。",
+                "published": current_time - timedelta(hours=11),
+                "url": "",
+                "source": f"生物技术",
+                "category": "industry_specific"
             }
         ])
     
@@ -277,6 +301,14 @@ def generate_company_specific_news(company_info, current_time):
                 "url": "",
                 "source": f"金融行业",
                 "category": "company_specific"
+            },
+            {
+                "title": f"金融科技发展推动传统银行转型，{ticker}积极布局",
+                "summary": f"数字化转型浪潮下，{company_name}等传统金融机构加大科技投入，通过金融科技提升服务效率和客户体验。",
+                "published": current_time - timedelta(hours=13),
+                "url": "",
+                "source": f"金融科技",
+                "category": "industry_specific"
             }
         ])
     
@@ -289,6 +321,14 @@ def generate_company_specific_news(company_info, current_time):
                 "url": "",
                 "source": f"能源行业",
                 "category": "company_specific"
+            },
+            {
+                "title": f"可再生能源转型加速，{company_name}绿色投资引关注",
+                "summary": f"全球能源转型趋势下，{company_name}在清洁能源和可再生能源领域的布局成为投资者关注焦点。",
+                "published": current_time - timedelta(hours=15),
+                "url": "",
+                "source": f"绿色能源",
+                "category": "industry_specific"
             }
         ])
     
@@ -301,6 +341,14 @@ def generate_company_specific_news(company_info, current_time):
                 "url": "",
                 "source": f"消费行业",
                 "category": "company_specific"
+            },
+            {
+                "title": f"电商渗透率持续提升，{ticker}数字化转型成效显著",
+                "summary": f"线上消费趋势不断强化，{company_name}通过数字化转型和全渠道布局，在竞争激烈的消费市场中保持优势。",
+                "published": current_time - timedelta(hours=12),
+                "url": "",
+                "source": f"数字零售",
+                "category": "industry_specific"
             }
         ])
     
@@ -313,6 +361,14 @@ def generate_company_specific_news(company_info, current_time):
                 "url": "",
                 "source": f"汽车行业",
                 "category": "company_specific"
+            },
+            {
+                "title": f"自动驾驶技术突破，{ticker}等车企加大研发投入",
+                "summary": f"自动驾驶和智能汽车技术快速发展，{company_name}等汽车制造商在这一领域的技术积累和投资备受市场期待。",
+                "published": current_time - timedelta(hours=14),
+                "url": "",
+                "source": f"智能汽车",
+                "category": "industry_specific"
             }
         ])
     
@@ -327,7 +383,7 @@ def generate_company_specific_news(company_info, current_time):
             "category": "company_specific"
         })
     
-    return news_list[:2]  # 最多返回2条公司相关新闻
+    return news_list[:4]  # 最多返回4条公司相关新闻
 
 def extract_keywords(text):
     """从新闻文本中提取关键词"""
