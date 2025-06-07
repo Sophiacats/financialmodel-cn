@@ -157,16 +157,17 @@ def generate_company_news(company_info, current_time):
     return news_list[:4]
 
 def fetch_financial_news(target_ticker=None):
-    """获取财经新闻"""
+    """获取真实财经新闻"""
     try:
         current_time = datetime.now()
         news_data = []
         
-        # 获取公司信息
-        company_info = {}
+        # 方法1: 从yfinance获取真实新闻
         if target_ticker:
             try:
                 ticker_obj = yf.Ticker(target_ticker)
+                
+                # 获取公司信息
                 info = ticker_obj.info
                 company_info = {
                     'name': info.get('longName', target_ticker),
@@ -174,87 +175,192 @@ def fetch_financial_news(target_ticker=None):
                     'industry': info.get('industry', ''),
                     'ticker': target_ticker
                 }
-            except:
-                company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
+                
+                # 获取真实新闻
+                news = ticker_obj.news
+                if news and len(news) > 0:
+                    for article in news[:6]:  # 获取前6条真实新闻
+                        if article.get('title') and article.get('providerPublishTime'):
+                            # 提取关键词和分析情绪
+                            title_summary = article.get('title', '') + ' ' + article.get('summary', '')
+                            keywords = extract_keywords_from_text(title_summary)
+                            sentiment = analyze_sentiment_from_keywords(keywords)
+                            
+                            news_data.append({
+                                "title": article.get('title', ''),
+                                "summary": article.get('summary', article.get('title', ''))[:300] + '...' if len(article.get('summary', '')) > 300 else article.get('summary', ''),
+                                "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
+                                "url": article.get('link', ''),
+                                "source": article.get('publisher', 'Unknown'),
+                                "category": "company_specific",
+                                "keywords": keywords,
+                                "sentiment": sentiment
+                            })
+                            
+            except Exception as e:
+                st.warning(f"获取{target_ticker}新闻失败: {str(e)}")
         
-        # 生成公司特定新闻
-        company_news = generate_company_news(company_info, current_time)
-        news_data.extend(company_news)
+        # 方法2: 获取市场整体新闻
+        try:
+            market_indices = ["^GSPC", "^IXIC", "^DJI"]
+            for index_symbol in market_indices:
+                try:
+                    index_ticker = yf.Ticker(index_symbol)
+                    index_news = index_ticker.news
+                    if index_news and len(index_news) > 0:
+                        for article in index_news[:2]:  # 每个指数取2条
+                            if article.get('title') and article.get('providerPublishTime'):
+                                # 避免重复新闻
+                                if not any(existing['title'] == article.get('title') for existing in news_data):
+                                    title_summary = article.get('title', '') + ' ' + article.get('summary', '')
+                                    keywords = extract_keywords_from_text(title_summary)
+                                    sentiment = analyze_sentiment_from_keywords(keywords)
+                                    
+                                    news_data.append({
+                                        "title": article.get('title', ''),
+                                        "summary": article.get('summary', article.get('title', ''))[:300] + '...' if len(article.get('summary', '')) > 300 else article.get('summary', ''),
+                                        "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
+                                        "url": article.get('link', ''),
+                                        "source": article.get('publisher', 'Market News'),
+                                        "category": "market_wide",
+                                        "keywords": keywords,
+                                        "sentiment": sentiment
+                                    })
+                except Exception:
+                    continue
+        except Exception:
+            pass
         
-        # 添加市场广泛影响的新闻
-        market_news = [
-            {
-                "title": "美联储官员暗示未来可能调整利率政策",
-                "summary": "美联储高级官员在最新讲话中表示，将根据通胀数据和经济增长情况灵活调整货币政策。",
-                "published": current_time - timedelta(hours=2),
-                "source": "美联储政策",
-                "category": "market_wide",
-                "keywords": ["利率", "政策"],
-                "sentiment": "中性"
-            },
-            {
-                "title": "全球通胀数据好于预期，风险资产普遍上涨",
-                "summary": "最新公布的全球主要经济体通胀数据均好于市场预期，投资者风险偏好提升。",
-                "published": current_time - timedelta(hours=6),
-                "source": "全球经济",
-                "category": "market_wide",
-                "keywords": ["通胀", "上涨"],
-                "sentiment": "利好"
-            },
-            {
-                "title": "地缘政治局势缓解，市场避险情绪降温",
-                "summary": "近期国际地缘政治紧张局势有所缓解，投资者避险情绪降温。",
-                "published": current_time - timedelta(hours=10),
-                "source": "国际政治",
-                "category": "market_wide",
-                "keywords": ["地缘政治", "避险"],
-                "sentiment": "利好"
-            },
-            {
-                "title": "经济数据显示复苏势头良好，市场信心增强",
-                "summary": "最新发布的一系列经济指标显示经济复苏势头良好，投资者信心增强。",
-                "published": current_time - timedelta(hours=14),
-                "source": "经济数据",
-                "category": "market_wide",
-                "keywords": ["经济增长", "复苏"],
-                "sentiment": "利好"
-            },
-            {
-                "title": "投资者风险偏好回升，股市资金流入增加",
-                "summary": "随着市场不确定性减少，投资者风险偏好明显回升，资金持续流入股票市场。",
-                "published": current_time - timedelta(hours=16),
-                "source": "市场资金",
-                "category": "market_wide",
-                "keywords": ["资金流入", "风险偏好"],
-                "sentiment": "利好"
-            },
-            {
-                "title": "企业盈利预期改善，分析师上调目标价",
-                "summary": "多家券商分析师基于最新财报数据和业务前景，上调了多只个股的目标价格。",
-                "published": current_time - timedelta(hours=18),
-                "source": "分析师报告",
-                "category": "market_wide",
-                "keywords": ["盈利预期", "目标价"],
-                "sentiment": "利好"
-            }
-        ]
-        news_data.extend(market_news)
+        # 如果真实新闻不足，补充一些高质量的模拟新闻
+        while len(news_data) < 10:
+            # 获取公司信息用于生成补充新闻
+            company_info = {}
+            if target_ticker:
+                try:
+                    ticker_obj = yf.Ticker(target_ticker)
+                    info = ticker_obj.info
+                    company_info = {
+                        'name': info.get('longName', target_ticker),
+                        'sector': info.get('sector', ''),
+                        'industry': info.get('industry', ''),
+                        'ticker': target_ticker
+                    }
+                except:
+                    company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
+            
+            # 补充新闻
+            supplement_news = generate_supplement_news(company_info, current_time, len(news_data))
+            if supplement_news:
+                news_data.extend(supplement_news)
+            else:
+                break
         
-        # 按时间排序
+        # 按时间排序，最新的在前
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
         return news_data[:10]
         
     except Exception as e:
-        return [{
-            "title": "新闻服务暂时不可用",
-            "summary": "获取新闻时遇到技术问题，建议稍后重试。",
-            "published": datetime.now(),
-            "source": "系统",
-            "category": "system",
-            "keywords": ["技术", "问题"],
+        st.error(f"获取新闻失败: {str(e)}")
+        return generate_fallback_news()
+
+def extract_keywords_from_text(text):
+    """从文本中提取财经关键词"""
+    if not text:
+        return []
+    
+    text_lower = text.lower()
+    
+    # 财经关键词库
+    keyword_categories = {
+        "利率": ["rate", "interest", "fed", "federal reserve", "利率", "降息", "加息"],
+        "科技": ["tech", "technology", "ai", "artificial intelligence", "chip", "semiconductor", "科技", "人工智能", "芯片"],
+        "金融": ["bank", "financial", "finance", "credit", "loan", "银行", "金融", "信贷"],
+        "能源": ["energy", "oil", "gas", "petroleum", "renewable", "能源", "石油", "天然气"],
+        "上涨": ["up", "rise", "gain", "increase", "rally", "surge", "上涨", "增长", "上升"],
+        "下跌": ["down", "fall", "drop", "decline", "crash", "下跌", "下降", "暴跌"],
+        "通胀": ["inflation", "cpi", "consumer price", "通胀", "物价"],
+        "政策": ["policy", "regulation", "government", "政策", "监管", "政府"],
+        "经济增长": ["growth", "gdp", "economic", "economy", "经济", "增长"],
+        "市场": ["market", "stock", "trading", "investor", "市场", "股票", "投资"]
+    }
+    
+    found_keywords = []
+    for category, words in keyword_categories.items():
+        for word in words:
+            if word in text_lower:
+                found_keywords.append(category)
+                break
+    
+    return found_keywords[:5]
+
+def analyze_sentiment_from_keywords(keywords):
+    """根据关键词分析情绪"""
+    bullish_words = ["上涨", "增长", "利率", "科技", "经济增长"]
+    bearish_words = ["下跌", "通胀", "政策"]
+    
+    bullish_count = sum(1 for kw in keywords if kw in bullish_words)
+    bearish_count = sum(1 for kw in keywords if kw in bearish_words)
+    
+    if bullish_count > bearish_count:
+        return "利好"
+    elif bearish_count > bullish_count:
+        return "利空"
+    else:
+        return "中性"
+
+def generate_supplement_news(company_info, current_time, existing_count):
+    """生成补充新闻（当真实新闻不足时）"""
+    if existing_count >= 10:
+        return []
+    
+    supplement_news = []
+    
+    # 通用市场新闻
+    market_news_templates = [
+        {
+            "title": "全球股市波动加剧，投资者关注央行政策动向",
+            "summary": "受多重因素影响，全球主要股指出现波动。投资者密切关注各国央行的货币政策走向，市场避险情绪有所升温。",
+            "category": "market_wide",
+            "keywords": ["市场", "政策", "投资"],
             "sentiment": "中性"
-        }]
+        },
+        {
+            "title": "科技股集体反弹，AI概念再度受到市场追捧",
+            "summary": "人工智能相关企业股价普遍上涨，市场对科技创新的乐观情绪回升。分析师认为科技股仍具备长期投资价值。",
+            "category": "market_wide", 
+            "keywords": ["科技", "上涨", "人工智能"],
+            "sentiment": "利好"
+        }
+    ]
+    
+    # 根据需要添加补充新闻
+    remaining_slots = 10 - existing_count
+    for i, template in enumerate(market_news_templates[:remaining_slots]):
+        supplement_news.append({
+            **template,
+            "published": current_time - timedelta(hours=20 + i * 2),
+            "url": "",
+            "source": "Market Analysis"
+        })
+    
+    return supplement_news
+
+def generate_fallback_news():
+    """生成备用新闻（完全无法获取真实新闻时）"""
+    current_time = datetime.now()
+    return [{
+        "title": "无法获取实时新闻数据",
+        "summary": "当前网络环境无法访问新闻API，建议直接访问主要财经网站获取最新市场动态。",
+        "published": current_time,
+        "url": "",
+        "source": "系统提示",
+        "category": "system",
+        "keywords": ["系统", "网络"],
+        "sentiment": "中性"
+    }]
+
+import time
 
 def get_market_impact_advice(sentiment):
     """根据情绪给出市场影响建议"""
@@ -629,7 +735,6 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                     </span>
                     <span style="font-size: 11px; color: #999;">📰 {news.get('source', '')}</span>
                 </div>
-                <h4 style="margin: 8px 0; color: #333;">{news.get('title', '')}</h4>
                 <p style="color: #666; margin: 10px 0;">{news.get('summary', '')}</p>
                 <p style="font-size: 12px; color: #999;">
                     📅 {news.get('published', datetime.now()).strftime('%Y-%m-%d %H:%M')} | 
@@ -637,6 +742,53 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 </p>
             </div>
             """, unsafe_allow_html=True)
+            
+            # 新闻标题按钮（可点击链接）
+            news_url = news.get('url', '')
+            news_title = news.get('title', '无标题')
+            
+            if news_url and news_url.startswith('http'):
+                # 真实新闻链接
+                st.markdown(f"""
+                <a href="{news_url}" target="_blank" style="text-decoration: none;">
+                    <button style="
+                        background: linear-gradient(45deg, {border_color}, {border_color}dd);
+                        color: white;
+                        border: none;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: bold;
+                        width: 100%;
+                        margin: 10px 0;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'" 
+                       onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                        🔗 {news_title}
+                    </button>
+                </a>
+                """, unsafe_allow_html=True)
+            else:
+                # 模拟新闻（无链接）
+                st.markdown(f"""
+                <button style="
+                    background: linear-gradient(45deg, #999, #777);
+                    color: white;
+                    border: none;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    font-weight: bold;
+                    width: 100%;
+                    margin: 10px 0;
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                " disabled>
+                    📄 {news_title} (模拟新闻)
+                </button>
+                """, unsafe_allow_html=True)
             
             # 市场影响分析
             col_sentiment, col_impact = st.columns([1, 2])
