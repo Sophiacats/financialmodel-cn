@@ -29,7 +29,6 @@ if 'show_analysis' not in st.session_state:
 st.title("💹 智能投资分析系统 v2.0")
 st.markdown("---")
 
-# ==================== 数据获取函数 ====================
 @st.cache_data(ttl=3600)
 def fetch_stock_data(ticker):
     """获取股票数据"""
@@ -56,7 +55,6 @@ def fetch_stock_data(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
-# ==================== 新闻生成函数 ====================
 def generate_company_news(company_info, current_time):
     """根据公司信息生成相关新闻"""
     news_list = []
@@ -279,7 +277,6 @@ def get_market_impact_advice(sentiment):
             "action": "密切关注后续发展，保持灵活操作"
         }
 
-# ==================== 技术分析函数 ====================
 def calculate_technical_indicators(hist_data):
     """计算技术指标"""
     try:
@@ -408,7 +405,6 @@ def calculate_dcf_valuation(data):
     except Exception as e:
         return None, None
 
-# ==================== 主程序 ====================
 # 侧边栏
 with st.sidebar:
     st.header("📊 分析参数设置")
@@ -421,7 +417,7 @@ with st.sidebar:
         ### 系统功能
         1. **股票分析**: 财务指标、技术分析、估值模型
         2. **新闻分析**: 10条相关新闻，支持分页浏览
-        3. **止盈止损**: 4种智能策略模拟器
+        3. **止盈止损**: 智能策略建议
         
         ### 操作方法
         1. 输入股票代码（如AAPL、TSLA、MSFT）
@@ -499,153 +495,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                         else:
                             st.warning("📉 可能高估")
                 else:
-                    st.info(f"📊 **{sentiment}**")
-            
-            with col_impact:
-                impact_info = get_market_impact_advice(sentiment)
-                st.write(f"{impact_info['icon']} {impact_info['advice']}")
-                st.caption(f"💡 操作建议: {impact_info['action']}")
-            
-            st.markdown("---")
-        
-        # 分页导航
-        if total_pages > 1:
-            nav_cols = st.columns(3)
-            with nav_cols[1]:
-                st.markdown(f"<div style='text-align: center;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
-        
-        # 整体市场情绪分析
-        st.subheader("📊 整体市场情绪分析")
-        
-        bullish_count = sum(1 for news in news_data if news.get('sentiment') == '利好')
-        bearish_count = sum(1 for news in news_data if news.get('sentiment') == '利空')
-        neutral_count = sum(1 for news in news_data if news.get('sentiment') == '中性')
-        
-        col_stats1, col_stats2, col_stats3 = st.columns(3)
-        with col_stats1:
-            st.metric("📈 利好消息", bullish_count)
-        with col_stats2:
-            st.metric("📉 利空消息", bearish_count)
-        with col_stats3:
-            st.metric("📊 中性消息", neutral_count)
-        
-        # 整体建议
-        if bullish_count > bearish_count:
-            st.success("🟢 **整体市场情绪**: 偏向乐观")
-            st.info("💡 **投资建议**: 市场利好因素较多，可适当关注优质标的投资机会。")
-        elif bearish_count > bullish_count:
-            st.error("🔴 **整体市场情绪**: 偏向谨慎")
-            st.warning("⚠️ **投资建议**: 市场风险因素增加，建议降低仓位，关注防御性资产。")
-        else:
-            st.info("🟡 **整体市场情绪**: 相对平衡")
-            st.info("📊 **投资建议**: 市场情绪相对平衡，建议保持现有投资策略。")
-        
-        # 关键词分析
-        st.subheader("🔍 热点关键词")
-        all_keywords = []
-        for news in news_data:
-            all_keywords.extend(news.get('keywords', []))
-        
-        keyword_count = {}
-        for keyword in all_keywords:
-            keyword_count[keyword] = keyword_count.get(keyword, 0) + 1
-        
-        sorted_keywords = sorted(keyword_count.items(), key=lambda x: x[1], reverse=True)[:8]
-        
-        cols = st.columns(4)
-        for i, (keyword, count) in enumerate(sorted_keywords):
-            with cols[i % 4]:
-                st.metric(f"🏷️ {keyword}", f"{count}次")
-        
-        # 投资建议
-        st.subheader("💡 基于时事的投资提醒")
-        
-        suggestions = []
-        for keyword, count in sorted_keywords:
-            if keyword in ["利率", "降息"]:
-                suggestions.append("🟢 关注利率敏感行业：房地产、银行、基建等")
-            elif keyword in ["科技", "AI"]:
-                suggestions.append("🔵 关注科技成长股：人工智能、芯片、软件等")
-            elif keyword in ["新能源"]:
-                suggestions.append("⚡ 关注新能源产业链：电动车、光伏、电池等")
-        
-        unique_suggestions = list(set(suggestions))
-        for suggestion in unique_suggestions[:5]:
-            st.write(suggestion)
-        
-        st.markdown("---")
-        st.caption("📝 **数据来源**: 基于Yahoo Finance等财经数据源")
-        st.caption("⚠️ **免责声明**: 所有分析仅供参考，不构成投资建议。投资有风险，入市需谨慎。")
-
-else:
-    st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
-    
-    with st.expander("📖 系统功能介绍"):
-        st.markdown("""
-        ### 🎯 主要功能
-        
-        **📊 股票分析**
-        - 公司基本信息展示
-        - Piotroski F-Score财务健康评分
-        - DCF估值模型计算安全边际
-        - 技术指标分析（RSI、均线等）
-        - 智能止盈止损建议
-        
-        **📰 新闻分析**
-        - 10条相关新闻（公司+行业+市场）
-        - 智能分页浏览（每页5条）
-        - 自动情绪分析（利好/利空/中性）
-        - 市场影响评估和操作建议
-        - 热点关键词统计
-        - 整体市场情绪分析
-        
-        ### 🚀 使用方法
-        1. 在侧边栏输入股票代码（如AAPL、TSLA、MSFT等）
-        2. 点击"🔍 开始分析"按钮
-        3. 查看"📊 股票分析"标签页的财务和技术分析
-        4. 切换到"📰 最新时事分析"查看相关新闻
-        5. 使用分页功能浏览所有新闻内容
-        
-        ### 📋 注意事项
-        - 本系统仅供参考，不构成投资建议
-        - 请结合其他信息进行综合判断
-        - 投资有风险，入市需谨慎
-        """)
-    
-    with st.expander("🆕 v2.0 新功能特色"):
-        st.markdown("""
-        ### ✨ 智能新闻系统
-        - **个性化内容**: 根据搜索股票自动生成相关新闻
-        - **三级分类**: 🏢公司特定、🏭行业动态、🌍市场影响
-        - **完整分页**: 确保10条新闻，每页5条，支持翻页
-        - **视觉识别**: 不同颜色边框区分新闻类别
-        - **情绪分析**: 自动判断新闻对市场的影响
-        
-        ### 📈 专业分析工具
-        - **Piotroski F-Score**: 9分制财务健康评分
-        - **DCF估值模型**: 现金流折现计算内在价值
-        - **技术指标**: RSI、MACD、均线等专业指标
-        - **止盈止损**: 智能推荐买卖点位
-        
-        ### 🎯 用户体验优化
-        - **响应式设计**: 适配不同屏幕尺寸
-        - **实时计算**: 参数调整即时反馈
-        - **状态保存**: 避免重复加载数据
-        - **详细说明**: 每个功能都有使用指导
-        """)
-
-# 页脚
-st.markdown("---")
-col_footer1, col_footer2, col_footer3 = st.columns([1, 2, 1])
-with col_footer2:
-    if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
-        st.session_state.show_analysis = False
-        st.session_state.current_ticker = None
-        st.session_state.current_price = 0
-        st.session_state.analysis_data = None
-        st.rerun()
-
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
+                    st.info("DCF估值数据不足")
         
         # 右栏：技术分析
         with col3:
@@ -795,4 +645,128 @@ st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎
                 elif sentiment == "利空":
                     st.error(f"📉 **{sentiment}**")
                 else:
-                    st.info(
+                    st.info(f"📊 **{sentiment}**")
+            
+            with col_impact:
+                impact_info = get_market_impact_advice(sentiment)
+                st.write(f"{impact_info['icon']} {impact_info['advice']}")
+                st.caption(f"💡 操作建议: {impact_info['action']}")
+            
+            st.markdown("---")
+        
+        # 分页导航
+        if total_pages > 1:
+            nav_cols = st.columns(3)
+            with nav_cols[1]:
+                st.markdown(f"<div style='text-align: center;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
+        
+        # 整体市场情绪分析
+        st.subheader("📊 整体市场情绪分析")
+        
+        bullish_count = sum(1 for news in news_data if news.get('sentiment') == '利好')
+        bearish_count = sum(1 for news in news_data if news.get('sentiment') == '利空')
+        neutral_count = sum(1 for news in news_data if news.get('sentiment') == '中性')
+        
+        col_stats1, col_stats2, col_stats3 = st.columns(3)
+        with col_stats1:
+            st.metric("📈 利好消息", bullish_count)
+        with col_stats2:
+            st.metric("📉 利空消息", bearish_count)
+        with col_stats3:
+            st.metric("📊 中性消息", neutral_count)
+        
+        # 整体建议
+        if bullish_count > bearish_count:
+            st.success("🟢 **整体市场情绪**: 偏向乐观")
+            st.info("💡 **投资建议**: 市场利好因素较多，可适当关注优质标的投资机会。")
+        elif bearish_count > bullish_count:
+            st.error("🔴 **整体市场情绪**: 偏向谨慎")
+            st.warning("⚠️ **投资建议**: 市场风险因素增加，建议降低仓位，关注防御性资产。")
+        else:
+            st.info("🟡 **整体市场情绪**: 相对平衡")
+            st.info("📊 **投资建议**: 市场情绪相对平衡，建议保持现有投资策略。")
+        
+        # 关键词分析
+        st.subheader("🔍 热点关键词")
+        all_keywords = []
+        for news in news_data:
+            all_keywords.extend(news.get('keywords', []))
+        
+        keyword_count = {}
+        for keyword in all_keywords:
+            keyword_count[keyword] = keyword_count.get(keyword, 0) + 1
+        
+        sorted_keywords = sorted(keyword_count.items(), key=lambda x: x[1], reverse=True)[:8]
+        
+        cols = st.columns(4)
+        for i, (keyword, count) in enumerate(sorted_keywords):
+            with cols[i % 4]:
+                st.metric(f"🏷️ {keyword}", f"{count}次")
+        
+        # 投资建议
+        st.subheader("💡 基于时事的投资提醒")
+        
+        suggestions = []
+        for keyword, count in sorted_keywords:
+            if keyword in ["利率", "降息"]:
+                suggestions.append("🟢 关注利率敏感行业：房地产、银行、基建等")
+            elif keyword in ["科技", "AI"]:
+                suggestions.append("🔵 关注科技成长股：人工智能、芯片、软件等")
+            elif keyword in ["新能源"]:
+                suggestions.append("⚡ 关注新能源产业链：电动车、光伏、电池等")
+        
+        unique_suggestions = list(set(suggestions))
+        for suggestion in unique_suggestions[:5]:
+            st.write(suggestion)
+        
+        st.markdown("---")
+        st.caption("📝 **数据来源**: 基于Yahoo Finance等财经数据源")
+        st.caption("⚠️ **免责声明**: 所有分析仅供参考，不构成投资建议。投资有风险，入市需谨慎。")
+
+else:
+    st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
+    
+    with st.expander("📖 系统功能介绍"):
+        st.markdown("""
+        ### 🎯 主要功能
+        
+        **📊 股票分析**
+        - 公司基本信息展示
+        - Piotroski F-Score财务健康评分
+        - DCF估值模型计算安全边际
+        - 技术指标分析（RSI、均线等）
+        - 智能止盈止损建议
+        
+        **📰 新闻分析**
+        - 10条相关新闻（公司+行业+市场）
+        - 智能分页浏览（每页5条）
+        - 自动情绪分析（利好/利空/中性）
+        - 市场影响评估和操作建议
+        - 热点关键词统计
+        - 整体市场情绪分析
+        
+        ### 🚀 使用方法
+        1. 在侧边栏输入股票代码（如AAPL、TSLA、MSFT等）
+        2. 点击"🔍 开始分析"按钮
+        3. 查看"📊 股票分析"标签页的财务和技术分析
+        4. 切换到"📰 最新时事分析"查看相关新闻
+        5. 使用分页功能浏览所有新闻内容
+        
+        ### 📋 注意事项
+        - 本系统仅供参考，不构成投资建议
+        - 请结合其他信息进行综合判断
+        - 投资有风险，入市需谨慎
+        """)
+
+# 页脚
+st.markdown("---")
+col_footer1, col_footer2, col_footer3 = st.columns([1, 2, 1])
+with col_footer2:
+    if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
+        st.session_state.show_analysis = False
+        st.session_state.current_ticker = None
+        st.session_state.current_price = 0
+        st.session_state.analysis_data = None
+        st.rerun()
+
+st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
