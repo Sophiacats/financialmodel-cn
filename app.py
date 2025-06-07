@@ -1,4 +1,592 @@
-import streamlit as st
+# 显示分析结果
+if st.session_state.show_analysis and st.session_state.analysis_data is not None:
+    data = st.session_state.analysis_data
+    current_price = st.session_state.current_price
+    ticker = st.session_state.current_ticker
+    
+    # 主功能标签页
+    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 最新时事分析"])
+    
+    with main_tab1:
+        col1, col2, col3 = st.columns([1, 2, 1.5])
+        
+        # 左栏：基本信息
+        with col1:
+            st.subheader("📌 公司基本信息")
+            info = data['info']
+            
+            st.metric("公司名称", info.get('longName', ticker))
+            st.metric("当前股价", f"${current_price:.2f}")
+            st.metric("市值", f"${info.get('marketCap', 0)/1e9:.2f}B")
+            st.metric("行业", info.get('industry', 'N/A'))
+            st.metric("Beta", f"{info.get('beta', 0):.2f}")
+            
+            st.markdown("---")
+            st.metric("52周最高", f"${info.get('fiftyTwoWeekHigh', 0):.2f}")
+            st.metric("52周最低", f"${info.get('fiftyTwoWeekLow', 0):.2f}")
+        
+        # 中栏：分析结果
+        with col2:
+            st.subheader("📈 综合分析结果")
+            
+            # Piotroski F-Score
+            with st.expander("🔍 Piotroski F-Score 分析", expanded=True):
+                f_score, reasons = calculate_piotroski_score(data)
+                
+                score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
+                st.markdown(f"### 得分: <span style='color:{score_color}; font-size:24px'>{f_score}/9</span>", unsafe_allow_html=True)
+                
+                for reason in reasons:
+                    st.write(reason)
+                
+                if f_score >= 7:
+                    st.success("💡 建议: 财务健康状况良好，基本面强劲")
+                elif f_score >= 4:
+                    st.warning("💡 建议: 财务状况一般，需要谨慎评估")
+                else:
+                    st.error("💡 建议: 财务状况较差，投资风险较高")
+            
+            # 杜邦分析
+            with st.expander("📊 杜邦分析", expanded=True):
+                dupont = calculate_dupont_analysis(data)
+                if dupont:
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.metric("ROE", f"{dupont['roe']:.2f}%")
+                        st.metric("利润率", f"{dupont['profit_margin']:.2f}%")
+                    with col_b:
+                        st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
+                        st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
+                    
+                    st.write("📝 ROE = 利润率 × 资产周转率 × 权益乘数")
+            
+            # Altman Z-Score
+            with st.expander("💰 Altman Z-Score 财务健康度", expanded=True):
+                z_score, status, color = calculate_altman_z_score(data)
+                if z_score:
+                    st.markdown(f"### Z-Score: <span style='color:{color}; font-size:24px'>{z_score:.2f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**状态**: <span style='color:{color}'>{status}</span>", unsafe_allow_html=True)
+                    
+                    if z_score > 2.99:
+                        st.success("✅ 财务健康 - 企业财务状况良好，破产风险极低")
+                    elif z_score >= 1.81:
+                        st.warning("⚠️ 临界风险 - 企业处于灰色地带，需要密切关注")
+                    else:
+                        st.error("🚨 高破产风险 - 企业财务状况堪忧，投资需谨慎")
+                    
+                    st.write("📊 评分标准:")
+                    st.write("- Z > 2.99: 安全区域")
+                    st.write("- 1.8 < Z < 2.99: 灰色区域")
+                    st.write("- Z < 1.8: 危险区域")
+            
+            # DCF估值分析
+            with st.expander("💎 DCF估值分析", expanded=True):
+                dcf_value, dcf_params = calculate_dcf_valuation(data)
+                
+                if dcf_value and current_price > 0:
+                    st.write("**DCF估值**")
+                    col_x, col_y = st.columns(2)
+                    with col_x:
+                        st.metric("合理价值", f"${dcf_value:.2f}")
+                        st.metric("当前价格", f"${current_price:.2f}")
+                    with col_y:
+                        margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
+                        st.metric("安全边际", f"{margin:.2f}%")
+                    
+                    if dcf_params:
+                        st.write("**📊 DCF模型参数详情**")
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
+                            st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
+                        with col_b:
+                            st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
+                            st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
+                        with col_c:
+                            st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
+                            st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
+                        
+                        st.write("**预测期现金流（百万美元）**")
+                        fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
+                        fcf_df['fcf'] = fcf_df['fcf'] / 1e6
+                        fcf_df['pv'] = fcf_df['pv'] / 1e6
+                        fcf_df.columns = ['年份', '预测FCF', '现值']
+                        st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
+                        
+                        st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
+                        st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
+                else:
+                    st.info("DCF估值数据不足")
+        
+        # 右栏：技术分析和止盈止损模拟器
+        with col3:
+            st.subheader("📉 技术分析与建议")
+            
+            # 计算技术指标
+            hist_data = data['hist_data'].copy()
+            hist_data = calculate_technical_indicators(hist_data)
+            
+            # 价格走势图
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(hist_data.index[-180:], hist_data['Close'][-180:], label='Close', linewidth=2)
+            if 'MA20' in hist_data.columns:
+                ax.plot(hist_data.index[-180:], hist_data['MA20'][-180:], label='MA20', alpha=0.7)
+            if 'MA60' in hist_data.columns:
+                ax.plot(hist_data.index[-180:], hist_data['MA60'][-180:], label='MA60', alpha=0.7)
+            ax.set_title(f'{ticker} Price Trend (Last 180 Days)')
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Price ($)')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # MACD图
+            if 'MACD' in hist_data.columns:
+                fig2, ax2 = plt.subplots(figsize=(10, 4))
+                ax2.plot(hist_data.index[-90:], hist_data['MACD'][-90:], label='MACD', color='blue')
+                ax2.plot(hist_data.index[-90:], hist_data['Signal'][-90:], label='Signal', color='red')
+                ax2.bar(hist_data.index[-90:], hist_data['MACD_Histogram'][-90:], label='Histogram', alpha=0.3)
+                ax2.set_title('MACD Indicator')
+                ax2.legend()
+                ax2.grid(True, alpha=0.3)
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                st.pyplot(fig2)
+            
+            # 技术分析结论展示
+            st.markdown("---")
+            st.subheader("📊 技术指标快速解读")
+            
+            # 计算技术信号
+            technical_signals = analyze_technical_signals(hist_data)
+            latest = hist_data.iloc[-1]
+            
+            # 技术指标状态卡片
+            tech_col1, tech_col2 = st.columns(2)
+            
+            with tech_col1:
+                # MACD 状态
+                if technical_signals['macd_golden_cross']:
+                    st.success("🔺 MACD：金叉（看涨信号）")
+                elif technical_signals['macd_death_cross']:
+                    st.error("🔻 MACD：死叉（看跌信号）")
+                else:
+                    if 'MACD' in hist_data.columns and 'Signal' in hist_data.columns:
+                        macd_val = latest['MACD']
+                        signal_val = latest['Signal']
+                        if macd_val > signal_val:
+                            st.info("📈 MACD：多头排列")
+                        else:
+                            st.warning("📉 MACD：空头排列")
+                
+                # 均线状态
+                if technical_signals['ma_golden_cross']:
+                    st.success("🔺 均线：金叉突破")
+                elif technical_signals['ma_death_cross']:
+                    st.error("🔻 均线：死叉下破")
+                elif 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
+                    if latest['MA10'] > latest['MA60']:
+                        st.info("📈 均线：多头排列")
+                    else:
+                        st.warning("📉 均线：空头排列")
+            
+            with tech_col2:
+                # RSI 状态
+                if 'RSI' in hist_data.columns:
+                    rsi_value = latest['RSI']
+                    if rsi_value > 70:
+                        st.error(f"⚠️ RSI：{rsi_value:.1f} → 超买状态")
+                    elif rsi_value < 30:
+                        st.success(f"💡 RSI：{rsi_value:.1f} → 超卖状态")
+                    else:
+                        st.info(f"📊 RSI：{rsi_value:.1f} → 正常区间")
+                
+                # 布林带状态
+                if 'BB_Upper' in hist_data.columns and 'BB_Lower' in hist_data.columns:
+                    close_price = latest['Close']
+                    bb_upper = latest['BB_Upper']
+                    bb_lower = latest['BB_Lower']
+                    bb_middle = latest['BB_Middle']
+                    
+                    if close_price > bb_upper:
+                        st.warning("🔺 布林带：突破上轨")
+                    elif close_price < bb_lower:
+                        st.success("🔻 布林带：跌破下轨")
+                    elif close_price > bb_middle:
+                        st.info("📈 布林带：上半区运行")
+                    else:
+                        st.info("📉 布林带：下半区运行")
+            
+            # Altman Z-score 简洁展示
+            st.markdown("---")
+            z_score, status, color = calculate_altman_z_score(data)
+            if z_score and z_score > 0:
+                if color == "green":
+                    st.success(f"📊 破产风险评分（Altman Z-score）：{z_score:.2f} ✅ {status}")
+                elif color == "orange":
+                    st.warning(f"📊 破产风险评分（Altman Z-score）：{z_score:.2f} ⚠️ {status}")
+                else:
+                    st.error(f"📊 破产风险评分（Altman Z-score）：{z_score:.2f} 🚨 {status}")
+            else:
+                st.info("📊 破产风险评分：数据不足，无法计算")
+            
+            # 智能止盈止损模拟器（保持原有功能不变）
+            st.markdown("---")
+            st.subheader("💰 智能止盈止损模拟器")
+            
+            st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
+            
+            # 输入参数
+            col_input1, col_input2 = st.columns(2)
+            with col_input1:
+                default_buy_price = current_price * 0.95
+                buy_price = st.number_input(
+                    "买入价格 ($)", 
+                    min_value=0.01, 
+                    value=default_buy_price, 
+                    step=0.01, 
+                    key=f"buy_price_{ticker}"
+                )
+            with col_input2:
+                position_size = st.number_input(
+                    "持仓数量", 
+                    min_value=1, 
+                    value=100, 
+                    step=1,
+                    key=f"position_size_{ticker}"
+                )
+            
+            # 基础计算
+            position_value = position_size * buy_price
+            current_value = position_size * current_price
+            pnl = current_value - position_value
+            pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
+            
+            # 四种策略标签页
+            st.markdown("#### 🎯 选择止盈止损策略")
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "📊 固定比例法", 
+                "📈 技术指标法", 
+                "📉 波动率法", 
+                "🎯 成本加码法"
+            ])
+            
+            # 策略1：固定比例法
+            with tab1:
+                st.write("**适用场景**: 大多数波动性股票，适合稳健型投资者")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    tp_pct = st.slider("止盈比例 (%)", 5, 50, 15, key=f"tp1_{ticker}")
+                with col2:
+                    sl_pct = st.slider("止损比例 (%)", 3, 20, 10, key=f"sl1_{ticker}")
+                
+                stop_loss = buy_price * (1 - sl_pct / 100)
+                take_profit = buy_price * (1 + tp_pct / 100)
+                
+                col_m1, col_m2, col_m3 = st.columns(3)
+                with col_m1:
+                    st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                with col_m2:
+                    st.metric("🛡️ 止损价位", f"${stop_loss:.2f}")
+                with col_m3:
+                    st.metric("🎯 止盈价位", f"${take_profit:.2f}")
+                
+                if current_price <= stop_loss:
+                    st.error("⚠️ 已触及止损线！")
+                elif current_price >= take_profit:
+                    st.success("🎯 已达到止盈目标！")
+                else:
+                    st.info("📊 持仓正常")
+                
+                # 风险收益分析
+                risk_amount = position_size * (buy_price - stop_loss)
+                reward_amount = position_size * (take_profit - buy_price)
+                rr_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
+                st.caption(f"💡 风险收益比：1:{rr_ratio:.2f}")
+            
+            # 策略2：技术指标法
+            with tab2:
+                st.write("**适用场景**: 基于支撑阻力位、布林带等技术分析")
+                
+                # 计算技术位
+                if len(hist_data) > 20:
+                    latest = hist_data.iloc[-1]
+                    support = hist_data['Low'].rolling(20).min().iloc[-1]
+                    resistance = hist_data['High'].rolling(20).max().iloc[-1]
+                    
+                    if 'BB_Lower' in hist_data.columns:
+                        bb_lower = latest['BB_Lower']
+                        bb_upper = latest['BB_Upper']
+                    else:
+                        bb_lower = current_price * 0.95
+                        bb_upper = current_price * 1.05
+                    
+                    tech_method = st.selectbox(
+                        "技术指标方法",
+                        ["布林带策略", "支撑阻力位", "均线支撑"],
+                        key=f"tech_method_{ticker}"
+                    )
+                    
+                    if tech_method == "布林带策略":
+                        tech_sl = bb_lower * 0.98
+                        tech_tp = bb_upper * 1.02
+                    elif tech_method == "支撑阻力位":
+                        tech_sl = support * 0.98
+                        tech_tp = resistance * 1.02
+                    else:
+                        ma20 = latest['MA20'] if 'MA20' in hist_data.columns else current_price * 0.98
+                        tech_sl = ma20 * 0.98
+                        tech_tp = current_price * 1.15
+                    
+                    col_t1, col_t2, col_t3 = st.columns(3)
+                    with col_t1:
+                        st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                    with col_t2:
+                        st.metric("🛡️ 技术止损", f"${tech_sl:.2f}")
+                    with col_t3:
+                        st.metric("🎯 技术止盈", f"${tech_tp:.2f}")
+                    
+                    st.write(f"• 支撑位: ${support:.2f}")
+                    st.write(f"• 阻力位: ${resistance:.2f}")
+                else:
+                    st.warning("数据不足，无法计算技术指标")
+            
+            # 策略3：波动率法
+            with tab3:
+                st.write("**适用场景**: 根据股票波动性调整，高波动股票设置更大空间")
+                
+                if len(hist_data) > 14:
+                    # 计算ATR
+                    high_low = hist_data['High'] - hist_data['Low']
+                    high_close = np.abs(hist_data['High'] - hist_data['Close'].shift())
+                    low_close = np.abs(hist_data['Low'] - hist_data['Close'].shift())
+                    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+                    atr = tr.rolling(14).mean().iloc[-1]
+                    
+                    # 计算波动率
+                    returns = hist_data['Close'].pct_change().dropna()
+                    volatility = returns.std() * np.sqrt(252) * 100
+                    
+                    atr_mult = st.slider("ATR倍数", 1.0, 4.0, 2.0, 0.1, key=f"atr_{ticker}")
+                    
+                    vol_sl = max(buy_price - atr * atr_mult, buy_price * 0.90)
+                    vol_tp = buy_price * 1.15
+                    
+                    col_v1, col_v2, col_v3 = st.columns(3)
+                    with col_v1:
+                        st.metric("ATR", f"${atr:.2f}")
+                    with col_v2:
+                        st.metric("年化波动率", f"{volatility:.1f}%")
+                    with col_v3:
+                        vol_level = "高" if volatility > 30 else "中" if volatility > 20 else "低"
+                        st.metric("波动等级", vol_level)
+                    
+                    col_vm1, col_vm2, col_vm3 = st.columns(3)
+                    with col_vm1:
+                        st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                    with col_vm2:
+                        st.metric("🛡️ ATR止损", f"${vol_sl:.2f}")
+                    with col_vm3:
+                        st.metric("🎯 波动率止盈", f"${vol_tp:.2f}")
+                else:
+                    st.warning("数据不足，无法计算波动率指标")
+            
+            # 策略4：成本加码法
+            with tab4:
+                st.write("**适用场景**: 根据盈利情况动态调整，保护利润追求更大收益")
+                
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    profit_threshold = st.slider("利润阈值 (%)", 5, 30, 10, key=f"profit_{ticker}")
+                with col_c2:
+                    trailing_dist = st.slider("追踪距离 (%)", 3, 15, 5, key=f"trail_{ticker}")
+                
+                threshold_price = buy_price * (1 + profit_threshold / 100)
+                
+                if current_price >= threshold_price:
+                    # 动态止损激活
+                    dynamic_sl = max(buy_price * 1.02, current_price * (1 - trailing_dist / 100))
+                    status = f"🟢 动态止损激活 (突破{profit_threshold}%)"
+                    dynamic_tp = buy_price * 1.25
+                else:
+                    # 普通止损
+                    dynamic_sl = buy_price * 0.92
+                    need_rise = ((threshold_price - current_price) / current_price * 100)
+                    status = f"🔵 等待激活 (需上涨{need_rise:.1f}%)"
+                    dynamic_tp = threshold_price
+                
+                st.info(status)
+                
+                # 分阶段目标
+                stage1 = threshold_price
+                stage2 = buy_price * 1.20
+                stage3 = buy_price * 1.35
+                
+                col_cm1, col_cm2, col_cm3 = st.columns(3)
+                with col_cm1:
+                    st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                with col_cm2:
+                    st.metric("🛡️ 动态止损", f"${dynamic_sl:.2f}")
+                with col_cm3:
+                    st.metric("🎯 当前目标", f"${dynamic_tp:.2f}")
+                
+                st.markdown("**分阶段目标**")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    s1_status = "✅" if current_price >= stage1 else "⏳"
+                    st.write(f"{s1_status} 阶段1: ${stage1:.2f}")
+                with col_s2:
+                    s2_status = "✅" if current_price >= stage2 else "⏳"
+                    st.write(f"{s2_status} 阶段2: ${stage2:.2f}")
+                with col_s3:
+                    s3_status = "✅" if current_price >= stage3 else "⏳"
+                    st.write(f"{s3_status} 阶段3: ${stage3:.2f}")
+            
+            # 策略推荐（简化版）
+            st.markdown("---")
+            st.markdown("#### 💡 当前推荐策略")
+            
+            try:
+                returns = hist_data['Close'].pct_change().dropna()
+                volatility = returns.std() * np.sqrt(252) * 100
+                
+                if volatility > 30:
+                    st.info("🔥 **推荐波动率法** - 当前股票波动性较高")
+                elif pnl_pct > 5:
+                    st.info("📈 **推荐成本加码法** - 当前有盈利，适合动态管理")
+                elif len(hist_data) > 20 and 'BB_Middle' in hist_data.columns:
+                    st.info("📊 **推荐技术指标法** - 技术形态明确")
+                else:
+                    st.info("🎯 **推荐固定比例法** - 市场信号不明确时最为稳健")
+            except:
+                st.info("🎯 **推荐固定比例法** - 适合大多数投资场景")
+            
+            # 风险提示
+            st.warning("""
+            ⚠️ **风险提示**: 所有策略仅供参考，实际投资需结合市场环境。
+            止损是风险管理工具，执行纪律比策略更重要。投资有风险，入市需谨慎。
+            """)
+    
+    with main_tab2:
+        st.subheader("📰 最新时事分析")
+        st.info("💡 基于最新财经新闻的市场影响分析，辅助投资决策")
+        
+        # 获取新闻数据
+        news_data = fetch_financial_news()
+        
+        # 新闻展示
+        for i, news in enumerate(news_data):
+            with st.container():
+                # 新闻卡片
+                st.markdown(f"""
+                <div style="border: 1px solid #ddd; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: #fafafa;">
+                    <h4 style="margin-top: 0; color: #333;">{news['title']}</h4>
+                    <p style="color: #666; margin: 10px 0;">{news['summary']}</p>
+                    <p style="font-size: 12px; color: #999;">
+                        📅 发布时间: {news['published'].strftime('%Y-%m-%d %H:%M')} | 
+                        🏷️ 关键词: {', '.join(news['keywords'])}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 市场影响分析
+                col_sentiment, col_impact = st.columns([1, 2])
+                
+                with col_sentiment:
+                    sentiment = news['sentiment']
+                    if sentiment == "利好":
+                        st.success(f"📈 **{sentiment}**")
+                    elif sentiment == "利空":
+                        st.error(f"📉 **{sentiment}**")
+                    else:
+                        st.info(f"📊 **{sentiment}**")
+                
+                with col_impact:
+                    impact_info = get_market_impact_advice(sentiment)
+                    st.write(f"{impact_info['icon']} {impact_info['advice']}")
+                    st.caption(f"💡 操作建议: {impact_info['action']}")
+                
+                st.markdown("---")
+        
+        # 整体市场情绪分析
+        st.subheader("📊 整体市场情绪分析")
+        
+        # 计算情绪统计
+        bullish_count = sum(1 for news in news_data if news['sentiment'] == '利好')
+        bearish_count = sum(1 for news in news_data if news['sentiment'] == '利空')
+        neutral_count = sum(1 for news in news_data if news['sentiment'] == '中性')
+        
+        col_stats1, col_stats2, col_stats3 = st.columns(3)
+        with col_stats1:
+            st.metric("📈 利好消息", bullish_count)
+        with col_stats2:
+            st.metric("📉 利空消息", bearish_count)
+        with col_stats3:
+            st.metric("📊 中性消息", neutral_count)
+        
+        # 整体建议
+        if bullish_count > bearish_count:
+            overall_sentiment = "偏向乐观"
+            st.success(f"🟢 **整体市场情绪**: {overall_sentiment}")
+            st.info("💡 **投资建议**: 市场利好因素较多，可适当关注优质标的的投资机会，但仍需注意风险控制。")
+        elif bearish_count > bullish_count:
+            overall_sentiment = "偏向谨慎"
+            st.error(f"🔴 **整体市场情绪**: {overall_sentiment}")
+            st.warning("⚠️ **投资建议**: 市场风险因素增加，建议降低仓位，关注防御性资产，等待更好的投资时机。")
+        else:
+            overall_sentiment = "相对平衡"
+            st.info(f"🟡 **整体市场情绪**: {overall_sentiment}")
+            st.info("📊 **投资建议**: 市场情绪相对平衡，建议保持现有投资策略，密切关注后续发展。")
+        
+        # 关键词词云（简化版）
+        st.subheader("🔍 热点关键词")
+        all_keywords = []
+        for news in news_data:
+            all_keywords.extend(news['keywords'])
+        
+        keyword_count = {}
+        for keyword in all_keywords:
+            keyword_count[keyword] = keyword_count.get(keyword, 0) + 1
+        
+        # 显示最热关键词
+        sorted_keywords = sorted(keyword_count.items(), key=lambda x: x[1], reverse=True)[:8]
+        
+        cols = st.columns(4)
+        for i, (keyword, count) in enumerate(sorted_keywords):
+            with cols[i % 4]:
+                st.metric(f"🏷️ {keyword}", f"{count}次")
+        
+        # 投资提醒
+        st.subheader("💡 基于时事的投资提醒")
+        
+        # 根据关键词给出具体建议
+        investment_suggestions = []
+        
+        for keyword, count in sorted_keywords:
+            if keyword in ["降息", "利好"]:
+                investment_suggestions.append("🟢 关注利率敏感性行业：房地产、基建、银行等")
+            elif keyword in ["AI", "科技股"]:
+                investment_suggestions.append("🔵 关注科技成长股：人工智能、芯片、软件等")
+            elif keyword in ["新能源", "电动车"]:
+                investment_suggestions.append("⚡ 关注新能源产业链：电池、充电桩、光伏等")
+            elif keyword in ["地缘政治", "避险"]:
+                investment_suggestions.append("🟡 关注避险资产：黄金、国债、公用事业等")
+            elif keyword in ["通胀", "消费"]:
+                investment_suggestions.append("🛒 关注消费防守板块：食品饮料、医药、日用品等")
+        
+        # 去重并显示建议
+        unique_suggestions = list(set(investment_suggestions))
+        for suggestion in unique_suggestions[:5]:  # 最多显示5个建议
+            st.write(suggestion)
+        
+        # 数据来源说明
+        st.markdown("---")
+        st.caption("📝 **数据来源**: 实时从Yahoo Finance、CNBC、MarketWatch等财经网站获取最新新闻")
+        st.caption("🔄 **更新频率**: 新闻数据实时更新，建议定期刷新页面获取最新信息")
+        st.caption("⚠️ **免责声明**: 时事分析仅供参考，不构成投资建议。投资决策应基于个人判断和专业咨询。")import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -83,7 +671,218 @@ def fetch_stock_data_uncached(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
-# ==================== 分析函数 ====================
+# ==================== 时事分析函数 ====================
+import requests
+import json
+from datetime import datetime, timedelta
+
+def fetch_financial_news():
+    """获取真实财经新闻"""
+    try:
+        # 使用多个免费新闻源
+        news_data = []
+        
+        # 1. 尝试从Yahoo Finance获取新闻
+        try:
+            import yfinance as yf
+            # 获取市场相关新闻
+            tickers = ["^GSPC", "^IXIC", "^DJI"]  # S&P 500, NASDAQ, Dow Jones
+            for ticker_symbol in tickers:
+                ticker = yf.Ticker(ticker_symbol)
+                news = ticker.news
+                if news:
+                    for article in news[:2]:  # 每个指数取2条
+                        news_data.append({
+                            "title": article.get('title', ''),
+                            "summary": article.get('summary', article.get('title', '')),
+                            "published": datetime.fromtimestamp(article.get('providerPublishTime', 0)),
+                            "url": article.get('link', ''),
+                            "source": "Yahoo Finance"
+                        })
+        except:
+            pass
+        
+        # 2. 尝试从RSS新闻源获取
+        try:
+            import feedparser
+            
+            # 财经新闻RSS源
+            rss_feeds = [
+                "https://feeds.finance.yahoo.com/rss/2.0/headline",
+                "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+                "https://www.marketwatch.com/rss/topstories"
+            ]
+            
+            for feed_url in rss_feeds:
+                try:
+                    feed = feedparser.parse(feed_url)
+                    for entry in feed.entries[:3]:  # 每个源取3条
+                        published_time = datetime.now()
+                        if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                            published_time = datetime(*entry.published_parsed[:6])
+                        
+                        news_data.append({
+                            "title": entry.get('title', ''),
+                            "summary": entry.get('summary', entry.get('description', '')),
+                            "published": published_time,
+                            "url": entry.get('link', ''),
+                            "source": feed_url.split('/')[2]
+                        })
+                except:
+                    continue
+        except ImportError:
+            # 如果没有feedparser，使用requests直接获取
+            pass
+        
+        # 3. 如果前面的方法都失败，使用备用的新闻API
+        if not news_data:
+            try:
+                # 使用NewsAPI（需要API key，这里提供免费备选方案）
+                # 或者使用其他免费新闻源
+                response = requests.get(
+                    "https://api.rss2json.com/v1/api.json",
+                    params={
+                        "rss_url": "https://feeds.finance.yahoo.com/rss/2.0/headline",
+                        "api_key": "free",  # 免费API key
+                        "count": 10
+                    },
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    for item in data.get('items', []):
+                        news_data.append({
+                            "title": item.get('title', ''),
+                            "summary": item.get('description', ''),
+                            "published": datetime.fromisoformat(item.get('pubDate', '').replace('Z', '+00:00')) if item.get('pubDate') else datetime.now(),
+                            "url": item.get('link', ''),
+                            "source": "Yahoo Finance RSS"
+                        })
+            except:
+                pass
+        
+        # 4. 如果所有方法都失败，返回基础市场信息
+        if not news_data:
+            news_data = [{
+                "title": "无法获取实时新闻数据",
+                "summary": "当前网络环境无法访问新闻API，请检查网络连接或稍后重试。建议查看主要财经网站获取最新市场动态。",
+                "published": datetime.now(),
+                "url": "",
+                "source": "系统提示"
+            }]
+        
+        # 处理新闻数据，添加关键词和情绪分析
+        processed_news = []
+        for news in news_data[:8]:  # 最多取8条新闻
+            keywords = extract_keywords(news['title'] + ' ' + news['summary'])
+            sentiment, _ = analyze_news_sentiment(keywords)
+            
+            processed_news.append({
+                **news,
+                'keywords': keywords,
+                'sentiment': sentiment
+            })
+        
+        return processed_news
+        
+    except Exception as e:
+        # 错误处理
+        return [{
+            "title": f"新闻获取遇到问题: {str(e)}",
+            "summary": "系统正在尝试从多个新闻源获取数据，请稍后刷新页面重试。",
+            "published": datetime.now(),
+            "url": "",
+            "source": "系统",
+            "keywords": ["系统", "错误"],
+            "sentiment": "中性"
+        }]
+
+def extract_keywords(text):
+    """从新闻文本中提取关键词"""
+    # 财经相关关键词库
+    financial_keywords = {
+        # 货币政策
+        "利率": ["利率", "降息", "加息", "基准利率", "联邦基金利率"],
+        "货币政策": ["货币政策", "央行", "美联储", "QE", "量化宽松"],
+        
+        # 市场情绪
+        "上涨": ["上涨", "上升", "增长", "涨幅", "大涨", "暴涨"],
+        "下跌": ["下跌", "下降", "跌幅", "大跌", "暴跌", "下滑"],
+        
+        # 行业板块
+        "科技": ["科技", "AI", "人工智能", "芯片", "半导体", "软件"],
+        "金融": ["银行", "保险", "券商", "金融", "信贷"],
+        "能源": ["石油", "天然气", "新能源", "电动车", "光伏", "风电"],
+        "消费": ["消费", "零售", "餐饮", "旅游", "酒店"],
+        
+        # 经济指标
+        "通胀": ["通胀", "CPI", "PPI", "物价"],
+        "就业": ["就业", "失业率", "就业数据", "非农"],
+        "GDP": ["GDP", "经济增长", "国内生产总值"],
+        
+        # 政策监管
+        "政策": ["政策", "监管", "法规", "政府"],
+        "贸易": ["贸易", "关税", "进出口", "贸易战"],
+        
+        # 风险事件
+        "地缘政治": ["地缘", "战争", "冲突", "制裁"],
+        "疫情": ["疫情", "病毒", "感染", "封锁"]
+    }
+    
+    text_lower = text.lower()
+    found_keywords = []
+    
+    for category, words in financial_keywords.items():
+        for word in words:
+            if word.lower() in text_lower:
+                found_keywords.append(category)
+                break
+    
+    # 如果没找到关键词，尝试直接提取一些常见词汇
+    if not found_keywords:
+        common_words = ["股市", "投资", "财报", "业绩", "收益", "股价", "市场"]
+        for word in common_words:
+            if word in text:
+                found_keywords.append(word)
+    
+    return found_keywords[:5]  # 最多返回5个关键词
+
+def analyze_news_sentiment(keywords):
+    """分析新闻关键词的市场情绪"""
+    bullish_keywords = ["上涨", "增长", "利好", "降息", "政策", "超预期", "科技", "消费"]
+    bearish_keywords = ["下跌", "加息", "利空", "风险", "地缘政治", "通胀", "监管"]
+    
+    bullish_count = sum(1 for keyword in keywords if keyword in bullish_keywords)
+    bearish_count = sum(1 for keyword in keywords if keyword in bearish_keywords)
+    
+    if bullish_count > bearish_count:
+        return "利好", "green"
+    elif bearish_count > bullish_count:
+        return "利空", "red"
+    else:
+        return "中性", "gray"
+
+def get_market_impact_advice(sentiment):
+    """根据情绪给出市场影响建议"""
+    if sentiment == "利好":
+        return {
+            "icon": "📈",
+            "advice": "积极因素，可关注相关板块机会",
+            "action": "建议关注相关概念股，适当增加仓位"
+        }
+    elif sentiment == "利空":
+        return {
+            "icon": "📉", 
+            "advice": "风险因素，建议谨慎操作",
+            "action": "降低风险敞口，关注防御性板块"
+        }
+    else:
+        return {
+            "icon": "📊",
+            "advice": "中性影响，维持现有策略",
+            "action": "密切关注后续发展，保持灵活操作"
+        }
 def calculate_technical_indicators(hist_data):
     """计算技术指标"""
     try:
@@ -408,13 +1207,13 @@ with st.sidebar:
         - 正值：股价低于估值，存在低估
         - 负值：股价高于估值，存在高估
         - 建议：
-          - 50%：强买入
+          - > 50%：强买入
           - 20-50%：买入
           - 0-20%：观察
           - < 0%：避免
         
         **2. 信心度 (Confidence)**
-        - 70%：高信心度
+        - > 70%：高信心度
         - 50-70%：中等信心
         - < 50%：低信心度
         
@@ -508,13 +1307,13 @@ with st.sidebar:
         **ROE = 利润率 × 资产周转率 × 权益乘数**
         
         - **利润率**: 每1元销售收入的净利润
-          - 15%: 优秀
+          - >15%: 优秀
           - 10-15%: 良好
           - 5-10%: 一般
           - <5%: 较差
         
         - **资产周转率**: 资产使用效率
-          - 1.5: 高效
+          - >1.5: 高效
           - 1.0-1.5: 正常
           - 0.5-1.0: 偏低
           - <0.5: 低效
