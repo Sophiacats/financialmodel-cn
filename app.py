@@ -1276,6 +1276,11 @@ if analyze_button and ticker:
             with st.container():
                 st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
                 
+                # 选择止盈止损策略
+                strategy_tab1, strategy_tab2, strategy_tab3, strategy_tab4 = st.tabs([
+                    "📊 固定比例法", "📈 技术指标法", "📉 波动率法", "🎯 成本加码法"
+                ])
+                
                 # 输入参数
                 col_input1, col_input2 = st.columns(2)
                 with col_input1:
@@ -1297,62 +1302,377 @@ if analyze_button and ticker:
                         key=f"main_position_size_{ticker}"
                     )
                 
-                # 实时计算
+                # 实时计算基础数据
                 position_value = position_size * buy_price
                 current_value = position_size * current_price
                 pnl = current_value - position_value
                 pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
                 
-                # 计算止盈止损点
-                stop_loss_price = buy_price * 0.9  # 10% 止损
-                take_profit_price = buy_price * 1.15  # 15% 止盈
+                # 策略1：固定比例法
+                with strategy_tab1:
+                    st.markdown("#### 🎯 固定比例止盈止损")
+                    st.write("**适用场景**: 大多数波动性股票，适合稳健型投资者")
+                    
+                    col_fixed1, col_fixed2 = st.columns(2)
+                    with col_fixed1:
+                        take_profit_pct = st.slider(
+                            "止盈比例 (%)", 
+                            min_value=5, 
+                            max_value=50, 
+                            value=15, 
+                            step=1,
+                            key=f"fixed_tp_{ticker}"
+                        )
+                    with col_fixed2:
+                        stop_loss_pct = st.slider(
+                            "止损比例 (%)", 
+                            min_value=3, 
+                            max_value=20, 
+                            value=10, 
+                            step=1,
+                            key=f"fixed_sl_{ticker}"
+                        )
+                    
+                    # 计算固定比例止盈止损价位
+                    fixed_stop_loss = buy_price * (1 - stop_loss_pct / 100)
+                    fixed_take_profit = buy_price * (1 + take_profit_pct / 100)
+                    
+                    col_metric1, col_metric2, col_metric3 = st.columns(3)
+                    with col_metric1:
+                        st.metric(
+                            "💰 当前盈亏", 
+                            f"${pnl:.2f}",
+                            f"{pnl_pct:+.2f}%"
+                        )
+                    with col_metric2:
+                        st.metric(
+                            "🛡️ 止损价位", 
+                            f"${fixed_stop_loss:.2f}",
+                            f"{((fixed_stop_loss - current_price)/current_price*100):+.1f}%"
+                        )
+                    with col_metric3:
+                        st.metric(
+                            "🎯 止盈价位", 
+                            f"${fixed_take_profit:.2f}",
+                            f"{((fixed_take_profit - current_price)/current_price*100):+.1f}%"
+                        )
+                    
+                    # 固定比例法状态判断
+                    if current_price <= fixed_stop_loss:
+                        st.error("⚠️ **已触及止损线！建议立即止损出场**")
+                    elif current_price >= fixed_take_profit:
+                        st.success("🎯 **已达到止盈目标！建议考虑获利了结**")
+                    else:
+                        st.info("📊 **持仓正常** | 继续观察市场走势")
+                    
+                    # 风险收益分析
+                    fixed_risk = position_size * (buy_price - fixed_stop_loss)
+                    fixed_reward = position_size * (fixed_take_profit - buy_price)
+                    fixed_rr = fixed_reward / fixed_risk if fixed_risk > 0 else 0
+                    st.caption(f"💡 风险：${fixed_risk:.2f} | 收益：${fixed_reward:.2f} | 风险收益比：1:{fixed_rr:.2f}")
                 
-                # 显示核心指标
-                st.markdown("#### 📊 实时盈亏状况")
-                metric_col1, metric_col2, metric_col3 = st.columns(3)
-                with metric_col1:
-                    st.metric(
-                        "💰 当前盈亏", 
-                        f"${pnl:.2f}",
-                        f"{pnl_pct:+.2f}%"
-                    )
+                # 策略2：技术指标法
+                with strategy_tab2:
+                    st.markdown("#### 📈 技术指标止盈止损")
+                    st.write("**适用场景**: 基于支撑阻力位、布林带等技术分析")
+                    
+                    # 计算技术指标位置
+                    latest = hist_data.iloc[-1]
+                    
+                    # 支撑位计算（20日最低价）
+                    support_level = hist_data['Low'].rolling(window=20).min().iloc[-1]
+                    
+                    # 阻力位计算（20日最高价）
+                    resistance_level = hist_data['High'].rolling(window=20).max().iloc[-1]
+                    
+                    # 布林带位置
+                    if 'BB_Lower' in hist_data.columns and 'BB_Upper' in hist_data.columns:
+                        bb_lower = latest['BB_Lower']
+                        bb_upper = latest['BB_Upper']
+                        bb_middle = latest['BB_Middle']
+                    else:
+                        bb_lower = current_price * 0.95
+                        bb_upper = current_price * 1.05
+                        bb_middle = current_price
+                    
+                    # 均线支撑
+                    ma20_support = latest['MA20'] if 'MA20' in hist_data.columns else current_price * 0.98
+                    
+                    col_tech1, col_tech2 = st.columns(2)
+                    with col_tech1:
+                        tech_method = st.selectbox(
+                            "选择技术指标方法",
+                            ["布林带策略", "支撑阻力位", "均线支撑", "自定义组合"],
+                            key=f"tech_method_{ticker}"
+                        )
+                    
+                    with col_tech2:
+                        safety_margin = st.slider(
+                            "安全边际 (%)", 
+                            min_value=1, 
+                            max_value=5, 
+                            value=2,
+                            key=f"safety_margin_{ticker}"
+                        )
+                    
+                    # 根据选择的方法计算止盈止损
+                    if tech_method == "布林带策略":
+                        tech_stop_loss = bb_lower * (1 - safety_margin / 100)
+                        tech_take_profit = bb_upper * (1 + safety_margin / 100)
+                        method_desc = "基于布林带上下轨"
+                    elif tech_method == "支撑阻力位":
+                        tech_stop_loss = support_level * (1 - safety_margin / 100)
+                        tech_take_profit = resistance_level * (1 + safety_margin / 100)
+                        method_desc = "基于20日支撑阻力位"
+                    elif tech_method == "均线支撑":
+                        tech_stop_loss = ma20_support * (1 - safety_margin / 100)
+                        tech_take_profit = current_price * 1.15  # 15%固定止盈
+                        method_desc = "基于20日均线支撑"
+                    else:  # 自定义组合
+                        tech_stop_loss = min(bb_lower, support_level, ma20_support) * (1 - safety_margin / 100)
+                        tech_take_profit = max(bb_upper, resistance_level) * (1 + safety_margin / 100)
+                        method_desc = "综合多个技术指标"
+                    
+                    st.info(f"📊 当前策略：{method_desc}")
+                    
+                    col_tech_metric1, col_tech_metric2, col_tech_metric3 = st.columns(3)
+                    with col_tech_metric1:
+                        st.metric(
+                            "💰 当前盈亏", 
+                            f"${pnl:.2f}",
+                            f"{pnl_pct:+.2f}%"
+                        )
+                    with col_tech_metric2:
+                        st.metric(
+                            "🛡️ 技术止损", 
+                            f"${tech_stop_loss:.2f}",
+                            f"{((tech_stop_loss - current_price)/current_price*100):+.1f}%"
+                        )
+                    with col_tech_metric3:
+                        st.metric(
+                            "🎯 技术止盈", 
+                            f"${tech_take_profit:.2f}",
+                            f"{((tech_take_profit - current_price)/current_price*100):+.1f}%"
+                        )
+                    
+                    # 显示关键技术位
+                    st.markdown("**📊 关键技术位参考**")
+                    tech_info_col1, tech_info_col2 = st.columns(2)
+                    with tech_info_col1:
+                        st.write(f"• 支撑位：${support_level:.2f}")
+                        st.write(f"• 布林下轨：${bb_lower:.2f}")
+                    with tech_info_col2:
+                        st.write(f"• 阻力位：${resistance_level:.2f}")
+                        st.write(f"• 布林上轨：${bb_upper:.2f}")
                 
-                with metric_col2:
-                    st.metric(
-                        "🛡️ 止损价位", 
-                        f"${stop_loss_price:.2f}",
-                        f"{((stop_loss_price - current_price)/current_price*100):+.1f}%"
-                    )
+                # 策略3：波动率法
+                with strategy_tab3:
+                    st.markdown("#### 📉 波动率自适应止盈止损")
+                    st.write("**适用场景**: 根据股票波动性调整止损幅度，高波动股票设置更大空间")
+                    
+                    # 计算ATR（Average True Range）
+                    high_low = hist_data['High'] - hist_data['Low']
+                    high_close = np.abs(hist_data['High'] - hist_data['Close'].shift())
+                    low_close = np.abs(hist_data['Low'] - hist_data['Close'].shift())
+                    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+                    atr = tr.rolling(window=14).mean().iloc[-1]
+                    
+                    # 计算历史波动率
+                    returns = hist_data['Close'].pct_change().dropna()
+                    volatility = returns.std() * np.sqrt(252) * 100  # 年化波动率
+                    
+                    col_vol1, col_vol2 = st.columns(2)
+                    with col_vol1:
+                        atr_multiplier = st.slider(
+                            "ATR倍数", 
+                            min_value=1.0, 
+                            max_value=4.0, 
+                            value=2.0, 
+                            step=0.1,
+                            key=f"atr_mult_{ticker}"
+                        )
+                    with col_vol2:
+                        vol_adjustment = st.selectbox(
+                            "波动率调整",
+                            ["低波动(保守)", "中波动(平衡)", "高波动(激进)"],
+                            index=1,
+                            key=f"vol_adj_{ticker}"
+                        )
+                    
+                    # 根据波动率调整参数
+                    if vol_adjustment == "低波动(保守)":
+                        vol_multiplier = 0.8
+                        base_tp_pct = 10
+                    elif vol_adjustment == "中波动(平衡)":
+                        vol_multiplier = 1.0
+                        base_tp_pct = 15
+                    else:  # 高波动
+                        vol_multiplier = 1.2
+                        base_tp_pct = 20
+                    
+                    # 计算波动率调整后的止盈止损
+                    atr_stop_distance = atr * atr_multiplier * vol_multiplier
+                    vol_stop_loss = max(buy_price - atr_stop_distance, buy_price * 0.90)  # 最大不超过10%
+                    vol_take_profit = buy_price * (1 + base_tp_pct / 100)
+                    
+                    # 显示波动率信息
+                    st.markdown("**📊 波动率分析**")
+                    vol_info_col1, vol_info_col2, vol_info_col3 = st.columns(3)
+                    with vol_info_col1:
+                        st.metric("ATR", f"${atr:.2f}")
+                    with vol_info_col2:
+                        st.metric("年化波动率", f"{volatility:.1f}%")
+                    with vol_info_col3:
+                        vol_level = "高" if volatility > 30 else "中" if volatility > 20 else "低"
+                        st.metric("波动等级", vol_level)
+                    
+                    col_vol_metric1, col_vol_metric2, col_vol_metric3 = st.columns(3)
+                    with col_vol_metric1:
+                        st.metric(
+                            "💰 当前盈亏", 
+                            f"${pnl:.2f}",
+                            f"{pnl_pct:+.2f}%"
+                        )
+                    with col_vol_metric2:
+                        st.metric(
+                            "🛡️ ATR止损", 
+                            f"${vol_stop_loss:.2f}",
+                            f"{((vol_stop_loss - current_price)/current_price*100):+.1f}%"
+                        )
+                    with col_vol_metric3:
+                        st.metric(
+                            "🎯 波动率止盈", 
+                            f"${vol_take_profit:.2f}",
+                            f"{((vol_take_profit - current_price)/current_price*100):+.1f}%"
+                        )
+                    
+                    st.info(f"💡 基于ATR的止损距离：${atr_stop_distance:.2f} ({((atr_stop_distance/current_price)*100):.1f}%)")
                 
-                with metric_col3:
-                    st.metric(
-                        "🎯 止盈价位", 
-                        f"${take_profit_price:.2f}",
-                        f"{((take_profit_price - current_price)/current_price*100):+.1f}%"
-                    )
+                # 策略4：成本加码法
+                with strategy_tab4:
+                    st.markdown("#### 🎯 成本加码动态止盈止损")
+                    st.write("**适用场景**: 根据盈利情况动态调整止损位，保护利润并追求更大收益")
+                    
+                    col_cost1, col_cost2 = st.columns(2)
+                    with col_cost1:
+                        profit_threshold = st.slider(
+                            "利润阈值 (%)", 
+                            min_value=5, 
+                            max_value=30, 
+                            value=10,
+                            help="超过此盈利后开始调整止损",
+                            key=f"profit_threshold_{ticker}"
+                        )
+                    with col_cost2:
+                        trailing_distance = st.slider(
+                            "追踪距离 (%)", 
+                            min_value=3, 
+                            max_value=15, 
+                            value=5,
+                            help="止损跟随价格的距离",
+                            key=f"trailing_distance_{ticker}"
+                        )
+                    
+                    # 动态止损逻辑
+                    profit_threshold_price = buy_price * (1 + profit_threshold / 100)
+                    
+                    if current_price >= profit_threshold_price:
+                        # 已超过利润阈值，启用动态止损
+                        # 止损位不低于成本价，并跟随最高价
+                        highest_price = max(current_price, buy_price * 1.1)  # 模拟历史最高价
+                        dynamic_stop_loss = max(
+                            buy_price * 1.02,  # 成本价上2%
+                            highest_price * (1 - trailing_distance / 100)
+                        )
+                        status_msg = f"🟢 **动态止损激活** (突破{profit_threshold}%利润阈值)"
+                        dynamic_take_profit = buy_price * 1.25  # 25%止盈目标
+                    else:
+                        # 未达到利润阈值，使用普通止损
+                        dynamic_stop_loss = buy_price * 0.92  # 8%固定止损
+                        status_msg = f"🔵 **等待激活** (需突破{((profit_threshold_price - current_price)/current_price*100):+.1f}%)"
+                        dynamic_take_profit = profit_threshold_price
+                    
+                    # 分阶段止盈设置
+                    stage1_tp = buy_price * (1 + profit_threshold / 100)  # 第一阶段
+                    stage2_tp = buy_price * 1.20  # 第二阶段 20%
+                    stage3_tp = buy_price * 1.35  # 第三阶段 35%
+                    
+                    st.info(status_msg)
+                    
+                    col_cost_metric1, col_cost_metric2, col_cost_metric3 = st.columns(3)
+                    with col_cost_metric1:
+                        st.metric(
+                            "💰 当前盈亏", 
+                            f"${pnl:.2f}",
+                            f"{pnl_pct:+.2f}%"
+                        )
+                    with col_cost_metric2:
+                        st.metric(
+                            "🛡️ 动态止损", 
+                            f"${dynamic_stop_loss:.2f}",
+                            f"{((dynamic_stop_loss - current_price)/current_price*100):+.1f}%"
+                        )
+                    with col_cost_metric3:
+                        st.metric(
+                            "🎯 当前目标", 
+                            f"${dynamic_take_profit:.2f}",
+                            f"{((dynamic_take_profit - current_price)/current_price*100):+.1f}%"
+                        )
+                    
+                    # 分阶段止盈计划
+                    st.markdown("**📊 分阶段止盈计划**")
+                    stage_col1, stage_col2, stage_col3 = st.columns(3)
+                    with stage_col1:
+                        stage1_status = "✅" if current_price >= stage1_tp else "⏳"
+                        st.write(f"{stage1_status} 阶段1: ${stage1_tp:.2f} ({profit_threshold}%)")
+                    with stage_col2:
+                        stage2_status = "✅" if current_price >= stage2_tp else "⏳"
+                        st.write(f"{stage2_status} 阶段2: ${stage2_tp:.2f} (20%)")
+                    with stage_col3:
+                        stage3_status = "✅" if current_price >= stage3_tp else "⏳"
+                        st.write(f"{stage3_status} 阶段3: ${stage3_tp:.2f} (35%)")
+                    
+                    # 操作建议
+                    if current_price >= stage3_tp:
+                        st.success("🎯 **第三阶段达成！建议分批止盈**")
+                    elif current_price >= stage2_tp:
+                        st.info("📈 **第二阶段达成！可考虑部分止盈**")
+                    elif current_price >= stage1_tp:
+                        st.info("💡 **第一阶段达成！动态止损已激活**")
+                    else:
+                        st.warning("⏳ **等待突破第一阶段**")
                 
-                # 状态判断和建议
-                st.markdown("#### 🚨 操作建议")
-                if current_price <= stop_loss_price:
-                    st.error("⚠️ **已触及止损线！建议立即止损出场**")
-                    st.error(f"当前价格 ${current_price:.2f} ≤ 止损价 ${stop_loss_price:.2f}")
-                elif current_price >= take_profit_price:
-                    st.success("🎯 **已达到止盈目标！建议考虑获利了结**")
-                    st.success(f"当前价格 ${current_price:.2f} ≥ 止盈价 ${take_profit_price:.2f}")
-                elif pnl_pct > 5:
-                    st.info(f"📈 **持续盈利中** | 距离止盈目标还有 {((take_profit_price - current_price)/current_price*100):.1f}%")
-                elif pnl_pct < -5:
-                    distance_to_stop = ((current_price - stop_loss_price)/current_price*100)
-                    st.warning(f"📉 **注意风险** | 距离止损线还有 {distance_to_stop:.1f}%")
+                # 策略对比总结
+                st.markdown("---")
+                st.markdown("#### 📊 四种策略对比总结")
+                
+                # 计算所有策略的止盈止损位
+                strategies_summary = {
+                    "策略": ["固定比例法", "技术指标法", "波动率法", "成本加码法"],
+                    "止损位": [f"${fixed_stop_loss:.2f}", f"${tech_stop_loss:.2f}", f"${vol_stop_loss:.2f}", f"${dynamic_stop_loss:.2f}"],
+                    "止盈位": [f"${fixed_take_profit:.2f}", f"${tech_take_profit:.2f}", f"${vol_take_profit:.2f}", f"${dynamic_take_profit:.2f}"],
+                    "风险收益比": [
+                        f"1:{fixed_rr:.2f}",
+                        f"1:{((position_size * (tech_take_profit - buy_price)) / (position_size * (buy_price - tech_stop_loss))):.2f}",
+                        f"1:{((position_size * (vol_take_profit - buy_price)) / (position_size * (buy_price - vol_stop_loss))):.2f}",
+                        f"1:{((position_size * (dynamic_take_profit - buy_price)) / (position_size * (buy_price - dynamic_stop_loss))):.2f}"
+                    ],
+                    "适用场景": ["稳健投资", "技术分析", "高波动股", "趋势追踪"]
+                }
+                
+                summary_df = pd.DataFrame(strategies_summary)
+                st.dataframe(summary_df, hide_index=True, use_container_width=True)
+                
+                # 推荐策略
+                st.markdown("#### 💡 智能策略推荐")
+                if volatility > 30:
+                    st.info("🔥 **推荐波动率法** - 当前股票波动性较高，适合使用ATR动态调整")
+                elif technical_signals['trend'] == 'bullish' and pnl_pct > 5:
+                    st.info("📈 **推荐成本加码法** - 当前处于上升趋势且有盈利，适合动态管理")
+                elif current_price > bb_middle:
+                    st.info("📊 **推荐技术指标法** - 技术形态明确，可根据支撑阻力位操作")
                 else:
-                    st.info("📊 **持仓正常** | 继续观察市场走势")
-                
-                # 风险分析
-                risk_amount = position_size * (buy_price - stop_loss_price)
-                reward_amount = position_size * (take_profit_price - buy_price)
-                risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
-                
-                st.caption(f"💡 最大风险金额：${risk_amount:.2f} | 预期收益：${reward_amount:.2f} | 风险收益比：1:{risk_reward_ratio:.2f}")
+                    st.info("🎯 **推荐固定比例法** - 市场信号不明确时，固定比例最为稳健")
             
             # 增强版止盈止损分析（基于当前股票）
             if st.session_state.current_ticker == ticker:
