@@ -1276,11 +1276,6 @@ if analyze_button and ticker:
             with st.container():
                 st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
                 
-                # 选择止盈止损策略
-                strategy_tab1, strategy_tab2, strategy_tab3, strategy_tab4 = st.tabs([
-                    "📊 固定比例法", "📈 技术指标法", "📉 波动率法", "🎯 成本加码法"
-                ])
-                
                 # 输入参数
                 col_input1, col_input2 = st.columns(2)
                 with col_input1:
@@ -1301,6 +1296,12 @@ if analyze_button and ticker:
                         step=1,
                         key=f"main_position_size_{ticker}"
                     )
+                
+                # 选择止盈止损策略
+                st.markdown("#### 🎯 选择止盈止损策略")
+                strategy_tab1, strategy_tab2, strategy_tab3, strategy_tab4 = st.tabs([
+                    "📊 固定比例法", "📈 技术指标法", "📉 波动率法", "🎯 成本加码法"
+                ])
                 
                 # 实时计算基础数据
                 position_value = position_size * buy_price
