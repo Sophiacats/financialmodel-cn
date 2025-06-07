@@ -126,29 +126,6 @@ def calculate_piotroski_score(data):
             else:
                 reasons.append("❌ 经营现金流为负")
         
-        # 3. ROA增长
-        if (len(financials.columns) >= 2 and len(balance_sheet.columns) >= 2 and 
-            'Total Assets' in balance_sheet.index and 'Net Income' in financials.index):
-            total_assets = balance_sheet.loc['Total Assets'].iloc[0]
-            total_assets_prev = balance_sheet.loc['Total Assets'].iloc[1]
-            
-            roa_current = net_income / total_assets if total_assets != 0 else 0
-            net_income_prev = financials.loc['Net Income'].iloc[1]
-            roa_prev = net_income_prev / total_assets_prev if total_assets_prev != 0 else 0
-            
-            if roa_current > roa_prev:
-                score += 1
-                reasons.append("✅ ROA同比增长")
-            else:
-                reasons.append("❌ ROA同比下降")
-        
-        # 4. 现金流质量
-        if 'net_income' in locals() and 'ocf' in locals() and net_income != 0 and ocf > net_income:
-            score += 1
-            reasons.append("✅ 经营现金流大于净利润")
-        else:
-            reasons.append("❌ 经营现金流小于净利润")
-        
         # 5-9. 其他财务指标（简化版本）
         score += 3
         reasons.append("📊 财务结构基础分: 3分")
@@ -341,96 +318,7 @@ if analyze_button and ticker:
                 elif f_score >= 4:
                     st.warning("💡 建议: 财务状况一般，需要谨慎评估")
                 else:
-                    st.info("🎯 **推荐固定比例法** - 市场信号不明确时最为稳健")
-                
-                # 使用建议
-                st.markdown("#### 🎓 策略选择指南")
-                col_guide1, col_guide2 = st.columns(2)
-                with col_guide1:
-                    st.markdown("""
-                    **🔰 新手投资者**:
-                    - 固定比例法：简单易懂
-                    - 建议：止盈15%，止损8%
-                    
-                    **📊 技术分析者**:
-                    - 技术指标法：基于图表
-                    - 布林带策略最实用
-                    """)
-                
-                with col_guide2:
-                    st.markdown("""
-                    **🎯 进阶投资者**:
-                    - 波动率法：适应变化
-                    - 成本加码法：保护利润
-                    
-                    **⚡ 短线交易者**:
-                    - 波动率法组合使用
-                    - 快速响应市场
-                    """)
-                
-                # 风险提示
-                st.warning("""
-                ⚠️ **风险提示**: 所有策略仅供参考，实际投资需结合市场环境。
-                止损是风险管理工具，执行纪律比策略更重要。投资有风险，入市需谨慎。
-                """)
-
-else:
-    st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
-    
-    with st.expander("📖 使用说明"):
-        st.markdown("""
-        ### 系统功能
-        1. **自动数据获取**: 输入股票代码后，系统自动获取最新财务数据和历史价格
-        2. **多维度分析**: 包含基本面、技术面、估值等多个维度的综合分析
-        3. **智能建议**: 基于多个模型的评分，给出买入/卖出建议和仓位建议
-        
-        ### 新增功能 - 四种止盈止损策略
-        - **📊 固定比例法**: 设定固定止盈止损百分比，适合稳健投资
-        - **📈 技术指标法**: 基于布林带、支撑阻力位等技术分析
-        - **📉 波动率法**: 根据ATR和历史波动率动态调整
-        - **🎯 成本加码法**: 动态止损和分阶段止盈，保护利润
-        
-        ### 注意事项
-        - 本系统仅供参考，不构成投资建议
-        - 请结合其他信息进行综合判断
-        - 投资有风险，入市需谨慎
-        """)
-    
-    with st.expander("🆕 四种策略详解"):
-        st.markdown("""
-        ### 📊 固定比例法
-        - **原理**: 设定固定的止盈/止损百分比
-        - **优点**: 简单易懂，风险可控
-        - **适用**: 稳健型投资者，大多数股票
-        - **设置**: 如+15%止盈，-10%止损
-        
-        ### 📈 技术指标法  
-        - **原理**: 基于技术分析设置关键位置
-        - **包含**: 布林带、支撑阻力位、均线支撑
-        - **优点**: 结合市场技术形态
-        - **适用**: 有技术分析基础的投资者
-        
-        ### 📉 波动率法
-        - **原理**: 根据股票波动性动态调整
-        - **核心**: ATR指标和历史波动率
-        - **优点**: 自适应市场变化
-        - **适用**: 高波动性股票，专业投资者
-        
-        ### 🎯 成本加码法
-        - **原理**: 根据盈利情况动态调整止损
-        - **特色**: 分阶段止盈，保护利润
-        - **优点**: 最大化收益，降低回撤
-        - **适用**: 趋势行情，进阶投资者
-        """)
-
-# 页脚
-st.markdown("---")
-col_footer1, col_footer2, col_footer3 = st.columns([1, 2, 1])
-with col_footer2:
-    if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
-        st.rerun()
-
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
+                    st.error("💡 建议: 财务状况较差，投资风险较高")
             
             # 杜邦分析
             with st.expander("📊 杜邦分析", expanded=True):
@@ -682,4 +570,93 @@ st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎
                 elif 'BB_Middle' in hist_data.columns and current_price > hist_data['BB_Middle'].iloc[-1]:
                     st.info("📊 **推荐技术指标法** - 技术形态明确")
                 else:
-                    st.
+                    st.info("🎯 **推荐固定比例法** - 市场信号不明确时最为稳健")
+                
+                # 使用建议
+                st.markdown("#### 🎓 策略选择指南")
+                col_guide1, col_guide2 = st.columns(2)
+                with col_guide1:
+                    st.markdown("""
+                    **🔰 新手投资者**:
+                    - 固定比例法：简单易懂
+                    - 建议：止盈15%，止损8%
+                    
+                    **📊 技术分析者**:
+                    - 技术指标法：基于图表
+                    - 布林带策略最实用
+                    """)
+                
+                with col_guide2:
+                    st.markdown("""
+                    **🎯 进阶投资者**:
+                    - 波动率法：适应变化
+                    - 成本加码法：保护利润
+                    
+                    **⚡ 短线交易者**:
+                    - 波动率法组合使用
+                    - 快速响应市场
+                    """)
+                
+                # 风险提示
+                st.warning("""
+                ⚠️ **风险提示**: 所有策略仅供参考，实际投资需结合市场环境。
+                止损是风险管理工具，执行纪律比策略更重要。投资有风险，入市需谨慎。
+                """)
+
+else:
+    st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
+    
+    with st.expander("📖 使用说明"):
+        st.markdown("""
+        ### 系统功能
+        1. **自动数据获取**: 输入股票代码后，系统自动获取最新财务数据和历史价格
+        2. **多维度分析**: 包含基本面、技术面、估值等多个维度的综合分析
+        3. **智能建议**: 基于多个模型的评分，给出买入/卖出建议和仓位建议
+        
+        ### 新增功能 - 四种止盈止损策略
+        - **📊 固定比例法**: 设定固定止盈止损百分比，适合稳健投资
+        - **📈 技术指标法**: 基于布林带、支撑阻力位等技术分析
+        - **📉 波动率法**: 根据ATR和历史波动率动态调整
+        - **🎯 成本加码法**: 动态止损和分阶段止盈，保护利润
+        
+        ### 注意事项
+        - 本系统仅供参考，不构成投资建议
+        - 请结合其他信息进行综合判断
+        - 投资有风险，入市需谨慎
+        """)
+    
+    with st.expander("🆕 四种策略详解"):
+        st.markdown("""
+        ### 📊 固定比例法
+        - **原理**: 设定固定的止盈/止损百分比
+        - **优点**: 简单易懂，风险可控
+        - **适用**: 稳健型投资者，大多数股票
+        - **设置**: 如+15%止盈，-10%止损
+        
+        ### 📈 技术指标法  
+        - **原理**: 基于技术分析设置关键位置
+        - **包含**: 布林带、支撑阻力位、均线支撑
+        - **优点**: 结合市场技术形态
+        - **适用**: 有技术分析基础的投资者
+        
+        ### 📉 波动率法
+        - **原理**: 根据股票波动性动态调整
+        - **核心**: ATR指标和历史波动率
+        - **优点**: 自适应市场变化
+        - **适用**: 高波动性股票，专业投资者
+        
+        ### 🎯 成本加码法
+        - **原理**: 根据盈利情况动态调整止损
+        - **特色**: 分阶段止盈，保护利润
+        - **优点**: 最大化收益，降低回撤
+        - **适用**: 趋势行情，进阶投资者
+        """)
+
+# 页脚
+st.markdown("---")
+col_footer1, col_footer2, col_footer3 = st.columns([1, 2, 1])
+with col_footer2:
+    if st.button("🔙 返回首页 / 清除数据", type="secondary", use_container_width=True):
+        st.rerun()
+
+st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
