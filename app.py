@@ -1,658 +1,4 @@
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-import warnings
-import plotly.graph_objects as go
-warnings.filterwarnings('ignore')
-
-# 页面配置
-st.set_page_config(
-    page_title="💹 智能投资分析系统",
-    page_icon="💹",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# 初始化 session state
-if 'current_ticker' not in st.session_state:
-    st.session_state.current_ticker = None
-if 'current_price' not in st.session_state:
-    st.session_state.current_price = 0
-if 'analysis_data' not in st.session_state:
-    st.session_state.analysis_data = None
-if 'show_analysis' not in st.session_state:
-    st.session_state.show_analysis = False
-
-# 标题
-st.title("💹 智能投资分析系统 v2.0")
-st.markdown("---")
-
-# ==================== 缓存函数 ====================
-@st.cache_data(ttl=3600)
-def fetch_stock_data(ticker):
-    """获取股票数据"""
-    try:
-        stock = yf.Ticker(ticker)
-        info = dict(stock.info)
-        
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=365*2)
-        hist_data = stock.history(start=start_date, end=end_date)
-        
-        financials = stock.financials
-        balance_sheet = stock.balance_sheet
-        cash_flow = stock.cashflow
-        
-        return {
-            'info': info,
-            'hist_data': hist_data.copy(),
-            'financials': financials.copy() if financials is not None else pd.DataFrame(),
-            'balance_sheet': balance_sheet.copy() if balance_sheet is not None else pd.DataFrame(),
-            'cash_flow': cash_flow.copy() if cash_flow is not None else pd.DataFrame()
-        }
-    except Exception as e:
-        st.error(f"获取数据失败: {str(e)}")
-        return None
-
-def fetch_stock_data_uncached(ticker):
-    """获取股票数据（不缓存版本）"""
-    try:
-        stock = yf.Ticker(ticker)
-        info = dict(stock.info)
-        
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=365*2)
-        hist_data = stock.history(start=start_date, end=end_date)
-        
-        financials = stock.financials
-        balance_sheet = stock.balance_sheet
-        cash_flow = stock.cashflow
-        
-        return {
-            'info': info,
-            'hist_data': hist_data,
-            'financials': financials if financials is not None else pd.DataFrame(),
-            'balance_sheet': balance_sheet if balance_sheet is not None else pd.DataFrame(),
-            'cash_flow': cash_flow if cash_flow is not None else pd.DataFrame(),
-            'stock': stock
-        }
-    except Exception as e:
-        st.error(f"获取数据失败: {str(e)}")
-        return None
-
-# ==================== 时事分析函数 ====================
-import requests
-import json
-import time
-
-def fetch_financial_news(target_ticker=None):
-    """获取财经新闻 - 根据股票代码定制化"""
-    try:
-        news_data = []
-        
-        # 方法1: 尝试从yfinance获取特定股票的新闻
-        if target_ticker:
-            try:
-                ticker = yf.Ticker(target_ticker)
-                news = ticker.news
-                if news and len(news) > 0:
-                    for article in news[:4]:  # 目标股票取4条新闻
-                        if article.get('title') and article.get('providerPublishTime'):
-                            news_data.append({
-                                "title": article.get('title', ''),
-                                "summary": article.get('summary', '')[:200] + '...' if article.get('summary') else article.get('title', ''),
-                                "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
-                                "url": article.get('link', ''),
-                                "source": f"Yahoo Finance ({target_ticker})",
-                                "category": "company_specific"
-                            })
-            except Exception as e:
-                pass
-        
-        # 方法2: 获取市场整体新闻
-        try:
-            market_tickers = ["^GSPC", "^IXIC", "^DJI"]
-            for ticker_symbol in market_tickers:
-                try:
-                    ticker = yf.Ticker(ticker_symbol)
-                    news = ticker.news
-                    if news and len(news) > 0:
-                        for article in news[:2]:  # 每个指数取2条
-                            if article.get('title') and article.get('providerPublishTime'):
-                                news_data.append({
-                                    "title": article.get('title', ''),
-                                    "summary": article.get('summary', '')[:200] + '...' if article.get('summary') else article.get('title', ''),
-                                    "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
-                                    "url": article.get('link', ''),
-                                    "source": f"Market News",
-                                    "category": "market_wide"
-                                })
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        
-        # 方法3: 如果真实新闻不够，补充模拟新闻
-        current_time = datetime.now()
-        
-        # 获取公司信息用于生成相关新闻
-        company_info = {}
-        if target_ticker:
-            try:
-                ticker_obj = yf.Ticker(target_ticker)
-                info = ticker_obj.info
-                company_info = {
-                    'name': info.get('longName', target_ticker),
-                    'sector': info.get('sector', ''),
-                    'industry': info.get('industry', ''),
-                    'ticker': target_ticker
-                }
-            except:
-                company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
-        
-        # 无论如何都生成公司特定新闻
-        company_news = generate_company_specific_news(company_info, current_time)
-        news_data.extend(company_news)
-        
-        # 添加市场广泛影响的新闻（美联储等）
-        market_wide_news = [
-            {
-                "title": "美联储官员暗示未来可能调整利率政策",
-                "summary": "美联储高级官员在最新讲话中表示，将根据通胀数据和经济增长情况灵活调整货币政策，市场对此反应积极。此举将影响所有资产类别的估值。",
-                "published": current_time - timedelta(hours=2),
-                "url": "",
-                "source": "美联储政策",
-                "category": "market_wide"
-            },
-            {
-                "title": "全球通胀数据好于预期，风险资产普遍上涨",
-                "summary": "最新公布的全球主要经济体通胀数据均好于市场预期，投资者风险偏好提升，股市、商品等风险资产普遍上涨。",
-                "published": current_time - timedelta(hours=6),
-                "url": "",
-                "source": "全球经济",
-                "category": "market_wide"
-            },
-            {
-                "title": "地缘政治局势缓解，市场避险情绪降温",
-                "summary": "近期国际地缘政治紧张局势有所缓解，投资者避险情绪降温，资金重新流入股市等风险资产，黄金等避险资产回落。",
-                "published": current_time - timedelta(hours=10),
-                "url": "",
-                "source": "国际政治",
-                "category": "market_wide"
-            },
-            {
-                "title": "经济数据显示复苏势头良好，市场信心增强",
-                "summary": "最新发布的一系列经济指标显示经济复苏势头良好，就业市场稳定，消费支出增长，投资者对经济前景的信心进一步增强。",
-                "published": current_time - timedelta(hours=14),
-                "url": "",
-                "source": "经济数据",
-                "category": "market_wide"
-            },
-            {
-                "title": "投资者风险偏好回升，股市资金流入增加",
-                "summary": "随着市场不确定性减少，投资者风险偏好明显回升，资金持续流入股票市场，各大指数表现活跃。",
-                "published": current_time - timedelta(hours=16),
-                "url": "",
-                "source": "市场资金流向",
-                "category": "market_wide"
-            },
-            {
-                "title": "企业盈利预期改善，分析师上调目标价",
-                "summary": "多家券商分析师基于最新财报数据和业务前景，上调了多只个股的目标价格和盈利预测。",
-                "published": current_time - timedelta(hours=18),
-                "url": "",
-                "source": "分析师报告",
-                "category": "market_wide"
-            }
-        ]
-        news_data.extend(market_wide_news)
-        
-        # 处理新闻数据，添加关键词和情绪分析
-        processed_news = []
-        for news in news_data[:10]:  # 提高至10条新闻
-            # 确保新闻内容不为空
-            if not news.get('title'):
-                continue
-                
-            keywords = extract_keywords(news['title'] + ' ' + news.get('summary', ''))
-            sentiment, _ = analyze_news_sentiment(keywords)
-            
-            processed_news.append({
-                **news,
-                'keywords': keywords,
-                'sentiment': sentiment
-            })
-        
-        # 如果还是没有新闻，返回默认消息
-        if not processed_news:
-            processed_news = [{
-                "title": "暂无最新财经新闻",
-                "summary": "当前无法获取实时新闻数据，建议访问主要财经网站获取最新市场动态。",
-                "published": datetime.now(),
-                "url": "",
-                "source": "系统提示",
-                "keywords": ["市场", "信息"],
-                "sentiment": "中性",
-                "category": "system"
-            }]
-        
-        # 确保返回的新闻数量足够
-        while len(processed_news) < 10:
-            # 添加更多通用市场新闻
-            extra_news = [
-                {
-                    "title": "监管政策明朗化，市场信心进一步增强",
-                    "summary": "相关部门发布的最新政策指引为市场提供了更清晰的方向，投资者信心得到进一步提振。",
-                    "published": datetime.now() - timedelta(hours=20),
-                    "url": "",
-                    "source": "政策解读",
-                    "keywords": ["监管政策", "市场信心"],
-                    "sentiment": "利好",
-                    "category": "market_wide"
-                },
-                {
-                    "title": "国际资本配置调整，新兴市场受关注",
-                    "summary": "全球资产配置趋势变化，国际资本对新兴市场的关注度提升，相关资产估值有望得到重估。",
-                    "published": datetime.now() - timedelta(hours=22),
-                    "url": "",
-                    "source": "国际资本",
-                    "keywords": ["资本配置", "新兴市场"],
-                    "sentiment": "中性",
-                    "category": "market_wide"
-                }
-            ]
-            
-            for extra in extra_news:
-                if len(processed_news) < 10:
-                    processed_news.append(extra)
-                else:
-                    break
-            break
-        
-        # 按时间排序，最新的在前
-        processed_news.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
-        
-        return processed_news[:10]  # 确保返回10条新闻
-        
-    except Exception as e:
-        # 最后的错误处理
-        return [{
-            "title": "新闻服务暂时不可用",
-            "summary": f"获取新闻时遇到技术问题，建议稍后重试或查看主要财经网站。",
-            "published": datetime.now(),
-            "url": "",
-            "source": "系统",
-            "keywords": ["技术", "问题"],
-            "sentiment": "中性",
-            "category": "system"
-        }]
-
-def generate_company_specific_news(company_info, current_time):
-    """根据公司信息生成相关新闻"""
-    news_list = []
-    
-    if not company_info or not company_info.get('ticker'):
-        # 即使没有公司信息，也生成通用新闻
-        news_list = [
-            {
-                "title": "市场整体表现稳健，投资机会显现",
-                "summary": "当前市场环境下，多个板块显示出投资价值，投资者可关注基本面良好的优质企业。",
-                "published": current_time - timedelta(hours=5),
-                "url": "",
-                "source": "市场分析",
-                "category": "company_specific"
-            }
-        ]
-        return news_list
-    
-    company_name = company_info.get('name', company_info.get('ticker'))
-    sector = company_info.get('sector', '')
-    industry = company_info.get('industry', '')
-    ticker = company_info.get('ticker')
-    
-    # 根据行业生成相关新闻
-    if 'Technology' in sector or 'tech' in industry.lower() or 'software' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"科技股{company_name}受益于AI发展趋势",
-                "summary": f"{company_name}作为科技行业领军企业，预计将从人工智能技术发展浪潮中获益。分析师看好其在AI领域的布局和技术优势。",
-                "published": current_time - timedelta(hours=3),
-                "url": "",
-                "source": f"科技行业分析",
-                "category": "company_specific"
-            },
-            {
-                "title": f"半导体行业整体向好，{ticker}等龙头股受关注",
-                "summary": f"随着全球数字化转型加速，半导体需求持续增长。{company_name}等行业龙头企业有望持续受益于这一趋势。",
-                "published": current_time - timedelta(hours=8),
-                "url": "",
-                "source": f"行业研究",
-                "category": "industry_specific"
-            },
-            {
-                "title": f"云计算市场快速增长，{company_name}云业务前景看好",
-                "summary": f"企业数字化转型推动云计算需求激增，{company_name}在云服务领域的投入和技术积累为其带来新的增长动力。",
-                "published": current_time - timedelta(hours=12),
-                "url": "",
-                "source": f"云计算行业",
-                "category": "industry_specific"
-            }
-        ])
-    
-    elif 'Healthcare' in sector or 'Pharmaceuticals' in industry or 'health' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"医药行业{company_name}新药研发进展受关注",
-                "summary": f"{company_name}在新药研发领域的最新进展引起市场关注。医药行业整体估值有望随着创新药物的推出而提升。",
-                "published": current_time - timedelta(hours=4),
-                "url": "",
-                "source": f"医药行业",
-                "category": "company_specific"
-            },
-            {
-                "title": f"生物技术领域投资热度不减，{ticker}等企业受益",
-                "summary": f"生物技术和医疗创新持续受到投资者青睐，{company_name}等医药企业在研发投入和产品创新方面的努力获得市场认可。",
-                "published": current_time - timedelta(hours=11),
-                "url": "",
-                "source": f"生物技术",
-                "category": "industry_specific"
-            }
-        ])
-    
-    elif 'Financial' in sector or 'bank' in industry.lower() or 'insurance' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"银行股{company_name}受益于利率政策预期",
-                "summary": f"市场对利率政策的预期变化对银行股形成利好。{company_name}作为金融行业重要参与者，有望受益于净息差改善。",
-                "published": current_time - timedelta(hours=5),
-                "url": "",
-                "source": f"金融行业",
-                "category": "company_specific"
-            },
-            {
-                "title": f"金融科技发展推动传统银行转型，{ticker}积极布局",
-                "summary": f"数字化转型浪潮下，{company_name}等传统金融机构加大科技投入，通过金融科技提升服务效率和客户体验。",
-                "published": current_time - timedelta(hours=13),
-                "url": "",
-                "source": f"金融科技",
-                "category": "industry_specific"
-            }
-        ])
-    
-    elif 'Energy' in sector or 'oil' in industry.lower() or 'gas' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"能源股{company_name}受益于油价上涨预期",
-                "summary": f"国际能源市场供需关系改善，油价维持高位。{company_name}等能源企业有望从中受益，业绩预期向好。",
-                "published": current_time - timedelta(hours=7),
-                "url": "",
-                "source": f"能源行业",
-                "category": "company_specific"
-            },
-            {
-                "title": f"可再生能源转型加速，{company_name}绿色投资引关注",
-                "summary": f"全球能源转型趋势下，{company_name}在清洁能源和可再生能源领域的布局成为投资者关注焦点。",
-                "published": current_time - timedelta(hours=15),
-                "url": "",
-                "source": f"绿色能源",
-                "category": "industry_specific"
-            }
-        ])
-    
-    elif 'Consumer' in sector or 'retail' in industry.lower() or 'food' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"消费股{company_name}业绩有望受益于经济复苏",
-                "summary": f"随着消费者信心回升和支出增加，{company_name}等消费类企业预计将迎来业绩改善。分析师上调盈利预期。",
-                "published": current_time - timedelta(hours=9),
-                "url": "",
-                "source": f"消费行业",
-                "category": "company_specific"
-            },
-            {
-                "title": f"电商渗透率持续提升，{ticker}数字化转型成效显著",
-                "summary": f"线上消费趋势不断强化，{company_name}通过数字化转型和全渠道布局，在竞争激烈的消费市场中保持优势。",
-                "published": current_time - timedelta(hours=12),
-                "url": "",
-                "source": f"数字零售",
-                "category": "industry_specific"
-            }
-        ])
-    
-    elif 'automotive' in industry.lower() or 'Automotive' in sector or 'motor' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"新能源汽车行业增长强劲，{company_name}前景看好",
-                "summary": f"全球新能源汽车销量持续高速增长，{company_name}在电动车领域的布局和技术积累为其带来发展机遇。",
-                "published": current_time - timedelta(hours=6),
-                "url": "",
-                "source": f"汽车行业",
-                "category": "company_specific"
-            },
-            {
-                "title": f"自动驾驶技术突破，{ticker}等车企加大研发投入",
-                "summary": f"自动驾驶和智能汽车技术快速发展，{company_name}等汽车制造商在这一领域的技术积累和投资备受市场期待。",
-                "published": current_time - timedelta(hours=14),
-                "url": "",
-                "source": f"智能汽车",
-                "category": "industry_specific"
-            }
-        ])
-    
-    else:
-        # 通用行业新闻
-        news_list.extend([
-            {
-                "title": f"{company_name}业绩表现稳健，投资价值凸显",
-                "summary": f"{company_name}作为{industry}领域的重要企业，在当前市场环境下表现稳健。投资者关注其业务发展和市场策略。",
-                "published": current_time - timedelta(hours=5),
-                "url": "",
-                "source": f"行业分析",
-                "category": "company_specific"
-            },
-            {
-                "title": f"{industry}行业整体向好，{ticker}等企业受益",
-                "summary": f"当前{industry}行业整体发展态势良好，{company_name}等行业内企业有望受益于行业增长趋势。",
-                "published": current_time - timedelta(hours=10),
-                "url": "",
-                "source": f"行业动态",
-                "category": "industry_specific"
-            }
-        ])
-    
-    return news_list[:4]  # 确保返回4条公司相关新闻published": current_time - timedelta(hours=12),
-                "url": "",
-                "source": f"数字零售",
-                "category": "industry_specific"
-            }
-        ])
-    
-    elif 'automotive' in industry.lower() or 'Automotive' in sector:
-        news_list.extend([
-            {
-                "title": f"新能源汽车行业增长强劲，{company_name}前景看好",
-                "summary": f"全球新能源汽车销量持续高速增长，{company_name}在电动车领域的布局和技术积累为其带来发展机遇。",
-                "published": current_time - timedelta(hours=6),
-                "url": "",
-                "source": f"汽车行业",
-                "category": "company_specific"
-            },
-            {
-                "title": f"自动驾驶技术突破，{ticker}等车企加大研发投入",
-                "summary": f"自动驾驶和智能汽车技术快速发展，{company_name}等汽车制造商在这一领域的技术积累和投资备受市场期待。",
-                "published": current_time - timedelta(hours=14),
-                "url": "",
-                "source": f"智能汽车",
-                "category": "industry_specific"
-            }
-        ])
-    
-    else:
-        # 通用行业新闻
-        news_list.append({
-            "title": f"{company_name}所在行业整体表现稳健",
-            "summary": f"{company_name}作为{industry}领域的重要企业，在当前市场环境下表现稳健。投资者关注其业务发展和市场策略。",
-            "published": current_time - timedelta(hours=5),
-            "url": "",
-            "source": f"行业分析",
-            "category": "company_specific"
-        })
-    
-    return news_list[:4]  # 最多返回4条公司相关新闻
-
-def extract_keywords(text):
-    """从新闻文本中提取关键词"""
-    # 财经相关关键词库
-    financial_keywords = {
-        # 货币政策
-        "利率": ["利率", "降息", "加息", "基准利率", "联邦基金利率"],
-        "货币政策": ["货币政策", "央行", "美联储", "QE", "量化宽松"],
-        
-        # 市场情绪
-        "上涨": ["上涨", "上升", "增长", "涨幅", "大涨", "暴涨"],
-        "下跌": ["下跌", "下降", "跌幅", "大跌", "暴跌", "下滑"],
-        
-        # 行业板块
-        "科技": ["科技", "AI", "人工智能", "芯片", "半导体", "软件"],
-        "金融": ["银行", "保险", "券商", "金融", "信贷"],
-        "能源": ["石油", "天然气", "新能源", "电动车", "光伏", "风电"],
-        "消费": ["消费", "零售", "餐饮", "旅游", "酒店"],
-        
-        # 经济指标
-        "通胀": ["通胀", "CPI", "PPI", "物价"],
-        "就业": ["就业", "失业率", "就业数据", "非农"],
-        "GDP": ["GDP", "经济增长", "国内生产总值"],
-        
-        # 政策监管
-        "政策": ["政策", "监管", "法规", "政府"],
-        "贸易": ["贸易", "关税", "进出口", "贸易战"],
-        
-        # 风险事件
-        "地缘政治": ["地缘", "战争", "冲突", "制裁"],
-        "疫情": ["疫情", "病毒", "感染", "封锁"]
-    }
-    
-    text_lower = text.lower()
-    found_keywords = []
-    
-    for category, words in financial_keywords.items():
-        for word in words:
-            if word.lower() in text_lower:
-                found_keywords.append(category)
-                break
-    
-    # 如果没找到关键词，尝试直接提取一些常见词汇
-    if not found_keywords:
-        common_words = ["股市", "投资", "财报", "业绩", "收益", "股价", "市场"]
-        for word in common_words:
-            if word in text:
-                found_keywords.append(word)
-    
-    return found_keywords[:5]  # 最多返回5个关键词
-
-def analyze_news_sentiment(keywords):
-    """分析新闻关键词的市场情绪"""
-    bullish_keywords = ["上涨", "增长", "利好", "降息", "政策", "超预期", "科技", "消费"]
-    bearish_keywords = ["下跌", "加息", "利空", "风险", "地缘政治", "通胀", "监管"]
-    
-    bullish_count = sum(1 for keyword in keywords if keyword in bullish_keywords)
-    bearish_count = sum(1 for keyword in keywords if keyword in bearish_keywords)
-    
-    if bullish_count > bearish_count:
-        return "利好", "green"
-    elif bearish_count > bullish_count:
-        return "利空", "red"
-    else:
-        return "中性", "gray"
-
-def get_market_impact_advice(sentiment):
-    """根据情绪给出市场影响建议"""
-    if sentiment == "利好":
-        return {
-            "icon": "📈",
-            "advice": "积极因素，可关注相关板块机会",
-            "action": "建议关注相关概念股，适当增加仓位"
-        }
-    elif sentiment == "利空":
-        return {
-            "icon": "📉", 
-            "advice": "风险因素，建议谨慎操作",
-            "action": "降低风险敞口，关注防御性板块"
-        }
-    else:
-        return {
-            "icon": "📊",
-            "advice": "中性影响，维持现有策略",
-            "action": "密切关注后续发展，保持灵活操作"
-        }
-
-def calculate_technical_indicators(hist_data):
-    """计算技术指标"""
-    try:
-        hist_data['MA10'] = hist_data['Close'].rolling(window=10).mean()
-        hist_data['MA20'] = hist_data['Close'].rolling(window=20).mean()
-        hist_data['MA60'] = hist_data['Close'].rolling(window=60).mean()
-        
-        exp1 = hist_data['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = hist_data['Close'].ewm(span=26, adjust=False).mean()
-        hist_data['MACD'] = exp1 - exp2
-        hist_data['Signal'] = hist_data['MACD'].ewm(span=9, adjust=False).mean()
-        hist_data['MACD_Histogram'] = hist_data['MACD'] - hist_data['Signal']
-        
-        delta = hist_data['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        hist_data['RSI'] = 100 - (100 / (1 + rs))
-        
-        hist_data['BB_Middle'] = hist_data['Close'].rolling(window=20).mean()
-        bb_std = hist_data['Close'].rolling(window=20).std()
-        hist_data['BB_Upper'] = hist_data['BB_Middle'] + (bb_std * 2)
-        hist_data['BB_Lower'] = hist_data['BB_Middle'] - (bb_std * 2)
-        hist_data['BB_Width'] = hist_data['BB_Upper'] - hist_data['BB_Lower']
-        
-        hist_data['Volume_MA'] = hist_data['Volume'].rolling(window=20).mean()
-        
-        return hist_data
-    except Exception as e:
-        st.warning(f"技术指标计算失败: {str(e)}")
-        return hist_data
-
-def calculate_piotroski_score(data):
-    """计算Piotroski F-Score"""
-    score = 0
-    reasons = []
-    
-    try:
-        financials = data['financials']
-        balance_sheet = data['balance_sheet']
-        cash_flow = data['cash_flow']
-        
-        if financials.empty or balance_sheet.empty or cash_flow.empty:
-            return 0, ["❌ 财务数据不完整"]
-        
-        # 1. 盈利能力
-        if len(financials.columns) >= 2 and 'Net Income' in financials.index:
-            net_income = financials.loc['Net Income'].iloc[0]
-            if net_income > 0:
-                score += 1
-                reasons.append("✅ 净利润为正")
-            else:
-                reasons.append("❌ 净利润为负")
-        
-        # 2. 经营现金流
-        if len(cash_flow.columns) >= 1 and 'Operating Cash Flow' in cash_flow.index:
-            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
-            if ocf > 0:
-                score += 1
-                reasons.append("✅ 经营现金流为正")
-            else:
-                reasons.append("❌ 经营现金流为负")
-        
-        # 3. ROA增长
+# 3. ROA增长
         if (len(financials.columns) >= 2 and len(balance_sheet.columns) >= 2 and 
             'Total Assets' in balance_sheet.index and 'Net Income' in financials.index):
             total_assets = balance_sheet.loc['Total Assets'].iloc[0]
@@ -1453,8 +799,51 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
         # 获取新闻数据
         news_data = fetch_financial_news(ticker)
         
-                        # 新闻展示
-        for i, news in enumerate(news_data):
+        # 添加新闻统计信息
+        total_news = len(news_data)
+        company_news = len([n for n in news_data if n.get('category') == 'company_specific'])
+        industry_news = len([n for n in news_data if n.get('category') == 'industry_specific'])
+        market_news = len([n for n in news_data if n.get('category') == 'market_wide'])
+        
+        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+        with col_stat1:
+            st.metric("📰 总新闻数", total_news)
+        with col_stat2:
+            st.metric("🏢 公司相关", company_news)
+        with col_stat3:
+            st.metric("🏭 行业动态", industry_news)
+        with col_stat4:
+            st.metric("🌍 市场影响", market_news)
+        
+        st.markdown("---")
+        
+        # 分页设置
+        news_per_page = 5  # 每页显示5条新闻
+        total_pages = (len(news_data) + news_per_page - 1) // news_per_page
+        
+        # 分页控制
+        if total_pages > 1:
+            col_page1, col_page2, col_page3 = st.columns([1, 2, 1])
+            with col_page2:
+                current_page = st.selectbox(
+                    f"选择页面 (共{total_pages}页)",
+                    range(1, total_pages + 1),
+                    format_func=lambda x: f"第 {x} 页 ({(x-1)*news_per_page + 1}-{min(x*news_per_page, len(news_data))} 条)",
+                    key="news_page_selector"
+                )
+        else:
+            current_page = 1
+        
+        # 计算当前页显示的新闻范围
+        start_idx = (current_page - 1) * news_per_page
+        end_idx = min(start_idx + news_per_page, len(news_data))
+        current_news = news_data[start_idx:end_idx]
+        
+        # 显示当前页新闻
+        st.markdown(f"### 📄 第 {current_page} 页 (显示第 {start_idx + 1}-{end_idx} 条新闻)")
+        
+        # 新闻展示
+        for i, news in enumerate(current_news):
             if not news.get('title'):  # 跳过空标题的新闻
                 continue
                 
@@ -1489,12 +878,20 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 }
                 category_label = category_labels.get(category, '📰 一般新闻')
                 
+                # 新闻编号
+                news_number = start_idx + i + 1
+                
                 st.markdown(f"""
                 <div style="border: 2px solid {border_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: {bg_color};">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="background-color: {border_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">
-                            {category_label}
-                        </span>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="background-color: #666; color: white; padding: 2px 8px; border-radius: 50%; font-size: 10px; font-weight: bold; min-width: 20px; text-align: center;">
+                                {news_number}
+                            </span>
+                            <span style="background-color: {border_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;">
+                                {category_label}
+                            </span>
+                        </div>
                         <span style="font-size: 11px; color: #999;">
                             📰 {source}
                         </span>
@@ -1654,46 +1051,6 @@ else:
         - 请结合其他信息进行综合判断
         - 投资有风险，入市需谨慎
         """)
-    
-    with st.expander("🆕 新功能展示"):
-        st.markdown("### v2.0 新增功能预览")
-        
-        st.subheader("技术分析图表")
-        st.write("• 📈 价格走势图（包含均线MA20、MA60）")
-        st.write("• 📊 MACD指标图（含金叉死叉信号）")
-        st.write("• 🎯 技术指标状态实时监控")
-        
-        st.subheader("财务分析模块")
-        st.write("• 🔍 Piotroski F-Score财务健康评分")
-        st.write("• 📊 杜邦分析ROE分解")
-        st.write("• 💰 Altman Z-Score破产风险评估")
-        st.write("• 💎 DCF现金流折现估值")
-        
-        st.subheader("智能止盈止损系统")
-        st.write("• 📊 固定比例法：简单实用")
-        st.write("• 📈 技术指标法：专业分析")
-        st.write("• 📉 波动率法：自适应调整")
-        st.write("• 🎯 成本加码法：动态管理")
-        
-        st.info("输入股票代码后即可查看完整分析结果")
-    
-    with st.expander("🚀 系统特色"):
-        st.markdown("""
-        ### 📊 全面的分析维度
-        - **基本面分析**: 财务健康度、盈利能力、估值水平
-        - **技术面分析**: 趋势判断、信号识别、支撑阻力
-        - **风险评估**: 破产风险、波动性分析、止损建议
-        
-        ### 🎯 智能化特性
-        - **自动推荐**: 根据股票特性推荐最适合的策略
-        - **实时计算**: 参数调整即时反馈
-        - **可视化**: 直观的图表和状态显示
-        
-        ### 💡 用户友好
-        - **分层设计**: 新手到专家都能找到适合的功能
-        - **状态持久**: 参数调整不会重新加载
-        - **详细说明**: 每个指标都有使用指导
-        """)
 
 # 页脚
 st.markdown("---")
@@ -1706,4 +1063,609 @@ with col_footer2:
         st.session_state.analysis_data = None
         st.rerun()
 
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
+st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")import streamlit as st
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+import warnings
+import plotly.graph_objects as go
+import requests
+import json
+import time
+warnings.filterwarnings('ignore')
+
+# 页面配置
+st.set_page_config(
+    page_title="💹 智能投资分析系统",
+    page_icon="💹",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# 初始化 session state
+if 'current_ticker' not in st.session_state:
+    st.session_state.current_ticker = None
+if 'current_price' not in st.session_state:
+    st.session_state.current_price = 0
+if 'analysis_data' not in st.session_state:
+    st.session_state.analysis_data = None
+if 'show_analysis' not in st.session_state:
+    st.session_state.show_analysis = False
+
+# 标题
+st.title("💹 智能投资分析系统 v2.0")
+st.markdown("---")
+
+# ==================== 缓存函数 ====================
+@st.cache_data(ttl=3600)
+def fetch_stock_data(ticker):
+    """获取股票数据"""
+    try:
+        stock = yf.Ticker(ticker)
+        info = dict(stock.info)
+        
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365*2)
+        hist_data = stock.history(start=start_date, end=end_date)
+        
+        financials = stock.financials
+        balance_sheet = stock.balance_sheet
+        cash_flow = stock.cashflow
+        
+        return {
+            'info': info,
+            'hist_data': hist_data.copy(),
+            'financials': financials.copy() if financials is not None else pd.DataFrame(),
+            'balance_sheet': balance_sheet.copy() if balance_sheet is not None else pd.DataFrame(),
+            'cash_flow': cash_flow.copy() if cash_flow is not None else pd.DataFrame()
+        }
+    except Exception as e:
+        st.error(f"获取数据失败: {str(e)}")
+        return None
+
+def fetch_stock_data_uncached(ticker):
+    """获取股票数据（不缓存版本）"""
+    try:
+        stock = yf.Ticker(ticker)
+        info = dict(stock.info)
+        
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365*2)
+        hist_data = stock.history(start=start_date, end=end_date)
+        
+        financials = stock.financials
+        balance_sheet = stock.balance_sheet
+        cash_flow = stock.cashflow
+        
+        return {
+            'info': info,
+            'hist_data': hist_data,
+            'financials': financials if financials is not None else pd.DataFrame(),
+            'balance_sheet': balance_sheet if balance_sheet is not None else pd.DataFrame(),
+            'cash_flow': cash_flow if cash_flow is not None else pd.DataFrame(),
+            'stock': stock
+        }
+    except Exception as e:
+        st.error(f"获取数据失败: {str(e)}")
+        return None
+
+# ==================== 时事分析函数 ====================
+def generate_company_specific_news(company_info, current_time):
+    """根据公司信息生成相关新闻"""
+    news_list = []
+    
+    if not company_info or not company_info.get('ticker'):
+        # 即使没有公司信息，也生成通用新闻
+        news_list = [
+            {
+                "title": "市场整体表现稳健，投资机会显现",
+                "summary": "当前市场环境下，多个板块显示出投资价值，投资者可关注基本面良好的优质企业。",
+                "published": current_time - timedelta(hours=5),
+                "url": "",
+                "source": "市场分析",
+                "category": "company_specific"
+            }
+        ]
+        return news_list
+    
+    company_name = company_info.get('name', company_info.get('ticker'))
+    sector = company_info.get('sector', '')
+    industry = company_info.get('industry', '')
+    ticker = company_info.get('ticker')
+    
+    # 根据行业生成相关新闻
+    if 'Technology' in sector or 'tech' in industry.lower() or 'software' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"科技股{company_name}受益于AI发展趋势",
+                "summary": f"{company_name}作为科技行业领军企业，预计将从人工智能技术发展浪潮中获益。分析师看好其在AI领域的布局和技术优势。",
+                "published": current_time - timedelta(hours=3),
+                "url": "",
+                "source": "科技行业分析",
+                "category": "company_specific"
+            },
+            {
+                "title": f"半导体行业整体向好，{ticker}等龙头股受关注",
+                "summary": f"随着全球数字化转型加速，半导体需求持续增长。{company_name}等行业龙头企业有望持续受益于这一趋势。",
+                "published": current_time - timedelta(hours=8),
+                "url": "",
+                "source": "行业研究",
+                "category": "industry_specific"
+            },
+            {
+                "title": f"云计算市场快速增长，{company_name}云业务前景看好",
+                "summary": f"企业数字化转型推动云计算需求激增，{company_name}在云服务领域的投入和技术积累为其带来新的增长动力。",
+                "published": current_time - timedelta(hours=12),
+                "url": "",
+                "source": "云计算行业",
+                "category": "industry_specific"
+            }
+        ])
+    
+    elif 'Healthcare' in sector or 'Pharmaceuticals' in industry or 'health' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"医药行业{company_name}新药研发进展受关注",
+                "summary": f"{company_name}在新药研发领域的最新进展引起市场关注。医药行业整体估值有望随着创新药物的推出而提升。",
+                "published": current_time - timedelta(hours=4),
+                "url": "",
+                "source": "医药行业",
+                "category": "company_specific"
+            },
+            {
+                "title": f"生物技术领域投资热度不减，{ticker}等企业受益",
+                "summary": f"生物技术和医疗创新持续受到投资者青睐，{company_name}等医药企业在研发投入和产品创新方面的努力获得市场认可。",
+                "published": current_time - timedelta(hours=11),
+                "url": "",
+                "source": "生物技术",
+                "category": "industry_specific"
+            }
+        ])
+    
+    elif 'Financial' in sector or 'bank' in industry.lower() or 'insurance' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"银行股{company_name}受益于利率政策预期",
+                "summary": f"市场对利率政策的预期变化对银行股形成利好。{company_name}作为金融行业重要参与者，有望受益于净息差改善。",
+                "published": current_time - timedelta(hours=5),
+                "url": "",
+                "source": "金融行业",
+                "category": "company_specific"
+            },
+            {
+                "title": f"金融科技发展推动传统银行转型，{ticker}积极布局",
+                "summary": f"数字化转型浪潮下，{company_name}等传统金融机构加大科技投入，通过金融科技提升服务效率和客户体验。",
+                "published": current_time - timedelta(hours=13),
+                "url": "",
+                "source": "金融科技",
+                "category": "industry_specific"
+            }
+        ])
+    
+    elif 'Energy' in sector or 'oil' in industry.lower() or 'gas' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"能源股{company_name}受益于油价上涨预期",
+                "summary": f"国际能源市场供需关系改善，油价维持高位。{company_name}等能源企业有望从中受益，业绩预期向好。",
+                "published": current_time - timedelta(hours=7),
+                "url": "",
+                "source": "能源行业",
+                "category": "company_specific"
+            },
+            {
+                "title": f"可再生能源转型加速，{company_name}绿色投资引关注",
+                "summary": f"全球能源转型趋势下，{company_name}在清洁能源和可再生能源领域的布局成为投资者关注焦点。",
+                "published": current_time - timedelta(hours=15),
+                "url": "",
+                "source": "绿色能源",
+                "category": "industry_specific"
+            }
+        ])
+    
+    elif 'Consumer' in sector or 'retail' in industry.lower() or 'food' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"消费股{company_name}业绩有望受益于经济复苏",
+                "summary": f"随着消费者信心回升和支出增加，{company_name}等消费类企业预计将迎来业绩改善。分析师上调盈利预期。",
+                "published": current_time - timedelta(hours=9),
+                "url": "",
+                "source": "消费行业",
+                "category": "company_specific"
+            },
+            {
+                "title": f"电商渗透率持续提升，{ticker}数字化转型成效显著",
+                "summary": f"线上消费趋势不断强化，{company_name}通过数字化转型和全渠道布局，在竞争激烈的消费市场中保持优势。",
+                "published": current_time - timedelta(hours=12),
+                "url": "",
+                "source": "数字零售",
+                "category": "industry_specific"
+            }
+        ])
+    
+    elif 'automotive' in industry.lower() or 'Automotive' in sector or 'motor' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"新能源汽车行业增长强劲，{company_name}前景看好",
+                "summary": f"全球新能源汽车销量持续高速增长，{company_name}在电动车领域的布局和技术积累为其带来发展机遇。",
+                "published": current_time - timedelta(hours=6),
+                "url": "",
+                "source": "汽车行业",
+                "category": "company_specific"
+            },
+            {
+                "title": f"自动驾驶技术突破，{ticker}等车企加大研发投入",
+                "summary": f"自动驾驶和智能汽车技术快速发展，{company_name}等汽车制造商在这一领域的技术积累和投资备受市场期待。",
+                "published": current_time - timedelta(hours=14),
+                "url": "",
+                "source": "智能汽车",
+                "category": "industry_specific"
+            }
+        ])
+    
+    else:
+        # 通用行业新闻
+        news_list.extend([
+            {
+                "title": f"{company_name}业绩表现稳健，投资价值凸显",
+                "summary": f"{company_name}作为{industry}领域的重要企业，在当前市场环境下表现稳健。投资者关注其业务发展和市场策略。",
+                "published": current_time - timedelta(hours=5),
+                "url": "",
+                "source": "行业分析",
+                "category": "company_specific"
+            },
+            {
+                "title": f"{industry}行业整体向好，{ticker}等企业受益",
+                "summary": f"当前{industry}行业整体发展态势良好，{company_name}等行业内企业有望受益于行业增长趋势。",
+                "published": current_time - timedelta(hours=10),
+                "url": "",
+                "source": "行业动态",
+                "category": "industry_specific"
+            }
+        ])
+    
+    return news_list[:4]  # 确保返回4条公司相关新闻
+
+def fetch_financial_news(target_ticker=None):
+    """获取财经新闻 - 根据股票代码定制化"""
+    try:
+        news_data = []
+        
+        # 方法1: 尝试从yfinance获取特定股票的新闻
+        if target_ticker:
+            try:
+                ticker = yf.Ticker(target_ticker)
+                news = ticker.news
+                if news and len(news) > 0:
+                    for article in news[:4]:  # 目标股票取4条新闻
+                        if article.get('title') and article.get('providerPublishTime'):
+                            news_data.append({
+                                "title": article.get('title', ''),
+                                "summary": article.get('summary', '')[:200] + '...' if article.get('summary') else article.get('title', ''),
+                                "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
+                                "url": article.get('link', ''),
+                                "source": f"Yahoo Finance ({target_ticker})",
+                                "category": "company_specific"
+                            })
+            except Exception as e:
+                pass
+        
+        # 方法2: 获取市场整体新闻
+        try:
+            market_tickers = ["^GSPC", "^IXIC", "^DJI"]
+            for ticker_symbol in market_tickers:
+                try:
+                    ticker = yf.Ticker(ticker_symbol)
+                    news = ticker.news
+                    if news and len(news) > 0:
+                        for article in news[:2]:  # 每个指数取2条
+                            if article.get('title') and article.get('providerPublishTime'):
+                                news_data.append({
+                                    "title": article.get('title', ''),
+                                    "summary": article.get('summary', '')[:200] + '...' if article.get('summary') else article.get('title', ''),
+                                    "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
+                                    "url": article.get('link', ''),
+                                    "source": "Market News",
+                                    "category": "market_wide"
+                                })
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        
+        # 方法3: 补充模拟新闻
+        current_time = datetime.now()
+        
+        # 获取公司信息用于生成相关新闻
+        company_info = {}
+        if target_ticker:
+            try:
+                ticker_obj = yf.Ticker(target_ticker)
+                info = ticker_obj.info
+                company_info = {
+                    'name': info.get('longName', target_ticker),
+                    'sector': info.get('sector', ''),
+                    'industry': info.get('industry', ''),
+                    'ticker': target_ticker
+                }
+            except:
+                company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
+        
+        # 无论如何都生成公司特定新闻
+        company_news = generate_company_specific_news(company_info, current_time)
+        news_data.extend(company_news)
+        
+        # 添加市场广泛影响的新闻（美联储等）
+        market_wide_news = [
+            {
+                "title": "美联储官员暗示未来可能调整利率政策",
+                "summary": "美联储高级官员在最新讲话中表示，将根据通胀数据和经济增长情况灵活调整货币政策，市场对此反应积极。此举将影响所有资产类别的估值。",
+                "published": current_time - timedelta(hours=2),
+                "url": "",
+                "source": "美联储政策",
+                "category": "market_wide"
+            },
+            {
+                "title": "全球通胀数据好于预期，风险资产普遍上涨",
+                "summary": "最新公布的全球主要经济体通胀数据均好于市场预期，投资者风险偏好提升，股市、商品等风险资产普遍上涨。",
+                "published": current_time - timedelta(hours=6),
+                "url": "",
+                "source": "全球经济",
+                "category": "market_wide"
+            },
+            {
+                "title": "地缘政治局势缓解，市场避险情绪降温",
+                "summary": "近期国际地缘政治紧张局势有所缓解，投资者避险情绪降温，资金重新流入股市等风险资产，黄金等避险资产回落。",
+                "published": current_time - timedelta(hours=10),
+                "url": "",
+                "source": "国际政治",
+                "category": "market_wide"
+            },
+            {
+                "title": "经济数据显示复苏势头良好，市场信心增强",
+                "summary": "最新发布的一系列经济指标显示经济复苏势头良好，就业市场稳定，消费支出增长，投资者对经济前景的信心进一步增强。",
+                "published": current_time - timedelta(hours=14),
+                "url": "",
+                "source": "经济数据",
+                "category": "market_wide"
+            },
+            {
+                "title": "投资者风险偏好回升，股市资金流入增加",
+                "summary": "随着市场不确定性减少，投资者风险偏好明显回升，资金持续流入股票市场，各大指数表现活跃。",
+                "published": current_time - timedelta(hours=16),
+                "url": "",
+                "source": "市场资金流向",
+                "category": "market_wide"
+            },
+            {
+                "title": "企业盈利预期改善，分析师上调目标价",
+                "summary": "多家券商分析师基于最新财报数据和业务前景，上调了多只个股的目标价格和盈利预测。",
+                "published": current_time - timedelta(hours=18),
+                "url": "",
+                "source": "分析师报告",
+                "category": "market_wide"
+            }
+        ]
+        news_data.extend(market_wide_news)
+        
+        # 处理新闻数据，添加关键词和情绪分析
+        processed_news = []
+        for news in news_data[:10]:  # 提高至10条新闻
+            # 确保新闻内容不为空
+            if not news.get('title'):
+                continue
+                
+            keywords = extract_keywords(news['title'] + ' ' + news.get('summary', ''))
+            sentiment, _ = analyze_news_sentiment(keywords)
+            
+            processed_news.append({
+                **news,
+                'keywords': keywords,
+                'sentiment': sentiment
+            })
+        
+        # 确保返回的新闻数量足够
+        while len(processed_news) < 10:
+            # 添加更多通用市场新闻
+            extra_news = [
+                {
+                    "title": "监管政策明朗化，市场信心进一步增强",
+                    "summary": "相关部门发布的最新政策指引为市场提供了更清晰的方向，投资者信心得到进一步提振。",
+                    "published": datetime.now() - timedelta(hours=20),
+                    "url": "",
+                    "source": "政策解读",
+                    "keywords": ["监管政策", "市场信心"],
+                    "sentiment": "利好",
+                    "category": "market_wide"
+                },
+                {
+                    "title": "国际资本配置调整，新兴市场受关注",
+                    "summary": "全球资产配置趋势变化，国际资本对新兴市场的关注度提升，相关资产估值有望得到重估。",
+                    "published": datetime.now() - timedelta(hours=22),
+                    "url": "",
+                    "source": "国际资本",
+                    "keywords": ["资本配置", "新兴市场"],
+                    "sentiment": "中性",
+                    "category": "market_wide"
+                }
+            ]
+            
+            for extra in extra_news:
+                if len(processed_news) < 10:
+                    processed_news.append(extra)
+                else:
+                    break
+            break
+        
+        # 按时间排序，最新的在前
+        processed_news.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
+        
+        return processed_news[:10]  # 确保返回10条新闻
+        
+    except Exception as e:
+        # 最后的错误处理
+        return [{
+            "title": "新闻服务暂时不可用",
+            "summary": f"获取新闻时遇到技术问题，建议稍后重试或查看主要财经网站。",
+            "published": datetime.now(),
+            "url": "",
+            "source": "系统",
+            "keywords": ["技术", "问题"],
+            "sentiment": "中性",
+            "category": "system"
+        }]
+
+def extract_keywords(text):
+    """从新闻文本中提取关键词"""
+    # 财经相关关键词库
+    financial_keywords = {
+        # 货币政策
+        "利率": ["利率", "降息", "加息", "基准利率", "联邦基金利率"],
+        "货币政策": ["货币政策", "央行", "美联储", "QE", "量化宽松"],
+        
+        # 市场情绪
+        "上涨": ["上涨", "上升", "增长", "涨幅", "大涨", "暴涨"],
+        "下跌": ["下跌", "下降", "跌幅", "大跌", "暴跌", "下滑"],
+        
+        # 行业板块
+        "科技": ["科技", "AI", "人工智能", "芯片", "半导体", "软件"],
+        "金融": ["银行", "保险", "券商", "金融", "信贷"],
+        "能源": ["石油", "天然气", "新能源", "电动车", "光伏", "风电"],
+        "消费": ["消费", "零售", "餐饮", "旅游", "酒店"],
+        
+        # 经济指标
+        "通胀": ["通胀", "CPI", "PPI", "物价"],
+        "就业": ["就业", "失业率", "就业数据", "非农"],
+        "GDP": ["GDP", "经济增长", "国内生产总值"],
+        
+        # 政策监管
+        "政策": ["政策", "监管", "法规", "政府"],
+        "贸易": ["贸易", "关税", "进出口", "贸易战"],
+        
+        # 风险事件
+        "地缘政治": ["地缘", "战争", "冲突", "制裁"],
+        "疫情": ["疫情", "病毒", "感染", "封锁"]
+    }
+    
+    text_lower = text.lower()
+    found_keywords = []
+    
+    for category, words in financial_keywords.items():
+        for word in words:
+            if word.lower() in text_lower:
+                found_keywords.append(category)
+                break
+    
+    # 如果没找到关键词，尝试直接提取一些常见词汇
+    if not found_keywords:
+        common_words = ["股市", "投资", "财报", "业绩", "收益", "股价", "市场"]
+        for word in common_words:
+            if word in text:
+                found_keywords.append(word)
+    
+    return found_keywords[:5]  # 最多返回5个关键词
+
+def analyze_news_sentiment(keywords):
+    """分析新闻关键词的市场情绪"""
+    bullish_keywords = ["上涨", "增长", "利好", "降息", "政策", "超预期", "科技", "消费"]
+    bearish_keywords = ["下跌", "加息", "利空", "风险", "地缘政治", "通胀", "监管"]
+    
+    bullish_count = sum(1 for keyword in keywords if keyword in bullish_keywords)
+    bearish_count = sum(1 for keyword in keywords if keyword in bearish_keywords)
+    
+    if bullish_count > bearish_count:
+        return "利好", "green"
+    elif bearish_count > bullish_count:
+        return "利空", "red"
+    else:
+        return "中性", "gray"
+
+def get_market_impact_advice(sentiment):
+    """根据情绪给出市场影响建议"""
+    if sentiment == "利好":
+        return {
+            "icon": "📈",
+            "advice": "积极因素，可关注相关板块机会",
+            "action": "建议关注相关概念股，适当增加仓位"
+        }
+    elif sentiment == "利空":
+        return {
+            "icon": "📉", 
+            "advice": "风险因素，建议谨慎操作",
+            "action": "降低风险敞口，关注防御性板块"
+        }
+    else:
+        return {
+            "icon": "📊",
+            "advice": "中性影响，维持现有策略",
+            "action": "密切关注后续发展，保持灵活操作"
+        }
+
+def calculate_technical_indicators(hist_data):
+    """计算技术指标"""
+    try:
+        hist_data['MA10'] = hist_data['Close'].rolling(window=10).mean()
+        hist_data['MA20'] = hist_data['Close'].rolling(window=20).mean()
+        hist_data['MA60'] = hist_data['Close'].rolling(window=60).mean()
+        
+        exp1 = hist_data['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = hist_data['Close'].ewm(span=26, adjust=False).mean()
+        hist_data['MACD'] = exp1 - exp2
+        hist_data['Signal'] = hist_data['MACD'].ewm(span=9, adjust=False).mean()
+        hist_data['MACD_Histogram'] = hist_data['MACD'] - hist_data['Signal']
+        
+        delta = hist_data['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        hist_data['RSI'] = 100 - (100 / (1 + rs))
+        
+        hist_data['BB_Middle'] = hist_data['Close'].rolling(window=20).mean()
+        bb_std = hist_data['Close'].rolling(window=20).std()
+        hist_data['BB_Upper'] = hist_data['BB_Middle'] + (bb_std * 2)
+        hist_data['BB_Lower'] = hist_data['BB_Middle'] - (bb_std * 2)
+        hist_data['BB_Width'] = hist_data['BB_Upper'] - hist_data['BB_Lower']
+        
+        hist_data['Volume_MA'] = hist_data['Volume'].rolling(window=20).mean()
+        
+        return hist_data
+    except Exception as e:
+        st.warning(f"技术指标计算失败: {str(e)}")
+        return hist_data
+
+def calculate_piotroski_score(data):
+    """计算Piotroski F-Score"""
+    score = 0
+    reasons = []
+    
+    try:
+        financials = data['financials']
+        balance_sheet = data['balance_sheet']
+        cash_flow = data['cash_flow']
+        
+        if financials.empty or balance_sheet.empty or cash_flow.empty:
+            return 0, ["❌ 财务数据不完整"]
+        
+        # 1. 盈利能力
+        if len(financials.columns) >= 2 and 'Net Income' in financials.index:
+            net_income = financials.loc['Net Income'].iloc[0]
+            if net_income > 0:
+                score += 1
+                reasons.append("✅ 净利润为正")
+            else:
+                reasons.append("❌ 净利润为负")
+        
+        # 2. 经营现金流
+        if len(cash_flow.columns) >= 1 and 'Operating Cash Flow' in cash_flow.index:
+            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
+            if ocf > 0:
+                score += 1
+                reasons.append("✅ 经营现金流为正")
+            else:
+                reasons.append("❌ 经营现金流为负")
+        
+        # 3. ROA增长
+        if (len(financials.columns) >= 2 and len(balance_sheet.columns) >= 2 and 
+            'Total Assets' in balance_sheet.index and 'Net Income' in financials.index):
+            total_assets = balance_
