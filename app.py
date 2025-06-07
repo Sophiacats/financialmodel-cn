@@ -295,178 +295,322 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
     ticker = st.session_state.current_ticker
         
     col1, col2, col3 = st.columns([1, 2, 1.5])
+    
+    # 左栏：公司基本信息
+    with col1:
+        st.subheader("📌 公司基本信息")
+        info = data['info']
         
-        # 左栏：公司基本信息
-        with col1:
-            st.subheader("📌 公司基本信息")
-            info = data['info']
-            
-            with st.container():
-                st.metric("公司名称", info.get('longName', ticker))
-                st.metric("当前股价", f"${info.get('currentPrice', 0):.2f}")
-                st.metric("市值", f"${info.get('marketCap', 0)/1e9:.2f}B")
-                st.metric("行业", info.get('industry', 'N/A'))
-                st.metric("Beta", f"{info.get('beta', 0):.2f}")
+        with st.container():
+            st.metric("公司名称", info.get('longName', ticker))
+            st.metric("当前股价", f"${info.get('currentPrice', 0):.2f}")
+            st.metric("市值", f"${info.get('marketCap', 0)/1e9:.2f}B")
+            st.metric("行业", info.get('industry', 'N/A'))
+            st.metric("Beta", f"{info.get('beta', 0):.2f}")
+    
+    # 中栏：分析结果
+    with col2:
+        st.subheader("📈 综合分析结果")
         
-        # 中栏：分析结果
-        with col2:
-            st.subheader("📈 综合分析结果")
+        # Piotroski F-Score
+        with st.expander("🔍 Piotroski F-Score 分析", expanded=True):
+            f_score, reasons = calculate_piotroski_score(data)
             
-            # Piotroski F-Score
-            with st.expander("🔍 Piotroski F-Score 分析", expanded=True):
-                f_score, reasons = calculate_piotroski_score(data)
+            score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
+            st.markdown(f"### 得分: <span style='color:{score_color}; font-size:24px'>{f_score}/9</span>", unsafe_allow_html=True)
+            
+            for reason in reasons:
+                st.write(reason)
+            
+            if f_score >= 7:
+                st.success("💡 建议: 财务健康状况良好，基本面强劲")
+            elif f_score >= 4:
+                st.warning("💡 建议: 财务状况一般，需要谨慎评估")
+            else:
+                st.error("💡 建议: 财务状况较差，投资风险较高")
+        
+        # 杜邦分析
+        with st.expander("📊 杜邦分析", expanded=True):
+            dupont = calculate_dupont_analysis(data)
+            if dupont:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.metric("ROE", f"{dupont['roe']:.2f}%")
+                    st.metric("利润率", f"{dupont['profit_margin']:.2f}%")
+                with col_b:
+                    st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
+                    st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
+    
+    # 右栏：图表和建议
+    with col3:
+        st.subheader("📉 技术分析与建议")
+        
+        hist_data = data['hist_data'].copy()
+        hist_data = calculate_technical_indicators(hist_data)
+        
+        # 价格走势图
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(hist_data.index[-180:], hist_data['Close'][-180:], label='Close', linewidth=2)
+        ax.plot(hist_data.index[-180:], hist_data['MA20'][-180:], label='MA20', alpha=0.7)
+        ax.plot(hist_data.index[-180:], hist_data['MA60'][-180:], label='MA60', alpha=0.7)
+        ax.set_title(f'{ticker} Price Trend (Last 180 Days)')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price ($)')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        # 智能止盈止损模拟器 - 四种策略
+        st.markdown("---")
+        st.subheader("💰 智能止盈止损模拟器")
+        
+        with st.container():
+            st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
+            
+            # 输入参数
+            col_input1, col_input2 = st.columns(2)
+            with col_input1:
+                default_buy_price = current_price * 0.95
+                buy_price = st.number_input(
+                    "买入价格 ($)", 
+                    min_value=0.01, 
+                    value=default_buy_price, 
+                    step=0.01, 
+                    key=f"buy_price_{ticker}_{current_price}"
+                )
+            with col_input2:
+                position_size = st.number_input(
+                    "持仓数量", 
+                    min_value=1, 
+                    value=100, 
+                    step=1,
+                    key=f"position_size_{ticker}_{current_price}"
+                )
+            
+            # 基础计算
+            position_value = position_size * buy_price
+            current_value = position_size * current_price
+            pnl = current_value - position_value
+            pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
+            
+            # 四种策略标签页
+            st.markdown("#### 🎯 选择止盈止损策略")
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "📊 固定比例法", 
+                "📈 技术指标法", 
+                "📉 波动率法", 
+                "🎯 成本加码法"
+            ])
+            
+            # 策略1：固定比例法
+            with tab1:
+                st.write("**适用场景**: 大多数波动性股票，适合稳健型投资者")
                 
-                score_color = "green" if f_score >= 7 else "orange" if f_score >= 4 else "red"
-                st.markdown(f"### 得分: <span style='color:{score_color}; font-size:24px'>{f_score}/9</span>", unsafe_allow_html=True)
+                col1, col2 = st.columns(2)
+                with col1:
+                    tp_pct = st.slider("止盈比例 (%)", 5, 50, 15, key=f"tp1_{ticker}_{current_price}")
+                with col2:
+                    sl_pct = st.slider("止损比例 (%)", 3, 20, 10, key=f"sl1_{ticker}_{current_price}")
                 
-                for reason in reasons:
-                    st.write(reason)
+                stop_loss = buy_price * (1 - sl_pct / 100)
+                take_profit = buy_price * (1 + tp_pct / 100)
                 
-                if f_score >= 7:
-                    st.success("💡 建议: 财务健康状况良好，基本面强劲")
-                elif f_score >= 4:
-                    st.warning("💡 建议: 财务状况一般，需要谨慎评估")
+                col_m1, col_m2, col_m3 = st.columns(3)
+                with col_m1:
+                    st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                with col_m2:
+                    st.metric("🛡️ 止损价位", f"${stop_loss:.2f}")
+                with col_m3:
+                    st.metric("🎯 止盈价位", f"${take_profit:.2f}")
+                
+                if current_price <= stop_loss:
+                    st.error("⚠️ 已触及止损线！")
+                elif current_price >= take_profit:
+                    st.success("🎯 已达到止盈目标！")
                 else:
-                    st.error("💡 建议: 财务状况较差，投资风险较高")
+                    st.info("📊 持仓正常")
             
-            # 杜邦分析
-            with st.expander("📊 杜邦分析", expanded=True):
-                dupont = calculate_dupont_analysis(data)
-                if dupont:
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.metric("ROE", f"{dupont['roe']:.2f}%")
-                        st.metric("利润率", f"{dupont['profit_margin']:.2f}%")
-                    with col_b:
-                        st.metric("资产周转率", f"{dupont['asset_turnover']:.2f}")
-                        st.metric("权益乘数", f"{dupont['equity_multiplier']:.2f}")
-        
-        # 右栏：图表和建议
-        with col3:
-            st.subheader("📉 技术分析与建议")
+            # 策略2：技术指标法
+            with tab2:
+                st.write("**适用场景**: 基于支撑阻力位、布林带等技术分析")
+                
+                # 计算技术位
+                latest = hist_data.iloc[-1]
+                support = hist_data['Low'].rolling(20).min().iloc[-1]
+                resistance = hist_data['High'].rolling(20).max().iloc[-1]
+                
+                if 'BB_Lower' in hist_data.columns:
+                    bb_lower = latest['BB_Lower']
+                    bb_upper = latest['BB_Upper']
+                else:
+                    bb_lower = current_price * 0.95
+                    bb_upper = current_price * 1.05
+                
+                tech_method = st.selectbox(
+                    "技术指标方法",
+                    ["布林带策略", "支撑阻力位", "均线支撑"],
+                    key=f"tech_method_{ticker}_{current_price}"
+                )
+                
+                if tech_method == "布林带策略":
+                    tech_sl = bb_lower * 0.98
+                    tech_tp = bb_upper * 1.02
+                elif tech_method == "支撑阻力位":
+                    tech_sl = support * 0.98
+                    tech_tp = resistance * 1.02
+                else:
+                    ma20 = latest['MA20'] if 'MA20' in hist_data.columns else current_price * 0.98
+                    tech_sl = ma20 * 0.98
+                    tech_tp = current_price * 1.15
+                
+                col_t1, col_t2, col_t3 = st.columns(3)
+                with col_t1:
+                    st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                with col_t2:
+                    st.metric("🛡️ 技术止损", f"${tech_sl:.2f}")
+                with col_t3:
+                    st.metric("🎯 技术止盈", f"${tech_tp:.2f}")
+                
+                st.write(f"• 支撑位: ${support:.2f}")
+                st.write(f"• 阻力位: ${resistance:.2f}")
             
-            hist_data = data['hist_data'].copy()
-            hist_data = calculate_technical_indicators(hist_data)
+            # 策略3：波动率法
+            with tab3:
+                st.write("**适用场景**: 根据股票波动性调整，高波动股票设置更大空间")
+                
+                # 计算ATR
+                high_low = hist_data['High'] - hist_data['Low']
+                high_close = np.abs(hist_data['High'] - hist_data['Close'].shift())
+                low_close = np.abs(hist_data['Low'] - hist_data['Close'].shift())
+                tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+                atr = tr.rolling(14).mean().iloc[-1]
+                
+                # 计算波动率
+                returns = hist_data['Close'].pct_change().dropna()
+                volatility = returns.std() * np.sqrt(252) * 100
+                
+                atr_mult = st.slider("ATR倍数", 1.0, 4.0, 2.0, 0.1, key=f"atr_{ticker}_{current_price}")
+                
+                vol_sl = max(buy_price - atr * atr_mult, buy_price * 0.90)
+                vol_tp = buy_price * 1.15
+                
+                col_v1, col_v2, col_v3 = st.columns(3)
+                with col_v1:
+                    st.metric("ATR", f"${atr:.2f}")
+                with col_v2:
+                    st.metric("年化波动率", f"{volatility:.1f}%")
+                with col_v3:
+                    vol_level = "高" if volatility > 30 else "中" if volatility > 20 else "低"
+                    st.metric("波动等级", vol_level)
+                
+                col_vm1, col_vm2, col_vm3 = st.columns(3)
+                with col_vm1:
+                    st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                with col_vm2:
+                    st.metric("🛡️ ATR止损", f"${vol_sl:.2f}")
+                with col_vm3:
+                    st.metric("🎯 波动率止盈", f"${vol_tp:.2f}")
             
-            # 价格走势图
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(hist_data.index[-180:], hist_data['Close'][-180:], label='Close', linewidth=2)
-            ax.plot(hist_data.index[-180:], hist_data['MA20'][-180:], label='MA20', alpha=0.7)
-            ax.plot(hist_data.index[-180:], hist_data['MA60'][-180:], label='MA60', alpha=0.7)
-            ax.set_title(f'{ticker} Price Trend (Last 180 Days)')
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Price ($)')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            st.pyplot(fig)
+            # 策略4：成本加码法
+            with tab4:
+                st.write("**适用场景**: 根据盈利情况动态调整，保护利润追求更大收益")
+                
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    profit_threshold = st.slider("利润阈值 (%)", 5, 30, 10, key=f"profit_{ticker}_{current_price}")
+                with col_c2:
+                    trailing_dist = st.slider("追踪距离 (%)", 3, 15, 5, key=f"trail_{ticker}_{current_price}")
+                
+                threshold_price = buy_price * (1 + profit_threshold / 100)
+                
+                if current_price >= threshold_price:
+                    # 动态止损激活
+                    dynamic_sl = max(buy_price * 1.02, current_price * (1 - trailing_dist / 100))
+                    status = f"🟢 动态止损激活 (突破{profit_threshold}%)"
+                    dynamic_tp = buy_price * 1.25
+                else:
+                    # 普通止损
+                    dynamic_sl = buy_price * 0.92
+                    need_rise = ((threshold_price - current_price) / current_price * 100)
+                    status = f"🔵 等待激活 (需上涨{need_rise:.1f}%)"
+                    dynamic_tp = threshold_price
+                
+                st.info(status)
+                
+                # 分阶段目标
+                stage1 = threshold_price
+                stage2 = buy_price * 1.20
+                stage3 = buy_price * 1.35
+                
+                col_cm1, col_cm2, col_cm3 = st.columns(3)
+                with col_cm1:
+                    st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
+                with col_cm2:
+                    st.metric("🛡️ 动态止损", f"${dynamic_sl:.2f}")
+                with col_cm3:
+                    st.metric("🎯 当前目标", f"${dynamic_tp:.2f}")
+                
+                st.markdown("**分阶段目标**")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    s1_status = "✅" if current_price >= stage1 else "⏳"
+                    st.write(f"{s1_status} 阶段1: ${stage1:.2f}")
+                with col_s2:
+                    s2_status = "✅" if current_price >= stage2 else "⏳"
+                    st.write(f"{s2_status} 阶段2: ${stage2:.2f}")
+                with col_s3:
+                    s3_status = "✅" if current_price >= stage3 else "⏳"
+                    st.write(f"{s3_status} 阶段3: ${stage3:.2f}")
             
-            # 智能止盈止损模拟器 - 四种策略
+            # 策略推荐
             st.markdown("---")
-            st.subheader("💰 智能止盈止损模拟器")
+            st.markdown("#### 💡 智能策略推荐")
             
-            with st.container():
-                st.info(f"📊 当前分析股票：{ticker} | 实时价格：${current_price:.2f}")
+            technical_signals = analyze_technical_signals(hist_data)
+            returns = hist_data['Close'].pct_change().dropna()
+            volatility = returns.std() * np.sqrt(252) * 100
+            
+            if volatility > 30:
+                st.info("🔥 **推荐波动率法** - 当前股票波动性较高")
+            elif technical_signals['trend'] == 'bullish' and pnl_pct > 5:
+                st.info("📈 **推荐成本加码法** - 当前上升趋势且有盈利")
+            elif 'BB_Middle' in hist_data.columns and current_price > hist_data['BB_Middle'].iloc[-1]:
+                st.info("📊 **推荐技术指标法** - 技术形态明确")
+            else:
+                st.info("🎯 **推荐固定比例法** - 市场信号不明确时最为稳健")
+            
+            # 使用建议
+            st.markdown("#### 🎓 策略选择指南")
+            col_guide1, col_guide2 = st.columns(2)
+            with col_guide1:
+                st.markdown("""
+                **🔰 新手投资者**:
+                - 固定比例法：简单易懂
+                - 建议：止盈15%，止损8%
                 
-                # 输入参数
-                col_input1, col_input2 = st.columns(2)
-                with col_input1:
-                    default_buy_price = current_price * 0.95
-                    buy_price = st.number_input(
-                        "买入价格 ($)", 
-                        min_value=0.01, 
-                        value=default_buy_price, 
-                        step=0.01, 
-                        key=f"buy_price_{ticker}_{current_price}"
-                    )
-                with col_input2:
-                    position_size = st.number_input(
-                        "持仓数量", 
-                        min_value=1, 
-                        value=100, 
-                        step=1,
-                        key=f"position_size_{ticker}_{current_price}"
-                    )
+                **📊 技术分析者**:
+                - 技术指标法：基于图表
+                - 布林带策略最实用
+                """)
+            
+            with col_guide2:
+                st.markdown("""
+                **🎯 进阶投资者**:
+                - 波动率法：适应变化
+                - 成本加码法：保护利润
                 
-                # 基础计算
-                position_value = position_size * buy_price
-                current_value = position_size * current_price
-                pnl = current_value - position_value
-                pnl_pct = (pnl / position_value) * 100 if position_value > 0 else 0
-                
-                # 四种策略标签页
-                st.markdown("#### 🎯 选择止盈止损策略")
-                tab1, tab2, tab3, tab4 = st.tabs([
-                    "📊 固定比例法", 
-                    "📈 技术指标法", 
-                    "📉 波动率法", 
-                    "🎯 成本加码法"
-                ])
-                
-                # 策略1：固定比例法
-                with tab1:
-                    st.write("**适用场景**: 大多数波动性股票，适合稳健型投资者")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        tp_pct = st.slider("止盈比例 (%)", 5, 50, 15, key=f"tp1_{ticker}_{current_price}")
-                    with col2:
-                        sl_pct = st.slider("止损比例 (%)", 3, 20, 10, key=f"sl1_{ticker}_{current_price}")
-                    
-                    stop_loss = buy_price * (1 - sl_pct / 100)
-                    take_profit = buy_price * (1 + tp_pct / 100)
-                    
-                    col_m1, col_m2, col_m3 = st.columns(3)
-                    with col_m1:
-                        st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
-                    with col_m2:
-                        st.metric("🛡️ 止损价位", f"${stop_loss:.2f}")
-                    with col_m3:
-                        st.metric("🎯 止盈价位", f"${take_profit:.2f}")
-                    
-                    if current_price <= stop_loss:
-                        st.error("⚠️ 已触及止损线！")
-                    elif current_price >= take_profit:
-                        st.success("🎯 已达到止盈目标！")
-                    else:
-                        st.info("📊 持仓正常")
-                
-                # 策略2：技术指标法
-                with tab2:
-                    st.write("**适用场景**: 基于支撑阻力位、布林带等技术分析")
-                    
-                    # 计算技术位
-                    latest = hist_data.iloc[-1]
-                    support = hist_data['Low'].rolling(20).min().iloc[-1]
-                    resistance = hist_data['High'].rolling(20).max().iloc[-1]
-                    
-                    if 'BB_Lower' in hist_data.columns:
-                        bb_lower = latest['BB_Lower']
-                        bb_upper = latest['BB_Upper']
-                    else:
-                        bb_lower = current_price * 0.95
-                        bb_upper = current_price * 1.05
-                    
-                    tech_method = st.selectbox(
-                        "技术指标方法",
-                        ["布林带策略", "支撑阻力位", "均线支撑"],
-                        key=f"tech_method_{ticker}_{current_price}"
-                    )
-                    
-                    if tech_method == "布林带策略":
-                        tech_sl = bb_lower * 0.98
-                        tech_tp = bb_upper * 1.02
-                    elif tech_method == "支撑阻力位":
-                        tech_sl = support * 0.98
-                        tech_tp = resistance * 1.02
-                    else:
-                        ma20 = latest['MA20'] if 'MA20' in hist_data.columns else current_price * 0.98
-                        tech_sl = ma20 * 0.98
-                        tech_tp = current_price * 1.15
-                    
-                    col_t1, col_t2, col_t3 = st.columns(3)
-                    with col_t1:
+                **⚡ 短线交易者**:
+                - 波动率法组合使用
+                - 快速响应市场
+                """)
+            
+            # 风险提示
+            st.warning("""
+            ⚠️ **风险提示**: 所有策略仅供参考，实际投资需结合市场环境。
+            止损是风险管理工具，执行纪律比策略更重要。投资有风险，入市需谨慎。
+            """)t1:
                         st.metric("💰 当前盈亏", f"${pnl:.2f}", f"{pnl_pct:+.2f}%")
                     with col_t2:
                         st.metric("🛡️ 技术止损", f"${tech_sl:.2f}")
