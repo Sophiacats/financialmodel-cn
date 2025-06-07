@@ -1,4 +1,60 @@
-# 3. ROA增长
+exp1 = hist_data['Close'].ewm(span=12, adjust=False).mean()
+        exp2 = hist_data['Close'].ewm(span=26, adjust=False).mean()
+        hist_data['MACD'] = exp1 - exp2
+        hist_data['Signal'] = hist_data['MACD'].ewm(span=9, adjust=False).mean()
+        hist_data['MACD_Histogram'] = hist_data['MACD'] - hist_data['Signal']
+        
+        delta = hist_data['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        hist_data['RSI'] = 100 - (100 / (1 + rs))
+        
+        hist_data['BB_Middle'] = hist_data['Close'].rolling(window=20).mean()
+        bb_std = hist_data['Close'].rolling(window=20).std()
+        hist_data['BB_Upper'] = hist_data['BB_Middle'] + (bb_std * 2)
+        hist_data['BB_Lower'] = hist_data['BB_Middle'] - (bb_std * 2)
+        hist_data['BB_Width'] = hist_data['BB_Upper'] - hist_data['BB_Lower']
+        
+        hist_data['Volume_MA'] = hist_data['Volume'].rolling(window=20).mean()
+        
+        return hist_data
+    except Exception as e:
+        st.warning(f"技术指标计算失败: {str(e)}")
+        return hist_data
+
+def calculate_piotroski_score(data):
+    """计算Piotroski F-Score"""
+    score = 0
+    reasons = []
+    
+    try:
+        financials = data['financials']
+        balance_sheet = data['balance_sheet']
+        cash_flow = data['cash_flow']
+        
+        if financials.empty or balance_sheet.empty or cash_flow.empty:
+            return 0, ["❌ 财务数据不完整"]
+        
+        # 1. 盈利能力
+        if len(financials.columns) >= 2 and 'Net Income' in financials.index:
+            net_income = financials.loc['Net Income'].iloc[0]
+            if net_income > 0:
+                score += 1
+                reasons.append("✅ 净利润为正")
+            else:
+                reasons.append("❌ 净利润为负")
+        
+        # 2. 经营现金流
+        if len(cash_flow.columns) >= 1 and 'Operating Cash Flow' in cash_flow.index:
+            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
+            if ocf > 0:
+                score += 1
+                reasons.append("✅ 经营现金流为正")
+            else:
+                reasons.append("❌ 经营现金流为负")
+        
+        # 3. ROA增长
         if (len(financials.columns) >= 2 and len(balance_sheet.columns) >= 2 and 
             'Total Assets' in balance_sheet.index and 'Net Income' in financials.index):
             total_assets = balance_sheet.loc['Total Assets'].iloc[0]
@@ -406,135 +462,6 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                         st.success("✅ 财务健康 - 企业财务状况良好，破产风险极低")
                     elif z_score >= 1.81:
                         st.warning("⚠️ 临界风险 - 企业处于灰色地带，需要密切关注")
-                    else:
-                        st.error("🚨 高破产风险 - 企业财务状况堪忧，投资需谨慎")
-                    
-                    st.write("📊 评分标准:")
-                    st.write("- Z > 2.99: 安全区域")
-                    st.write("- 1.8 < Z < 2.99: 灰色区域")
-                    st.write("- Z < 1.8: 危险区域")
-            
-            # DCF估值分析
-            with st.expander("💎 DCF估值分析", expanded=True):
-                dcf_value, dcf_params = calculate_dcf_valuation(data)
-                
-                if dcf_value and current_price > 0:
-                    st.write("**DCF估值**")
-                    col_x, col_y = st.columns(2)
-                    with col_x:
-                        st.metric("合理价值", f"${dcf_value:.2f}")
-                        st.metric("当前价格", f"${current_price:.2f}")
-                    with col_y:
-                        margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
-                        st.metric("安全边际", f"{margin:.2f}%")
-                    
-                    if dcf_params:
-                        st.write("**📊 DCF模型参数详情**")
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
-                            st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
-                        with col_b:
-                            st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
-                            st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
-                        with col_c:
-                            st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
-                            st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
-                        
-                        st.write("**预测期现金流（百万美元）**")
-                        fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
-                        fcf_df['fcf'] = fcf_df['fcf'] / 1e6
-                        fcf_df['pv'] = fcf_df['pv'] / 1e6
-                        fcf_df.columns = ['年份', '预测FCF', '现值']
-                        st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
-                        
-                        st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
-                        st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
-                else:
-                    st.info("DCF估值数据不足")
-        
-        # 右栏：技术分析和止盈止损模拟器
-        with col3:
-            st.subheader("📉 技术分析与建议")
-            
-            # 计算技术指标
-            hist_data = data['hist_data'].copy()
-            hist_data = calculate_technical_indicators(hist_data)
-            
-            # 价格走势图
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(hist_data.index[-180:], hist_data['Close'][-180:], label='Close', linewidth=2)
-            if 'MA20' in hist_data.columns:
-                ax.plot(hist_data.index[-180:], hist_data['MA20'][-180:], label='MA20', alpha=0.7)
-            if 'MA60' in hist_data.columns:
-                ax.plot(hist_data.index[-180:], hist_data['MA60'][-180:], label='MA60', alpha=0.7)
-            ax.set_title(f'{ticker} Price Trend (Last 180 Days)')
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Price ($)')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # MACD图
-            if 'MACD' in hist_data.columns:
-                fig2, ax2 = plt.subplots(figsize=(10, 4))
-                ax2.plot(hist_data.index[-90:], hist_data['MACD'][-90:], label='MACD', color='blue')
-                ax2.plot(hist_data.index[-90:], hist_data['Signal'][-90:], label='Signal', color='red')
-                ax2.bar(hist_data.index[-90:], hist_data['MACD_Histogram'][-90:], label='Histogram', alpha=0.3)
-                ax2.set_title('MACD Indicator')
-                ax2.legend()
-                ax2.grid(True, alpha=0.3)
-                plt.xticks(rotation=45)
-                plt.tight_layout()
-                st.pyplot(fig2)
-            
-            # 技术分析结论展示
-            st.markdown("---")
-            st.subheader("📊 技术指标快速解读")
-            
-            # 计算技术信号
-            technical_signals = analyze_technical_signals(hist_data)
-            latest = hist_data.iloc[-1]
-            
-            # 技术指标状态卡片
-            tech_col1, tech_col2 = st.columns(2)
-            
-            with tech_col1:
-                # MACD 状态
-                if technical_signals['macd_golden_cross']:
-                    st.success("🔺 MACD：金叉（看涨信号）")
-                elif technical_signals['macd_death_cross']:
-                    st.error("🔻 MACD：死叉（看跌信号）")
-                else:
-                    if 'MACD' in hist_data.columns and 'Signal' in hist_data.columns:
-                        macd_val = latest['MACD']
-                        signal_val = latest['Signal']
-                        if macd_val > signal_val:
-                            st.info("📈 MACD：多头排列")
-                        else:
-                            st.warning("📉 MACD：空头排列")
-                
-                # 均线状态
-                if technical_signals['ma_golden_cross']:
-                    st.success("🔺 均线：金叉突破")
-                elif technical_signals['ma_death_cross']:
-                    st.error("🔻 均线：死叉下破")
-                elif 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
-                    if latest['MA10'] > latest['MA60']:
-                        st.info("📈 均线：多头排列")
-                    else:
-                        st.warning("📉 均线：空头排列")
-            
-            with tech_col2:
-                # RSI 状态
-                if 'RSI' in hist_data.columns:
-                    rsi_value = latest['RSI']
-                    if rsi_value > 70:
-                        st.error(f"⚠️ RSI：{rsi_value:.1f} → 超买状态")
-                    elif rsi_value < 30:
-                        st.success(f"💡 RSI：{rsi_value:.1f} → 超卖状态")
                     else:
                         st.info(f"📊 RSI：{rsi_value:.1f} → 正常区间")
                 
@@ -1063,7 +990,136 @@ with col_footer2:
         st.session_state.analysis_data = None
         st.rerun()
 
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")import streamlit as st
+st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎"):
+                        st.error("🚨 高破产风险 - 企业财务状况堪忧，投资需谨慎")
+                    
+                    st.write("📊 评分标准:")
+                    st.write("- Z > 2.99: 安全区域")
+                    st.write("- 1.8 < Z < 2.99: 灰色区域")
+                    st.write("- Z < 1.8: 危险区域")
+            
+            # DCF估值分析
+            with st.expander("💎 DCF估值分析", expanded=True):
+                dcf_value, dcf_params = calculate_dcf_valuation(data)
+                
+                if dcf_value and current_price > 0:
+                    st.write("**DCF估值**")
+                    col_x, col_y = st.columns(2)
+                    with col_x:
+                        st.metric("合理价值", f"${dcf_value:.2f}")
+                        st.metric("当前价格", f"${current_price:.2f}")
+                    with col_y:
+                        margin = ((dcf_value - current_price) / dcf_value * 100) if dcf_value > 0 else 0
+                        st.metric("安全边际", f"{margin:.2f}%")
+                    
+                    if dcf_params:
+                        st.write("**📊 DCF模型参数详情**")
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.write(f"**永续增长率 g**: {dcf_params['terminal_growth']*100:.1f}%")
+                            st.write(f"**预测期增长率**: {dcf_params['growth_rate']*100:.1f}%")
+                        with col_b:
+                            st.write(f"**折现率 WACC**: {dcf_params['discount_rate']*100:.1f}%")
+                            st.write(f"**预测年限**: {dcf_params['forecast_years']}年")
+                        with col_c:
+                            st.write(f"**初始FCF**: ${dcf_params['initial_fcf']/1e6:.1f}M")
+                            st.write(f"**企业价值**: ${dcf_params['enterprise_value']/1e9:.2f}B")
+                        
+                        st.write("**预测期现金流（百万美元）**")
+                        fcf_df = pd.DataFrame(dcf_params['fcf_projections'])
+                        fcf_df['fcf'] = fcf_df['fcf'] / 1e6
+                        fcf_df['pv'] = fcf_df['pv'] / 1e6
+                        fcf_df.columns = ['年份', '预测FCF', '现值']
+                        st.dataframe(fcf_df.style.format({'预测FCF': '${:.1f}M', '现值': '${:.1f}M'}))
+                        
+                        st.write(f"**终值**: ${dcf_params['terminal_value']/1e9:.2f}B")
+                        st.write(f"**终值现值**: ${dcf_params['terminal_pv']/1e9:.2f}B")
+                else:
+                    st.info("DCF估值数据不足")
+        
+        # 右栏：技术分析和止盈止损模拟器
+        with col3:
+            st.subheader("📉 技术分析与建议")
+            
+            # 计算技术指标
+            hist_data = data['hist_data'].copy()
+            hist_data = calculate_technical_indicators(hist_data)
+            
+            # 价格走势图
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(hist_data.index[-180:], hist_data['Close'][-180:], label='Close', linewidth=2)
+            if 'MA20' in hist_data.columns:
+                ax.plot(hist_data.index[-180:], hist_data['MA20'][-180:], label='MA20', alpha=0.7)
+            if 'MA60' in hist_data.columns:
+                ax.plot(hist_data.index[-180:], hist_data['MA60'][-180:], label='MA60', alpha=0.7)
+            ax.set_title(f'{ticker} Price Trend (Last 180 Days)')
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Price ($)')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            # MACD图
+            if 'MACD' in hist_data.columns:
+                fig2, ax2 = plt.subplots(figsize=(10, 4))
+                ax2.plot(hist_data.index[-90:], hist_data['MACD'][-90:], label='MACD', color='blue')
+                ax2.plot(hist_data.index[-90:], hist_data['Signal'][-90:], label='Signal', color='red')
+                ax2.bar(hist_data.index[-90:], hist_data['MACD_Histogram'][-90:], label='Histogram', alpha=0.3)
+                ax2.set_title('MACD Indicator')
+                ax2.legend()
+                ax2.grid(True, alpha=0.3)
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                st.pyplot(fig2)
+            
+            # 技术分析结论展示
+            st.markdown("---")
+            st.subheader("📊 技术指标快速解读")
+            
+            # 计算技术信号
+            technical_signals = analyze_technical_signals(hist_data)
+            latest = hist_data.iloc[-1]
+            
+            # 技术指标状态卡片
+            tech_col1, tech_col2 = st.columns(2)
+            
+            with tech_col1:
+                # MACD 状态
+                if technical_signals['macd_golden_cross']:
+                    st.success("🔺 MACD：金叉（看涨信号）")
+                elif technical_signals['macd_death_cross']:
+                    st.error("🔻 MACD：死叉（看跌信号）")
+                else:
+                    if 'MACD' in hist_data.columns and 'Signal' in hist_data.columns:
+                        macd_val = latest['MACD']
+                        signal_val = latest['Signal']
+                        if macd_val > signal_val:
+                            st.info("📈 MACD：多头排列")
+                        else:
+                            st.warning("📉 MACD：空头排列")
+                
+                # 均线状态
+                if technical_signals['ma_golden_cross']:
+                    st.success("🔺 均线：金叉突破")
+                elif technical_signals['ma_death_cross']:
+                    st.error("🔻 均线：死叉下破")
+                elif 'MA10' in hist_data.columns and 'MA60' in hist_data.columns:
+                    if latest['MA10'] > latest['MA60']:
+                        st.info("📈 均线：多头排列")
+                    else:
+                        st.warning("📉 均线：空头排列")
+            
+            with tech_col2:
+                # RSI 状态
+                if 'RSI' in hist_data.columns:
+                    rsi_value = latest['RSI']
+                    if rsi_value > 70:
+                        st.error(f"⚠️ RSI：{rsi_value:.1f} → 超买状态")
+                    elif rsi_value < 30:
+                        st.success(f"💡 RSI：{rsi_value:.1f} → 超卖状态")
+                    elseimport streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -1609,63 +1665,4 @@ def calculate_technical_indicators(hist_data):
         hist_data['MA20'] = hist_data['Close'].rolling(window=20).mean()
         hist_data['MA60'] = hist_data['Close'].rolling(window=60).mean()
         
-        exp1 = hist_data['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = hist_data['Close'].ewm(span=26, adjust=False).mean()
-        hist_data['MACD'] = exp1 - exp2
-        hist_data['Signal'] = hist_data['MACD'].ewm(span=9, adjust=False).mean()
-        hist_data['MACD_Histogram'] = hist_data['MACD'] - hist_data['Signal']
-        
-        delta = hist_data['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        hist_data['RSI'] = 100 - (100 / (1 + rs))
-        
-        hist_data['BB_Middle'] = hist_data['Close'].rolling(window=20).mean()
-        bb_std = hist_data['Close'].rolling(window=20).std()
-        hist_data['BB_Upper'] = hist_data['BB_Middle'] + (bb_std * 2)
-        hist_data['BB_Lower'] = hist_data['BB_Middle'] - (bb_std * 2)
-        hist_data['BB_Width'] = hist_data['BB_Upper'] - hist_data['BB_Lower']
-        
-        hist_data['Volume_MA'] = hist_data['Volume'].rolling(window=20).mean()
-        
-        return hist_data
-    except Exception as e:
-        st.warning(f"技术指标计算失败: {str(e)}")
-        return hist_data
-
-def calculate_piotroski_score(data):
-    """计算Piotroski F-Score"""
-    score = 0
-    reasons = []
-    
-    try:
-        financials = data['financials']
-        balance_sheet = data['balance_sheet']
-        cash_flow = data['cash_flow']
-        
-        if financials.empty or balance_sheet.empty or cash_flow.empty:
-            return 0, ["❌ 财务数据不完整"]
-        
-        # 1. 盈利能力
-        if len(financials.columns) >= 2 and 'Net Income' in financials.index:
-            net_income = financials.loc['Net Income'].iloc[0]
-            if net_income > 0:
-                score += 1
-                reasons.append("✅ 净利润为正")
-            else:
-                reasons.append("❌ 净利润为负")
-        
-        # 2. 经营现金流
-        if len(cash_flow.columns) >= 1 and 'Operating Cash Flow' in cash_flow.index:
-            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
-            if ocf > 0:
-                score += 1
-                reasons.append("✅ 经营现金流为正")
-            else:
-                reasons.append("❌ 经营现金流为负")
-        
-        # 3. ROA增长
-        if (len(financials.columns) >= 2 and len(balance_sheet.columns) >= 2 and 
-            'Total Assets' in balance_sheet.index and 'Net Income' in financials.index):
-            total_assets = balance_
+        exp1 = hist_data['
