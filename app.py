@@ -580,14 +580,17 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
         news_per_page = 5
         total_pages = (len(news_data) + news_per_page - 1) // news_per_page
         
-        if total_pages > 1:
-            current_page = st.selectbox(
-                f"选择页面 (共{total_pages}页)",
-                range(1, total_pages + 1),
-                format_func=lambda x: f"第 {x} 页"
-            )
-        else:
-            current_page = 1
+        # 初始化当前页
+        if 'current_news_page' not in st.session_state:
+            st.session_state.current_news_page = 1
+        
+        # 确保页数在有效范围内
+        if st.session_state.current_news_page > total_pages:
+            st.session_state.current_news_page = total_pages
+        if st.session_state.current_news_page < 1:
+            st.session_state.current_news_page = 1
+        
+        current_page = st.session_state.current_news_page
         
         # 计算当前页新闻
         start_idx = (current_page - 1) * news_per_page
@@ -654,11 +657,51 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
             
             st.markdown("---")
         
-        # 分页导航
+        # 页面底部的翻页按钮
         if total_pages > 1:
-            nav_cols = st.columns(3)
-            with nav_cols[1]:
-                st.markdown(f"<div style='text-align: center;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
+            st.markdown("### 📄 页面导航")
+            
+            # 创建翻页按钮布局
+            nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 1, 1, 1])
+            
+            with nav_col1:
+                if current_page > 1:
+                    if st.button("⬅️ 上一页", key="prev_page_btn", use_container_width=True):
+                        st.session_state.current_news_page = current_page - 1
+                        st.rerun()
+                else:
+                    st.button("⬅️ 上一页", key="prev_page_btn_disabled", disabled=True, use_container_width=True)
+            
+            with nav_col2:
+                if st.button("📖 第1页", key="page_1_btn", use_container_width=True, 
+                           type="primary" if current_page == 1 else "secondary"):
+                    st.session_state.current_news_page = 1
+                    st.rerun()
+            
+            with nav_col3:
+                st.markdown(f"<div style='text-align: center; padding: 10px; font-weight: bold; color: #666;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
+            
+            with nav_col4:
+                if total_pages >= 2:
+                    if st.button("📄 第2页", key="page_2_btn", use_container_width=True,
+                               type="primary" if current_page == 2 else "secondary"):
+                        st.session_state.current_news_page = 2
+                        st.rerun()
+                else:
+                    st.button("📄 第2页", key="page_2_btn_disabled", disabled=True, use_container_width=True)
+            
+            with nav_col5:
+                if current_page < total_pages:
+                    if st.button("下一页 ➡️", key="next_page_btn", use_container_width=True):
+                        st.session_state.current_news_page = current_page + 1
+                        st.rerun()
+                else:
+                    st.button("下一页 ➡️", key="next_page_btn_disabled", disabled=True, use_container_width=True)
+            
+            # 页面状态指示器
+            st.markdown("---")
+            progress_text = f"🔖 当前浏览: 第{current_page}页，共{total_pages}页 | 显示新闻 {start_idx + 1}-{end_idx} / {len(news_data)}"
+            st.info(progress_text)
         
         # 整体市场情绪分析
         st.subheader("📊 整体市场情绪分析")
