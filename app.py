@@ -162,9 +162,12 @@ def fetch_financial_news(target_ticker=None):
         current_time = datetime.now()
         news_data = []
         
+        st.info("🔄 正在获取真实新闻数据...")
+        
         # 方法1: 从yfinance获取真实新闻
         if target_ticker:
             try:
+                st.write(f"🔍 正在获取 {target_ticker} 的新闻...")
                 ticker_obj = yf.Ticker(target_ticker)
                 
                 # 获取公司信息
@@ -178,61 +181,97 @@ def fetch_financial_news(target_ticker=None):
                 
                 # 获取真实新闻
                 news = ticker_obj.news
+                st.write(f"📰 获取到 {len(news) if news else 0} 条 {target_ticker} 新闻")
+                
                 if news and len(news) > 0:
-                    for article in news[:6]:  # 获取前6条真实新闻
-                        if article.get('title') and article.get('providerPublishTime'):
-                            # 提取关键词和分析情绪
-                            title_summary = article.get('title', '') + ' ' + article.get('summary', '')
-                            keywords = extract_keywords_from_text(title_summary)
-                            sentiment = analyze_sentiment_from_keywords(keywords)
+                    for i, article in enumerate(news[:6]):  # 获取前6条真实新闻
+                        try:
+                            title = article.get('title', '')
+                            summary = article.get('summary', '')
+                            link = article.get('link', '')
+                            publisher = article.get('publisher', 'Unknown')
+                            pub_time = article.get('providerPublishTime', 0)
                             
-                            news_data.append({
-                                "title": article.get('title', ''),
-                                "summary": article.get('summary', article.get('title', ''))[:300] + '...' if len(article.get('summary', '')) > 300 else article.get('summary', ''),
-                                "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
-                                "url": article.get('link', ''),
-                                "source": article.get('publisher', 'Unknown'),
-                                "category": "company_specific",
-                                "keywords": keywords,
-                                "sentiment": sentiment
-                            })
+                            if title and pub_time:
+                                # 提取关键词和分析情绪
+                                title_summary = title + ' ' + summary
+                                keywords = extract_keywords_from_text(title_summary)
+                                sentiment = analyze_sentiment_from_keywords(keywords)
+                                
+                                news_item = {
+                                    "title": title,
+                                    "summary": summary[:300] + '...' if len(summary) > 300 else summary,
+                                    "published": datetime.fromtimestamp(pub_time),
+                                    "url": link,
+                                    "source": publisher,
+                                    "category": "company_specific",
+                                    "keywords": keywords,
+                                    "sentiment": sentiment,
+                                    "is_real": True
+                                }
+                                news_data.append(news_item)
+                                st.success(f"✅ 获取新闻 {i+1}: {title[:50]}...")
+                        except Exception as e:
+                            st.warning(f"⚠️ 处理第{i+1}条新闻时出错: {str(e)}")
+                            continue
                             
             except Exception as e:
-                st.warning(f"获取{target_ticker}新闻失败: {str(e)}")
+                st.error(f"❌ 获取{target_ticker}新闻失败: {str(e)}")
         
         # 方法2: 获取市场整体新闻
         try:
+            st.write("🌍 正在获取市场整体新闻...")
             market_indices = ["^GSPC", "^IXIC", "^DJI"]
             for index_symbol in market_indices:
                 try:
                     index_ticker = yf.Ticker(index_symbol)
                     index_news = index_ticker.news
+                    
                     if index_news and len(index_news) > 0:
+                        st.write(f"📊 从 {index_symbol} 获取到 {len(index_news)} 条市场新闻")
                         for article in index_news[:2]:  # 每个指数取2条
-                            if article.get('title') and article.get('providerPublishTime'):
-                                # 避免重复新闻
-                                if not any(existing['title'] == article.get('title') for existing in news_data):
-                                    title_summary = article.get('title', '') + ' ' + article.get('summary', '')
-                                    keywords = extract_keywords_from_text(title_summary)
-                                    sentiment = analyze_sentiment_from_keywords(keywords)
-                                    
-                                    news_data.append({
-                                        "title": article.get('title', ''),
-                                        "summary": article.get('summary', article.get('title', ''))[:300] + '...' if len(article.get('summary', '')) > 300 else article.get('summary', ''),
-                                        "published": datetime.fromtimestamp(article.get('providerPublishTime', time.time())),
-                                        "url": article.get('link', ''),
-                                        "source": article.get('publisher', 'Market News'),
-                                        "category": "market_wide",
-                                        "keywords": keywords,
-                                        "sentiment": sentiment
-                                    })
-                except Exception:
+                            try:
+                                title = article.get('title', '')
+                                summary = article.get('summary', '')
+                                link = article.get('link', '')
+                                publisher = article.get('publisher', 'Market News')
+                                pub_time = article.get('providerPublishTime', 0)
+                                
+                                if title and pub_time:
+                                    # 避免重复新闻
+                                    if not any(existing['title'] == title for existing in news_data):
+                                        title_summary = title + ' ' + summary
+                                        keywords = extract_keywords_from_text(title_summary)
+                                        sentiment = analyze_sentiment_from_keywords(keywords)
+                                        
+                                        news_item = {
+                                            "title": title,
+                                            "summary": summary[:300] + '...' if len(summary) > 300 else summary,
+                                            "published": datetime.fromtimestamp(pub_time),
+                                            "url": link,
+                                            "source": publisher,
+                                            "category": "market_wide",
+                                            "keywords": keywords,
+                                            "sentiment": sentiment,
+                                            "is_real": True
+                                        }
+                                        news_data.append(news_item)
+                                        st.success(f"✅ 获取市场新闻: {title[:50]}...")
+                            except Exception as e:
+                                continue
+                except Exception as e:
+                    st.warning(f"⚠️ 获取{index_symbol}新闻失败: {str(e)}")
                     continue
-        except Exception:
-            pass
+        except Exception as e:
+            st.error(f"❌ 获取市场新闻失败: {str(e)}")
         
-        # 如果真实新闻不足，补充一些高质量的模拟新闻
-        while len(news_data) < 10:
+        st.success(f"🎉 成功获取 {len(news_data)} 条真实新闻")
+        
+        # 如果真实新闻不足，补充模拟新闻
+        if len(news_data) < 10:
+            needed = 10 - len(news_data)
+            st.info(f"📝 补充 {needed} 条模拟新闻")
+            
             # 获取公司信息用于生成补充新闻
             company_info = {}
             if target_ticker:
@@ -251,17 +290,22 @@ def fetch_financial_news(target_ticker=None):
             # 补充新闻
             supplement_news = generate_supplement_news(company_info, current_time, len(news_data))
             if supplement_news:
+                for sim_news in supplement_news:
+                    sim_news["is_real"] = False
                 news_data.extend(supplement_news)
-            else:
-                break
         
         # 按时间排序，最新的在前
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
+        # 显示最终统计
+        real_count = len([n for n in news_data if n.get('is_real', False)])
+        fake_count = len(news_data) - real_count
+        st.success(f"📊 最终结果: {real_count} 条真实新闻 + {fake_count} 条模拟新闻 = {len(news_data)} 条总新闻")
+        
         return news_data[:10]
         
     except Exception as e:
-        st.error(f"获取新闻失败: {str(e)}")
+        st.error(f"❌ 新闻获取过程出现严重错误: {str(e)}")
         return generate_fallback_news()
 
 def extract_keywords_from_text(text):
