@@ -136,64 +136,79 @@ def fetch_financial_news(target_ticker=None):
             pass
         
         # 方法3: 如果真实新闻不够，补充模拟新闻
-        if len(news_data) < 8:
-            current_time = datetime.now()
-            
-            # 获取公司信息用于生成相关新闻
-            company_info = {}
-            if target_ticker:
-                try:
-                    ticker_obj = yf.Ticker(target_ticker)
-                    info = ticker_obj.info
-                    company_info = {
-                        'name': info.get('longName', target_ticker),
-                        'sector': info.get('sector', ''),
-                        'industry': info.get('industry', ''),
-                        'ticker': target_ticker
-                    }
-                except:
-                    company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
-            
-            # 生成公司特定新闻
-            company_news = generate_company_specific_news(company_info, current_time)
-            news_data.extend(company_news)
-            
-            # 添加市场广泛影响的新闻（美联储等）
-            market_wide_news = [
-                {
-                    "title": "美联储官员暗示未来可能调整利率政策",
-                    "summary": "美联储高级官员在最新讲话中表示，将根据通胀数据和经济增长情况灵活调整货币政策，市场对此反应积极。此举将影响所有资产类别的估值。",
-                    "published": current_time - timedelta(hours=2),
-                    "url": "",
-                    "source": "美联储政策",
-                    "category": "market_wide"
-                },
-                {
-                    "title": "全球通胀数据好于预期，风险资产普遍上涨",
-                    "summary": "最新公布的全球主要经济体通胀数据均好于市场预期，投资者风险偏好提升，股市、商品等风险资产普遍上涨。",
-                    "published": current_time - timedelta(hours=6),
-                    "url": "",
-                    "source": "全球经济",
-                    "category": "market_wide"
-                },
-                {
-                    "title": "地缘政治局势缓解，市场避险情绪降温",
-                    "summary": "近期国际地缘政治紧张局势有所缓解，投资者避险情绪降温，资金重新流入股市等风险资产，黄金等避险资产回落。",
-                    "published": current_time - timedelta(hours=10),
-                    "url": "",
-                    "source": "国际政治",
-                    "category": "market_wide"
-                },
-                {
-                    "title": "经济数据显示复苏势头良好，市场信心增强",
-                    "summary": "最新发布的一系列经济指标显示经济复苏势头良好，就业市场稳定，消费支出增长，投资者对经济前景的信心进一步增强。",
-                    "published": current_time - timedelta(hours=14),
-                    "url": "",
-                    "source": "经济数据",
-                    "category": "market_wide"
+        current_time = datetime.now()
+        
+        # 获取公司信息用于生成相关新闻
+        company_info = {}
+        if target_ticker:
+            try:
+                ticker_obj = yf.Ticker(target_ticker)
+                info = ticker_obj.info
+                company_info = {
+                    'name': info.get('longName', target_ticker),
+                    'sector': info.get('sector', ''),
+                    'industry': info.get('industry', ''),
+                    'ticker': target_ticker
                 }
-            ]
-            news_data.extend(market_wide_news)
+            except:
+                company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
+        
+        # 无论如何都生成公司特定新闻
+        company_news = generate_company_specific_news(company_info, current_time)
+        news_data.extend(company_news)
+        
+        # 添加市场广泛影响的新闻（美联储等）
+        market_wide_news = [
+            {
+                "title": "美联储官员暗示未来可能调整利率政策",
+                "summary": "美联储高级官员在最新讲话中表示，将根据通胀数据和经济增长情况灵活调整货币政策，市场对此反应积极。此举将影响所有资产类别的估值。",
+                "published": current_time - timedelta(hours=2),
+                "url": "",
+                "source": "美联储政策",
+                "category": "market_wide"
+            },
+            {
+                "title": "全球通胀数据好于预期，风险资产普遍上涨",
+                "summary": "最新公布的全球主要经济体通胀数据均好于市场预期，投资者风险偏好提升，股市、商品等风险资产普遍上涨。",
+                "published": current_time - timedelta(hours=6),
+                "url": "",
+                "source": "全球经济",
+                "category": "market_wide"
+            },
+            {
+                "title": "地缘政治局势缓解，市场避险情绪降温",
+                "summary": "近期国际地缘政治紧张局势有所缓解，投资者避险情绪降温，资金重新流入股市等风险资产，黄金等避险资产回落。",
+                "published": current_time - timedelta(hours=10),
+                "url": "",
+                "source": "国际政治",
+                "category": "market_wide"
+            },
+            {
+                "title": "经济数据显示复苏势头良好，市场信心增强",
+                "summary": "最新发布的一系列经济指标显示经济复苏势头良好，就业市场稳定，消费支出增长，投资者对经济前景的信心进一步增强。",
+                "published": current_time - timedelta(hours=14),
+                "url": "",
+                "source": "经济数据",
+                "category": "market_wide"
+            },
+            {
+                "title": "投资者风险偏好回升，股市资金流入增加",
+                "summary": "随着市场不确定性减少，投资者风险偏好明显回升，资金持续流入股票市场，各大指数表现活跃。",
+                "published": current_time - timedelta(hours=16),
+                "url": "",
+                "source": "市场资金流向",
+                "category": "market_wide"
+            },
+            {
+                "title": "企业盈利预期改善，分析师上调目标价",
+                "summary": "多家券商分析师基于最新财报数据和业务前景，上调了多只个股的目标价格和盈利预测。",
+                "published": current_time - timedelta(hours=18),
+                "url": "",
+                "source": "分析师报告",
+                "category": "market_wide"
+            }
+        ]
+        news_data.extend(market_wide_news)
         
         # 处理新闻数据，添加关键词和情绪分析
         processed_news = []
@@ -224,7 +239,43 @@ def fetch_financial_news(target_ticker=None):
                 "category": "system"
             }]
         
-        return processed_news
+        # 确保返回的新闻数量足够
+        while len(processed_news) < 10:
+            # 添加更多通用市场新闻
+            extra_news = [
+                {
+                    "title": "监管政策明朗化，市场信心进一步增强",
+                    "summary": "相关部门发布的最新政策指引为市场提供了更清晰的方向，投资者信心得到进一步提振。",
+                    "published": datetime.now() - timedelta(hours=20),
+                    "url": "",
+                    "source": "政策解读",
+                    "keywords": ["监管政策", "市场信心"],
+                    "sentiment": "利好",
+                    "category": "market_wide"
+                },
+                {
+                    "title": "国际资本配置调整，新兴市场受关注",
+                    "summary": "全球资产配置趋势变化，国际资本对新兴市场的关注度提升，相关资产估值有望得到重估。",
+                    "published": datetime.now() - timedelta(hours=22),
+                    "url": "",
+                    "source": "国际资本",
+                    "keywords": ["资本配置", "新兴市场"],
+                    "sentiment": "中性",
+                    "category": "market_wide"
+                }
+            ]
+            
+            for extra in extra_news:
+                if len(processed_news) < 10:
+                    processed_news.append(extra)
+                else:
+                    break
+            break
+        
+        # 按时间排序，最新的在前
+        processed_news.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
+        
+        return processed_news[:10]  # 确保返回10条新闻
         
     except Exception as e:
         # 最后的错误处理
@@ -244,6 +295,17 @@ def generate_company_specific_news(company_info, current_time):
     news_list = []
     
     if not company_info or not company_info.get('ticker'):
+        # 即使没有公司信息，也生成通用新闻
+        news_list = [
+            {
+                "title": "市场整体表现稳健，投资机会显现",
+                "summary": "当前市场环境下，多个板块显示出投资价值，投资者可关注基本面良好的优质企业。",
+                "published": current_time - timedelta(hours=5),
+                "url": "",
+                "source": "市场分析",
+                "category": "company_specific"
+            }
+        ]
         return news_list
     
     company_name = company_info.get('name', company_info.get('ticker'))
@@ -252,7 +314,7 @@ def generate_company_specific_news(company_info, current_time):
     ticker = company_info.get('ticker')
     
     # 根据行业生成相关新闻
-    if 'Technology' in sector or 'tech' in industry.lower():
+    if 'Technology' in sector or 'tech' in industry.lower() or 'software' in industry.lower():
         news_list.extend([
             {
                 "title": f"科技股{company_name}受益于AI发展趋势",
@@ -269,10 +331,18 @@ def generate_company_specific_news(company_info, current_time):
                 "url": "",
                 "source": f"行业研究",
                 "category": "industry_specific"
+            },
+            {
+                "title": f"云计算市场快速增长，{company_name}云业务前景看好",
+                "summary": f"企业数字化转型推动云计算需求激增，{company_name}在云服务领域的投入和技术积累为其带来新的增长动力。",
+                "published": current_time - timedelta(hours=12),
+                "url": "",
+                "source": f"云计算行业",
+                "category": "industry_specific"
             }
         ])
     
-    elif 'Healthcare' in sector or 'Pharmaceuticals' in industry:
+    elif 'Healthcare' in sector or 'Pharmaceuticals' in industry or 'health' in industry.lower():
         news_list.extend([
             {
                 "title": f"医药行业{company_name}新药研发进展受关注",
@@ -292,7 +362,7 @@ def generate_company_specific_news(company_info, current_time):
             }
         ])
     
-    elif 'Financial' in sector or 'bank' in industry.lower():
+    elif 'Financial' in sector or 'bank' in industry.lower() or 'insurance' in industry.lower():
         news_list.extend([
             {
                 "title": f"银行股{company_name}受益于利率政策预期",
@@ -312,7 +382,7 @@ def generate_company_specific_news(company_info, current_time):
             }
         ])
     
-    elif 'Energy' in sector or 'oil' in industry.lower():
+    elif 'Energy' in sector or 'oil' in industry.lower() or 'gas' in industry.lower():
         news_list.extend([
             {
                 "title": f"能源股{company_name}受益于油价上涨预期",
@@ -332,7 +402,7 @@ def generate_company_specific_news(company_info, current_time):
             }
         ])
     
-    elif 'Consumer' in sector or 'retail' in industry.lower():
+    elif 'Consumer' in sector or 'retail' in industry.lower() or 'food' in industry.lower():
         news_list.extend([
             {
                 "title": f"消费股{company_name}业绩有望受益于经济复苏",
@@ -346,6 +416,54 @@ def generate_company_specific_news(company_info, current_time):
                 "title": f"电商渗透率持续提升，{ticker}数字化转型成效显著",
                 "summary": f"线上消费趋势不断强化，{company_name}通过数字化转型和全渠道布局，在竞争激烈的消费市场中保持优势。",
                 "published": current_time - timedelta(hours=12),
+                "url": "",
+                "source": f"数字零售",
+                "category": "industry_specific"
+            }
+        ])
+    
+    elif 'automotive' in industry.lower() or 'Automotive' in sector or 'motor' in industry.lower():
+        news_list.extend([
+            {
+                "title": f"新能源汽车行业增长强劲，{company_name}前景看好",
+                "summary": f"全球新能源汽车销量持续高速增长，{company_name}在电动车领域的布局和技术积累为其带来发展机遇。",
+                "published": current_time - timedelta(hours=6),
+                "url": "",
+                "source": f"汽车行业",
+                "category": "company_specific"
+            },
+            {
+                "title": f"自动驾驶技术突破，{ticker}等车企加大研发投入",
+                "summary": f"自动驾驶和智能汽车技术快速发展，{company_name}等汽车制造商在这一领域的技术积累和投资备受市场期待。",
+                "published": current_time - timedelta(hours=14),
+                "url": "",
+                "source": f"智能汽车",
+                "category": "industry_specific"
+            }
+        ])
+    
+    else:
+        # 通用行业新闻
+        news_list.extend([
+            {
+                "title": f"{company_name}业绩表现稳健，投资价值凸显",
+                "summary": f"{company_name}作为{industry}领域的重要企业，在当前市场环境下表现稳健。投资者关注其业务发展和市场策略。",
+                "published": current_time - timedelta(hours=5),
+                "url": "",
+                "source": f"行业分析",
+                "category": "company_specific"
+            },
+            {
+                "title": f"{industry}行业整体向好，{ticker}等企业受益",
+                "summary": f"当前{industry}行业整体发展态势良好，{company_name}等行业内企业有望受益于行业增长趋势。",
+                "published": current_time - timedelta(hours=10),
+                "url": "",
+                "source": f"行业动态",
+                "category": "industry_specific"
+            }
+        ])
+    
+    return news_list[:4]  # 确保返回4条公司相关新闻published": current_time - timedelta(hours=12),
                 "url": "",
                 "source": f"数字零售",
                 "category": "industry_specific"
@@ -1408,6 +1526,28 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                     st.caption(f"💡 操作建议: {impact_info['action']}")
                 
                 st.markdown("---")
+        
+        # 分页导航按钮
+        if total_pages > 1:
+            st.markdown("### 📄 页面导航")
+            nav_cols = st.columns(5)
+            
+            with nav_cols[0]:
+                if current_page > 1:
+                    if st.button("⬅️ 上一页", key="prev_page"):
+                        st.session_state.news_page_selector = current_page - 1
+                        st.rerun()
+            
+            with nav_cols[2]:
+                st.markdown(f"<div style='text-align: center; padding: 8px;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
+            
+            with nav_cols[4]:
+                if current_page < total_pages:
+                    if st.button("下一页 ➡️", key="next_page"):
+                        st.session_state.news_page_selector = current_page + 1
+                        st.rerun()
+        
+        st.markdown("---")
         
         # 整体市场情绪分析
         st.subheader("📊 整体市场情绪分析")
