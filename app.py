@@ -294,7 +294,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
     current_price = st.session_state.current_price
     ticker = st.session_state.current_ticker
         
-        col1, col2, col3 = st.columns([1, 2, 1.5])
+    col1, col2, col3 = st.columns([1, 2, 1.5])
         
         # 左栏：公司基本信息
         with col1:
