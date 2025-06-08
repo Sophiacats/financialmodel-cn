@@ -74,18 +74,23 @@ def fetch_financial_news(target_ticker=None):
                 st.write(f"📰 获取到 {len(news) if news else 0} 条 {target_ticker} 新闻")
                 
                 if news and len(news) > 0:
+                    # 显示原始数据结构用于调试
+                    st.write(f"🔍 第一条新闻的完整结构: {news[0].keys() if news else 'None'}")
+                    
                     for i, article in enumerate(news[:8]):  # 获取前8条真实新闻
                         try:
-                            title = article.get('title', '')
-                            summary = article.get('summary', '')
-                            link = article.get('link', '')
-                            publisher = article.get('publisher', 'Unknown')
-                            pub_time = article.get('providerPublishTime', None)
+                            # 显示原始数据
+                            st.write(f"📝 原始新闻 {i+1} 数据: {article}")
                             
-                            # 调试信息
-                            st.write(f"📝 处理新闻 {i+1}: 标题='{title[:30]}...', 时间={pub_time}")
+                            title = article.get('title', '') or article.get('headline', '') or article.get('text', '')
+                            summary = article.get('summary', '') or article.get('description', '') or article.get('snippet', '')
+                            link = article.get('link', '') or article.get('url', '') or article.get('href', '')
+                            publisher = article.get('publisher', '') or article.get('source', '') or article.get('provider', 'Unknown')
+                            pub_time = article.get('providerPublishTime', None) or article.get('publishTime', None) or article.get('timestamp', None)
                             
-                            if title:  # 只要有标题就处理
+                            st.write(f"📝 解析结果 {i+1}: 标题='{title}', 摘要='{summary[:50] if summary else 'None'}', 链接='{link}', 发布者='{publisher}', 时间={pub_time}")
+                            
+                            if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                 # 处理时间戳
                                 if pub_time:
                                     try:
@@ -113,8 +118,10 @@ def fetch_financial_news(target_ticker=None):
                                 }
                                 news_data.append(news_item)
                                 st.success(f"✅ 成功处理新闻 {i+1}: {title[:50]}...")
+                            else:
+                                st.warning(f"⚠️ 新闻 {i+1} 标题为空或太短，跳过")
                         except Exception as e:
-                            st.warning(f"⚠️ 处理第{i+1}条新闻时出错: {str(e)}")
+                            st.error(f"❌ 处理第{i+1}条新闻时出错: {str(e)}")
                             continue
                             
             except Exception as e:
@@ -133,13 +140,13 @@ def fetch_financial_news(target_ticker=None):
                         st.write(f"📊 从 {index_symbol} 获取到 {len(index_news)} 条市场新闻")
                         for j, article in enumerate(index_news[:3]):  # 每个指数取3条
                             try:
-                                title = article.get('title', '')
-                                summary = article.get('summary', '')
-                                link = article.get('link', '')
-                                publisher = article.get('publisher', 'Market News')
-                                pub_time = article.get('providerPublishTime', None)
+                                title = article.get('title', '') or article.get('headline', '') or article.get('text', '')
+                                summary = article.get('summary', '') or article.get('description', '') or article.get('snippet', '')
+                                link = article.get('link', '') or article.get('url', '') or article.get('href', '')
+                                publisher = article.get('publisher', '') or article.get('source', '') or article.get('provider', 'Market News')
+                                pub_time = article.get('providerPublishTime', None) or article.get('publishTime', None) or article.get('timestamp', None)
                                 
-                                if title:  # 只要有标题就处理
+                                if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
                                         # 处理时间戳
@@ -177,22 +184,51 @@ def fetch_financial_news(target_ticker=None):
         except Exception as e:
             st.error(f"❌ 获取市场新闻失败: {str(e)}")
         
+        # 如果仍然没有新闻，尝试备用方法
+        if len(news_data) == 0:
+            st.info("🔄 尝试备用新闻获取方法...")
+            try:
+                # 创建一些示例新闻作为演示
+                demo_news = [
+                    {
+                        "title": f"{target_ticker or 'Market'} - 实时财经数据获取受限",
+                        "summary": "由于网络限制或API配额限制，暂时无法获取实时财经新闻。建议访问Yahoo Finance、Bloomberg等财经网站获取最新信息。",
+                        "published": current_time,
+                        "url": "https://finance.yahoo.com",
+                        "source": "系统提示",
+                        "category": "system_info",
+                        "keywords": ["系统", "提示"],
+                        "sentiment": "中性",
+                        "is_real": False
+                    }
+                ]
+                news_data.extend(demo_news)
+                st.info("📝 已添加系统提示信息")
+            except Exception as e:
+                st.error(f"创建示例新闻失败: {str(e)}")
+        
         # 按时间排序，最新的在前
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
         # 显示最终统计
-        st.success(f"📊 最终成功获取 {len(news_data)} 条真实新闻")
-        
-        if len(news_data) == 0:
-            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
-            st.info("🔍 可能的原因：网络连接问题、API限制或新闻源暂时不可用")
-            return []
+        st.success(f"📊 最终成功获取 {len(news_data)} 条新闻数据")
         
         return news_data
         
     except Exception as e:
         st.error(f"❌ 新闻获取过程出现严重错误: {str(e)}")
-        return []
+        # 返回一个基本的系统信息
+        return [{
+            "title": "新闻获取服务暂时不可用",
+            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
+            "published": datetime.now(),
+            "url": "",
+            "source": "系统",
+            "category": "system_info",
+            "keywords": ["系统"],
+            "sentiment": "中性",
+            "is_real": False
+        }]
 
 def extract_keywords_from_text(text):
     """从文本中提取财经关键词"""
