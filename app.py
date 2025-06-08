@@ -5,6 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import warnings
+import hashlib
+import random
+import time
+import re
 warnings.filterwarnings('ignore')
 
 # 页面配置
@@ -55,41 +59,42 @@ def fetch_stock_data(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
-import hashlib
-import random
-import time
-
-def translate_with_baidu(text, app_id=None, secret_key=None):
-    """使用百度翻译API"""
+def translate_with_google_alternative(text):
+    """使用Google翻译的替代接口"""
     try:
         import requests
-        import hashlib
-        import random
-        import time
         
-        # 如果没有提供API密钥，使用免费的方式
-        if not app_id or not secret_key:
-            return None
-            
-        # 百度翻译API
-        url = 'https://fanyi-api.baidu.com/api/trans/vip/translate'
-        salt = random.randint(32768, 65536)
-        sign = hashlib.md5((app_id + text + str(salt) + secret_key).encode('utf-8')).hexdigest()
-        
+        url = "https://translate.google.cn/translate_a/single"
         params = {
-            'q': text,
-            'from': 'en',
-            'to': 'zh',
-            'appid': app_id,
-            'salt': salt,
-            'sign': sign
+            'client': 'webapp',
+            'sl': 'en',
+            'tl': 'zh',
+            'hl': 'zh',
+            'dt': ['t', 'bd', 'qc', 'rm', 'ex'],
+            'otf': 1,
+            'ssel': 0,
+            'tsel': 0,
+            'tk': '',
+            'q': text
         }
         
-        response = requests.get(url, params=params, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://translate.google.cn/',
+            'Accept': '*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         if response.status_code == 200:
             result = response.json()
-            if 'trans_result' in result:
-                return result['trans_result'][0]['dst']
+            if result and len(result) > 0 and result[0]:
+                translated_parts = []
+                for item in result[0]:
+                    if item and len(item) > 0 and item[0]:
+                        translated_parts.append(item[0])
+                if translated_parts:
+                    return ''.join(translated_parts)
     except:
         pass
     return None
@@ -98,7 +103,6 @@ def translate_with_youdao(text):
     """使用有道翻译免费接口"""
     try:
         import requests
-        import json
         
         url = "https://fanyi.youdao.com/translate"
         headers = {
@@ -132,115 +136,11 @@ def translate_with_youdao(text):
         pass
     return None
 
-def translate_with_google_alternative(text):
-    """使用Google翻译的替代接口"""
-    try:
-        import requests
-        
-        # 使用translate.google.cn域名
-        url = "https://translate.google.cn/translate_a/single"
-        params = {
-            'client': 'webapp',
-            'sl': 'en',
-            'tl': 'zh',
-            'hl': 'zh',
-            'dt': ['t', 'bd', 'qc', 'rm', 'ex'],
-            'otf': 1,
-            'ssel': 0,
-            'tsel': 0,
-            'tk': '',
-            'q': text
-        }
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Referer': 'https://translate.google.cn/',
-            'Accept': '*/*',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        }
-        
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        if response.status_code == 200:
-            result = response.json()
-            if result and len(result) > 0 and result[0]:
-                translated_parts = []
-                for item in result[0]:
-                    if item and len(item) > 0 and item[0]:
-                        translated_parts.append(item[0])
-                if translated_parts:
-                    return ''.join(translated_parts)
-    except:
-        pass
-    return None
-
-def translate_with_deepl_free(text):
-    """使用DeepL免费接口"""
-    try:
-        import requests
-        
-        url = "https://www2.deepl.com/jsonrpc"
-        headers = {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        
-        data = {
-            "jsonrpc": "2.0",
-            "method": "LMT_handle_jobs",
-            "params": {
-                "jobs": [{"kind": "default", "raw_en_sentence": text}],
-                "lang": {"user_preferred_langs": ["ZH"], "source_lang_user_selected": "EN", "target_lang": "ZH"},
-                "priority": -1
-            },
-            "id": random.randint(1, 100000)
-        }
-        
-        response = requests.post(url, headers=headers, json=data, timeout=10)
-        if response.status_code == 200:
-            result = response.json()
-            if 'result' in result and 'translations' in result['result']:
-                return result['result']['translations'][0]['beams'][0]['postprocessed_sentence']
-    except:
-        pass
-    return None
-
-def smart_translate(text):
-    """智能翻译：尝试多个翻译源"""
-    if not text or len(text.strip()) < 3:
-        return text
-    
-    # 限制长度避免API限制
-    if len(text) > 1000:
-        text = text[:997] + "..."
-    
-    # 翻译方法优先级
-    translation_methods = [
-        translate_with_google_alternative,
-        translate_with_youdao, 
-        translate_with_deepl_free,
-        # translate_with_baidu  # 需要API密钥，暂时注释
-    ]
-    
-    for method in translation_methods:
-        try:
-            result = method(text)
-            if result and len(result.strip()) > 5:
-                # 简单验证翻译质量
-                if not any(char in result for char in ['翻译', 'translate', 'error', 'Error']):
-                    return result.strip()
-            time.sleep(0.2)  # 避免请求过快
-        except:
-            continue
-    
-    # 如果所有方法都失败，使用基础词汇翻译
-    return basic_financial_translate(text)
-
 def basic_financial_translate(text):
-    """基础财经术语翻译（作为最后备选）"""
+    """基础财经术语翻译"""
     if not text:
         return text
     
-    # 完整的财经翻译词典
     financial_dict = {
         # 完整句式
         'said in a statement': '在声明中表示',
@@ -280,7 +180,6 @@ def basic_financial_translate(text):
         # 财经术语
         'artificial intelligence': '人工智能',
         'AI': '人工智能',
-        'machine learning': '机器学习',
         'quarterly earnings': '季度财报',
         'earnings report': '财报',
         'revenue': '营收',
@@ -300,10 +199,8 @@ def basic_financial_translate(text):
         'technology': '科技',
         'semiconductor': '半导体',
         'electric vehicle': '电动汽车',
-        'renewable energy': '可再生能源',
         'cloud computing': '云计算',
         'e-commerce': '电子商务',
-        'social media': '社交媒体',
         'streaming': '流媒体',
         
         # 数值表达
@@ -311,18 +208,12 @@ def basic_financial_translate(text):
         'million': '百万',
         'trillion': '万亿',
         'percent': '百分比',
-        'percentage': '百分比',
         
         # 时间表达
         'this year': '今年',
         'last year': '去年',
-        'next year': '明年',
         'this quarter': '本季度',
         'last quarter': '上季度',
-        'Q1': '第一季度',
-        'Q2': '第二季度', 
-        'Q3': '第三季度',
-        'Q4': '第四季度',
         
         # 市场动作
         'announced': '宣布',
@@ -330,32 +221,52 @@ def basic_financial_translate(text):
         'released': '发布',
         'launched': '推出',
         'acquired': '收购',
-        'merged': '合并',
-        'partnership': '合作',
-        'investment': '投资',
-        'funding': '融资',
         
         # 其他常用词
         'growth': '增长',
         'decline': '下降',
         'increase': '增加',
-        'decrease': '减少',
         'performance': '表现',
         'results': '结果',
         'forecast': '预测',
-        'outlook': '展望',
-        'guidance': '指导',
-        'target': '目标'
+        'outlook': '展望'
     }
     
     result = text
     for en, zh in financial_dict.items():
-        # 使用词边界匹配，避免部分替换
-        import re
         pattern = r'\b' + re.escape(en) + r'\b'
         result = re.sub(pattern, zh, result, flags=re.IGNORECASE)
     
     return result
+
+def smart_translate(text):
+    """智能翻译：尝试多个翻译源"""
+    if not text or len(text.strip()) < 3:
+        return text
+    
+    # 限制长度避免API限制
+    if len(text) > 1000:
+        text = text[:997] + "..."
+    
+    # 翻译方法优先级
+    translation_methods = [
+        translate_with_google_alternative,
+        translate_with_youdao
+    ]
+    
+    for method in translation_methods:
+        try:
+            result = method(text)
+            if result and len(result.strip()) > 5:
+                # 简单验证翻译质量
+                if not any(char in result for char in ['翻译', 'translate', 'error', 'Error']):
+                    return result.strip()
+            time.sleep(0.2)  # 避免请求过快
+        except:
+            continue
+    
+    # 如果所有方法都失败，使用基础词汇翻译
+    return basic_financial_translate(text)
 
 def fetch_financial_news(target_ticker=None):
     """获取真实财经新闻（仅真实新闻）"""
@@ -370,10 +281,9 @@ def fetch_financial_news(target_ticker=None):
                 news = ticker_obj.news
                 
                 if news and len(news) > 0:
-                    for i, article in enumerate(news[:8]):  # 获取前8条真实新闻
+                    for i, article in enumerate(news[:8]):
                         try:
-                            # 新的API结构：数据在content字段里
-                            content = article.get('content', article)  # 兼容新旧结构
+                            content = article.get('content', article)
                             
                             title = content.get('title', '') or content.get('headline', '') or article.get('title', '')
                             summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
@@ -395,11 +305,9 @@ def fetch_financial_news(target_ticker=None):
                                 publisher = content.get('publisher', '') or content.get('source', 'Unknown')
                             
                             # 获取时间
-                            pub_time = None
                             pub_date_str = content.get('pubDate', '') or content.get('displayTime', '')
                             if pub_date_str:
                                 try:
-                                    # 处理ISO格式的时间字符串
                                     if 'T' in pub_date_str and 'Z' in pub_date_str:
                                         published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
                                     else:
@@ -407,7 +315,6 @@ def fetch_financial_news(target_ticker=None):
                                 except:
                                     published_time = current_time - timedelta(hours=i+1)
                             else:
-                                # 尝试数字时间戳
                                 pub_time = content.get('providerPublishTime', None) or article.get('providerPublishTime', None)
                                 if pub_time:
                                     try:
@@ -415,93 +322,19 @@ def fetch_financial_news(target_ticker=None):
                                     except:
                                         published_time = current_time - timedelta(hours=i+1)
                                 else:
-                                    published_time = current_time - timedelta(hours=len(news_data)+1)
-                                
-                                if title and len(title.strip()) > 5:  # 确保标题有实际内容
-                                    # 避免重复新闻
-                                    if not any(existing['title'] == title for existing in news_data):
-                                        # 翻译标题和摘要
-                                        try:
-                                            translated_title = smart_translate(title)
-                                            if summary and len(summary.strip()) > 10:
-                                                if len(summary) > 400:
-                                                    summary = summary[:400] + "..."
-                                                translated_summary = smart_translate(summary)
-                                            else:
-                                                translated_summary = '暂无摘要'
-                                        except:
-                                            translated_title = basic_financial_translate(title)
-                                            translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
-                                        
-                                        title_summary = title + ' ' + (summary or '')
-                                        keywords = extract_keywords_from_text(title_summary)
-                                        sentiment = analyze_sentiment_from_keywords(keywords)
-                                        
-                                        news_item = {
-                                            "title": translated_title,
-                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
-                                            "published": published_time,
-                                            "url": link or '',
-                                            "source": publisher,
-                                            "category": "market_wide",
-                                            "keywords": keywords,
-                                            "sentiment": sentiment,
-                                            "is_real": True
-                                        }
-                                        news_data.append(news_item)
-                            except Exception as e:
-                                continue
-                except Exception as e:
-                    continue
-        except Exception as e:
-            pass
-        
-        # 按时间排序，最新的在前
-        news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
-        
-        # 如果仍然没有新闻，提供系统提示
-        if len(news_data) == 0:
-            return [{
-                "title": "新闻获取服务暂时不可用",
-                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
-                "published": current_time,
-                "url": "https://finance.yahoo.com",
-                "source": "系统提示",
-                "category": "system_info",
-                "keywords": ["系统", "提示"],
-                "sentiment": "中性",
-                "is_real": False
-            }]
-        
-        return news_data
-        
-    except Exception as e:
-        # 返回一个基本的系统信息
-        return [{
-            "title": "新闻获取服务暂时不可用",
-            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
-            "published": datetime.now(),
-            "url": "",
-            "source": "系统",
-            "category": "system_info",
-            "keywords": ["系统"],
-            "sentiment": "中性",
-            "is_real": False
-        }]time = current_time - timedelta(hours=i+1)
+                                    published_time = current_time - timedelta(hours=i+1)
                             
-                            if title and len(title.strip()) > 5:  # 确保标题有实际内容
+                            if title and len(title.strip()) > 5:
                                 # 翻译标题和摘要
                                 try:
                                     translated_title = smart_translate(title)
                                     if summary and len(summary.strip()) > 10:
-                                        # 对长摘要进行截取后翻译
                                         if len(summary) > 400:
                                             summary = summary[:400] + "..."
                                         translated_summary = smart_translate(summary)
                                     else:
                                         translated_summary = '暂无摘要'
                                 except:
-                                    # 翻译失败时使用基础翻译
                                     translated_title = basic_financial_translate(title)
                                     translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
                                 
@@ -524,7 +357,6 @@ def fetch_financial_news(target_ticker=None):
                                 news_data.append(news_item)
                         except Exception as e:
                             continue
-                            
             except Exception as e:
                 pass
         
@@ -537,9 +369,8 @@ def fetch_financial_news(target_ticker=None):
                     index_news = index_ticker.news
                     
                     if index_news and len(index_news) > 0:
-                        for j, article in enumerate(index_news[:3]):  # 每个指数取3条
+                        for j, article in enumerate(index_news[:3]):
                             try:
-                                # 新的API结构：数据在content字段里
                                 content = article.get('content', article)
                                 
                                 title = content.get('title', '') or content.get('headline', '') or article.get('title', '')
@@ -574,10 +405,9 @@ def fetch_financial_news(target_ticker=None):
                                 else:
                                     published_time = current_time - timedelta(hours=len(news_data)+1)
                                 
-                                if title and len(title.strip()) > 5:  # 确保标题有实际内容
+                                if title and len(title.strip()) > 5:
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
-                                        # 翻译标题和摘要
                                         try:
                                             translated_title = smart_translate(title)
                                             if summary and len(summary.strip()) > 10:
@@ -633,66 +463,6 @@ def fetch_financial_news(target_ticker=None):
         return news_data
         
     except Exception as e:
-        # 返回一个基本的系统信息
-        return [{
-            "title": "新闻获取服务暂时不可用",
-            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
-            "published": datetime.now(),
-            "url": "",
-            "source": "系统",
-            "category": "system_info",
-            "keywords": ["系统"],
-            "sentiment": "中性",
-            "is_real": False
-        }]time = current_time - timedelta(hours=len(news_data)+1)
-                                
-                                if title and len(title.strip()) > 5:  # 确保标题有实际内容
-                                    # 避免重复新闻
-                                    if not any(existing['title'] == title for existing in news_data):
-                                        title_summary = title + ' ' + (summary or '')
-                                        keywords = extract_keywords_from_text(title_summary)
-                                        sentiment = analyze_sentiment_from_keywords(keywords)
-                                        
-                                        news_item = {
-                                            "title": title,  # 保持英文原文
-                                            "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
-                                            "published": published_time,
-                                            "url": link or '',
-                                            "source": publisher,
-                                            "category": "market_wide",
-                                            "keywords": keywords,
-                                            "sentiment": sentiment,
-                                            "is_real": True
-                                        }
-                                        news_data.append(news_item)
-                            except Exception as e:
-                                continue
-                except Exception as e:
-                    continue
-        except Exception as e:
-            pass
-        
-        # 按时间排序，最新的在前
-        news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
-        
-        # 如果仍然没有新闻，提供系统提示
-        if len(news_data) == 0:
-            return [{
-                "title": "新闻获取服务暂时不可用",
-                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
-                "published": current_time,
-                "url": "https://finance.yahoo.com",
-                "source": "系统提示",
-                "category": "system_info",
-                "keywords": ["系统", "提示"],
-                "sentiment": "中性",
-                "is_real": False
-            }]
-        
-        return news_data
-        
-    except Exception as e:
-        # 返回一个基本的系统信息
         return [{
             "title": "新闻获取服务暂时不可用",
             "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
@@ -712,7 +482,6 @@ def extract_keywords_from_text(text):
     
     text_lower = text.lower()
     
-    # 财经关键词库
     keyword_categories = {
         "利率": ["rate", "interest", "fed", "federal reserve", "利率", "降息", "加息"],
         "科技": ["tech", "technology", "ai", "artificial intelligence", "chip", "semiconductor", "科技", "人工智能", "芯片"],
@@ -910,7 +679,7 @@ with st.sidebar:
         st.markdown("""
         ### 系统功能
         1. **股票分析**: 财务指标、技术分析、估值模型
-        2. **新闻分析**: 真实新闻获取与分析
+        2. **新闻分析**: 中文新闻翻译与分析
         3. **止盈止损**: 智能策略建议
         
         ### 操作方法
@@ -919,8 +688,8 @@ with st.sidebar:
         3. 查看分析结果和新闻
         
         ### 注意事项
-        - 仅显示真实新闻，无模拟内容
-        - 新闻数量取决于实际可获取的数据
+        - 新闻自动翻译为中文
+        - 使用多个翻译源确保质量
         """)
 
 # 主界面逻辑
@@ -943,7 +712,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
     ticker = st.session_state.current_ticker
     
     # 主功能标签页
-    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 真实新闻分析"])
+    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 中文新闻分析"])
     
     with main_tab1:
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -1053,14 +822,14 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 st.info("📊 持仓正常")
     
     with main_tab2:
-        st.subheader("📰 真实新闻分析")
-        st.info("💡 基于真实财经新闻的市场影响分析（不含任何模拟内容）")
+        st.subheader("📰 中文新闻分析")
+        st.info("💡 自动翻译最新财经新闻为中文")
         
-        # 获取真实新闻数据
+        # 获取新闻数据
         news_data = fetch_financial_news(ticker)
         
         if len(news_data) == 0:
-            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试或检查网络连接")
+            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
             st.info("💡 建议直接访问财经网站获取最新市场动态")
         else:
             # 新闻统计
@@ -1070,7 +839,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
             
             col_stat1, col_stat2, col_stat3 = st.columns(3)
             with col_stat1:
-                st.metric("📰 真实新闻", total_news)
+                st.metric("📰 中文新闻", total_news)
             with col_stat2:
                 st.metric("🏢 公司相关", company_news)
             with col_stat3:
@@ -1122,12 +891,14 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 category_label = category_labels.get(category, '📰 一般新闻')
                 
                 news_number = start_idx + i + 1
+                is_real = news.get('is_real', True)
+                real_label = "✅ 真实新闻" if is_real else "📝 系统信息"
                 
                 st.markdown(f"""
                 <div style="border: 2px solid {border_color}; border-radius: 10px; padding: 15px; margin: 10px 0;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <span style="background-color: {border_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;">
-                            {news_number}. {category_label} | ✅ 真实新闻
+                            {news_number}. {category_label} | {real_label}
                         </span>
                         <span style="font-size: 11px; color: #999;">📰 {news.get('source', '')}</span>
                     </div>
@@ -1139,14 +910,14 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # 新闻标题按钮（真实链接）
+                # 新闻标题按钮
                 news_url = news.get('url', '')
                 news_title = news.get('title', '无标题')
                 
                 if news_url and news_url.startswith('http'):
                     st.markdown(f'<a href="{news_url}" target="_blank"><button style="background: linear-gradient(45deg, {border_color}, {border_color}dd); color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; width: 100%; margin: 10px 0;">🔗 {news_title}</button></a>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<button style="background: linear-gradient(45deg, #999, #777); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; width: 100%; margin: 10px 0; opacity: 0.7; cursor: not-allowed;" disabled>📄 {news_title} (无有效链接)</button>', unsafe_allow_html=True)
+                    st.markdown(f'<button style="background: linear-gradient(45deg, #999, #777); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; width: 100%; margin: 10px 0; opacity: 0.7; cursor: not-allowed;" disabled>📄 {news_title}</button>', unsafe_allow_html=True)
                 
                 # 市场影响分析
                 col_sentiment, col_impact = st.columns([1, 2])
@@ -1171,7 +942,6 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
             if total_pages > 1:
                 st.markdown("### 📄 页面导航")
                 
-                # 创建翻页按钮布局
                 nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 1, 1, 1])
                 
                 with nav_col1:
@@ -1208,7 +978,6 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                     else:
                         st.button("下一页 ➡️", key="next_page_btn_disabled", disabled=True, use_container_width=True)
                 
-                # 页面状态指示器
                 st.markdown("---")
                 progress_text = f"🔖 当前浏览: 第{current_page}页，共{total_pages}页 | 显示新闻 {start_idx + 1}-{end_idx} / {len(news_data)}"
                 st.info(progress_text)
@@ -1257,7 +1026,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                     st.metric(f"🏷️ {keyword}", f"{count}次")
             
             # 投资建议
-            st.subheader("💡 基于真实时事的投资提醒")
+            st.subheader("💡 基于时事的投资提醒")
             
             suggestions = []
             for keyword, count in sorted_keywords:
@@ -1274,7 +1043,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
             
             st.markdown("---")
             st.caption("📝 **数据来源**: 基于Yahoo Finance等真实财经数据源")
-            st.caption("✅ **真实性保证**: 所有新闻均为真实获取，无任何模拟内容")
+            st.caption("🌐 **翻译服务**: 使用Google翻译、有道翻译等专业服务")
             st.caption("⚠️ **免责声明**: 所有分析仅供参考，不构成投资建议。投资有风险，入市需谨慎。")
 
 else:
@@ -1291,27 +1060,26 @@ else:
         - 技术指标分析（RSI、均线等）
         - 智能止盈止损建议
         
-        **📰 真实新闻分析**
-        - 获取真实财经新闻（公司+行业+市场）
+        **📰 中文新闻分析**
+        - 自动获取真实财经新闻
+        - 多源专业翻译服务（Google、有道等）
         - 智能分页浏览（每页5条）
         - 自动情绪分析（利好/利空/中性）
         - 市场影响评估和操作建议
         - 热点关键词统计
         - 整体市场情绪分析
-        - **100%真实新闻，绝无模拟内容**
         
         ### 🚀 使用方法
         1. 在侧边栏输入股票代码（如AAPL、TSLA、MSFT等）
         2. 点击"🔍 开始分析"按钮
         3. 查看"📊 股票分析"标签页的财务和技术分析
-        4. 切换到"📰 真实新闻分析"查看相关新闻
+        4. 切换到"📰 中文新闻分析"查看翻译后的新闻
         5. 使用分页功能浏览所有新闻内容
         
         ### 📋 注意事项
-        - 本系统仅显示真实财经新闻
-        - 新闻数量取决于实际可获取的数据
+        - 新闻自动翻译为中文，便于阅读
+        - 使用多个翻译源确保翻译质量
         - 本系统仅供参考，不构成投资建议
-        - 请结合其他信息进行综合判断
         - 投资有风险，入市需谨慎
         """)
 
@@ -1326,4 +1094,4 @@ with col_footer2:
         st.session_state.analysis_data = None
         st.rerun()
 
-st.markdown("💹 智能投资分析系统 v2.0 | 仅真实新闻 | 投资需谨慎")
+st.markdown("💹 智能投资分析系统 v2.0 | 中文新闻翻译 | 投资需谨慎")
