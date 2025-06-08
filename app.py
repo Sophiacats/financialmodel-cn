@@ -56,122 +56,64 @@ def fetch_stock_data(ticker):
         return None
 
 def translate_to_chinese(text):
-    """简单的英文翻译成中文"""
-    if not text:
+    """使用在线翻译服务将英文翻译成中文"""
+    if not text or len(text.strip()) < 3:
         return text
     
-    # 常见财经词汇翻译字典
-    translation_dict = {
-        # 基本词汇
-        'Stock': '股票', 'Stocks': '股票', 'stock': '股票', 'stocks': '股票',
-        'Market': '市场', 'market': '市场', 'Markets': '市场', 'markets': '市场',
-        'Apple': '苹果公司', 'AAPL': '苹果', 'iPhone': 'iPhone',
-        'Tesla': '特斯拉', 'TSLA': '特斯拉',
-        'Microsoft': '微软', 'MSFT': '微软',
-        'Amazon': '亚马逊', 'AMZN': '亚马逊',
-        'Google': '谷歌', 'GOOGL': '谷歌',
-        'Meta': 'Meta', 'Facebook': '脸书',
+    try:
+        # 方法1: 使用googletrans库 (如果可用)
+        try:
+            from googletrans import Translator
+            translator = Translator()
+            result = translator.translate(text, src='en', dest='zh-cn')
+            return result.text
+        except ImportError:
+            pass
+        except Exception:
+            pass
         
-        # 财经术语
-        'earnings': '财报', 'Earnings': '财报',
-        'revenue': '营收', 'Revenue': '营收',
-        'profit': '利润', 'Profit': '利润',
-        'dividend': '分红', 'Dividend': '分红', 'dividends': '分红', 'Dividends': '分红',
-        'billion': '十亿', 'Billion': '十亿',
-        'million': '百万', 'Million': '百万',
-        'AI': '人工智能', 'artificial intelligence': '人工智能',
-        'portfolio': '投资组合', 'Portfolio': '投资组合',
-        'investment': '投资', 'Investment': '投资',
-        'investor': '投资者', 'Investor': '投资者', 'investors': '投资者',
-        'trading': '交易', 'Trading': '交易',
-        'trader': '交易员', 'Trader': '交易员', 'traders': '交易员',
-        'price': '价格', 'Price': '价格',
-        'share': '股份', 'Share': '股份', 'shares': '股份', 'Shares': '股份',
-        'CEO': '首席执行官',
-        'CFO': '首席财务官',
-        'IPO': '首次公开募股',
-        'SEC': '证券交易委员会',
-        'FDA': '食品药品监督管理局',
+        # 方法2: 使用requests调用Google翻译API
+        try:
+            import requests
+            import urllib.parse
+            
+            # Google翻译API (免费版本)
+            url = "https://translate.googleapis.com/translate_a/single"
+            params = {
+                'client': 'gtx',
+                'sl': 'en',
+                'tl': 'zh-cn',
+                'dt': 't',
+                'q': text
+            }
+            
+            response = requests.get(url, params=params, timeout=5)
+            if response.status_code == 200:
+                result = response.json()
+                if result and len(result) > 0 and len(result[0]) > 0:
+                    translated_text = ''.join([item[0] for item in result[0] if item[0]])
+                    return translated_text
+        except:
+            pass
         
-        # 行业术语
-        'technology': '科技', 'Technology': '科技', 'tech': '科技', 'Tech': '科技',
-        'semiconductor': '半导体', 'Semiconductor': '半导体',
-        'chip': '芯片', 'Chip': '芯片', 'chips': '芯片',
-        'electric vehicle': '电动汽车', 'EV': '电动汽车',
-        'renewable energy': '可再生能源',
-        'solar': '太阳能', 'Solar': '太阳能',
-        'battery': '电池', 'Battery': '电池',
+        # 方法3: 使用百度翻译API (备用)
+        try:
+            import requests
+            import hashlib
+            import random
+            
+            # 这里可以添加百度翻译API的调用
+            # 需要申请API密钥
+            pass
+        except:
+            pass
         
-        # 市场动作
-        'rise': '上涨', 'Rise': '上涨', 'rising': '上涨',
-        'fall': '下跌', 'Fall': '下跌', 'falling': '下跌',
-        'gain': '上涨', 'Gain': '上涨', 'gains': '上涨',
-        'loss': '下跌', 'Loss': '下跌', 'losses': '下跌',
-        'surge': '大涨', 'Surge': '大涨',
-        'decline': '下降', 'Decline': '下降',
-        'rally': '反弹', 'Rally': '反弹',
-        'crash': '暴跌', 'Crash': '暴跌',
-        'volatility': '波动', 'Volatility': '波动',
+        # 如果所有翻译方法都失败，返回原文
+        return text
         
-        # 时间词汇
-        'today': '今日', 'Today': '今日',
-        'yesterday': '昨日', 'Yesterday': '昨日',
-        'week': '周', 'Week': '周',
-        'month': '月', 'Month': '月',
-        'year': '年', 'Year': '年', 'years': '年', 'Years': '年',
-        'quarter': '季度', 'Quarter': '季度',
-        'daily': '每日', 'Daily': '每日',
-        'weekly': '每周', 'Weekly': '每周',
-        'monthly': '每月', 'Monthly': '每月',
-        'annually': '每年', 'Annually': '每年',
-        
-        # 其他常用词
-        'report': '报告', 'Report': '报告',
-        'analysis': '分析', 'Analysis': '分析',
-        'forecast': '预测', 'Forecast': '预测',
-        'outlook': '展望', 'Outlook': '展望',
-        'guidance': '指引', 'Guidance': '指引',
-        'target': '目标', 'Target': '目标',
-        'expected': '预期', 'Expected': '预期',
-        'announced': '宣布', 'Announced': '宣布',
-        'launched': '推出', 'Launched': '推出',
-        'released': '发布', 'Released': '发布',
-        'unveiled': '公布', 'Unveiled': '公布',
-        'acquisition': '收购', 'Acquisition': '收购',
-        'merger': '合并', 'Merger': '合并',
-        'partnership': '合作', 'Partnership': '合作',
-        'deal': '交易', 'Deal': '交易',
-        'agreement': '协议', 'Agreement': '协议',
-        'contract': '合同', 'Contract': '合同',
-        
-        # 监管和政策
-        'regulation': '监管', 'Regulation': '监管',
-        'policy': '政策', 'Policy': '政策',
-        'government': '政府', 'Government': '政府',
-        'federal': '联邦', 'Federal': '联邦',
-        'rate': '利率', 'Rate': '利率', 'rates': '利率',
-        'inflation': '通胀', 'Inflation': '通胀',
-        'GDP': '国内生产总值',
-        'economy': '经济', 'Economy': '经济', 'economic': '经济',
-        
-        # 特定事件
-        'WWDC': '苹果全球开发者大会',
-        'earnings report': '财报',
-        'earnings call': '财报电话会议',
-        'conference call': '电话会议',
-        'press release': '新闻稿',
-        'shareholder': '股东', 'shareholders': '股东',
-        'board of directors': '董事会',
-        'buyback': '回购', 'stock buyback': '股票回购',
-        'split': '拆股', 'stock split': '股票拆分'
-    }
-    
-    # 进行翻译替换
-    translated_text = text
-    for english, chinese in translation_dict.items():
-        translated_text = translated_text.replace(english, chinese)
-    
-    return translated_text
+    except Exception as e:
+        # 如果翻译失败，返回原文
+        return text
 
 def fetch_financial_news(target_ticker=None):
     """获取真实财经新闻（仅真实新闻）"""
@@ -235,8 +177,16 @@ def fetch_financial_news(target_ticker=None):
                             
                             if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                 # 翻译标题和摘要
-                                translated_title = translate_to_chinese(title)
-                                translated_summary = translate_to_chinese(summary) if summary else '暂无摘要'
+                                try:
+                                    translated_title = translate_to_chinese(title)
+                                    if summary and len(summary.strip()) > 10:
+                                        translated_summary = translate_to_chinese(summary)
+                                    else:
+                                        translated_summary = '暂无摘要'
+                                except:
+                                    # 如果翻译失败，使用原文
+                                    translated_title = title
+                                    translated_summary = summary or '暂无摘要'
                                 
                                 # 提取关键词和分析情绪
                                 title_summary = title + ' ' + (summary or '')
@@ -311,8 +261,16 @@ def fetch_financial_news(target_ticker=None):
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
                                         # 翻译标题和摘要
-                                        translated_title = translate_to_chinese(title)
-                                        translated_summary = translate_to_chinese(summary) if summary else '暂无摘要'
+                                        try:
+                                            translated_title = translate_to_chinese(title)
+                                            if summary and len(summary.strip()) > 10:
+                                                translated_summary = translate_to_chinese(summary)
+                                            else:
+                                                translated_summary = '暂无摘要'
+                                        except:
+                                            # 如果翻译失败，使用原文
+                                            translated_title = title
+                                            translated_summary = summary or '暂无摘要'
                                         
                                         title_summary = title + ' ' + (summary or '')
                                         keywords = extract_keywords_from_text(title_summary)
