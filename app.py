@@ -603,25 +603,16 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                         🏷️ 关键词: {', '.join(news.get('keywords', []))}
                     </p>
                 </div>
-                                    """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+                
+                # 新闻标题按钮（真实链接）
+                news_url = news.get('url', '')
+                news_title = news.get('title', '无标题')
+                
+                if news_url and news_url.startswith('http'):
+                    st.markdown(f'<a href="{news_url}" target="_blank"><button style="background: linear-gradient(45deg, {border_color}, {border_color}dd); color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; width: 100%; margin: 10px 0;">🔗 {news_title}</button></a>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f"""
-                    <button style="
-                        background: linear-gradient(45deg, #999, #777);
-                        color: white;
-                        border: none;
-                        padding: 12px 20px;
-                        border-radius: 8px;
-                        font-size: 14px;
-                        font-weight: bold;
-                        width: 100%;
-                        margin: 10px 0;
-                        opacity: 0.7;
-                        cursor: not-allowed;
-                    " disabled>
-                        📄 {news_title} (无有效链接)
-                    </button>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f'<button style="background: linear-gradient(45deg, #999, #777); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; width: 100%; margin: 10px 0; opacity: 0.7; cursor: not-allowed;" disabled>📄 {news_title} (无有效链接)</button>', unsafe_allow_html=True)
                 
                 # 市场影响分析
                 col_sentiment, col_impact = st.columns([1, 2])
@@ -802,29 +793,3 @@ with col_footer2:
         st.rerun()
 
 st.markdown("💹 智能投资分析系统 v2.0 | 仅真实新闻 | 投资需谨慎")
-                
-                # 新闻标题按钮（真实链接）
-                news_url = news.get('url', '')
-                news_title = news.get('title', '无标题')
-                
-                if news_url and news_url.startswith('http'):
-                    st.markdown(f"""
-                    <a href="{news_url}" target="_blank" style="text-decoration: none;">
-                        <button style="
-                            background: linear-gradient(45deg, {border_color}, {border_color}dd);
-                            color: white;
-                            border: none;
-                            padding: 12px 20px;
-                            border-radius: 8px;
-                            cursor: pointer;
-                            font-size: 14px;
-                            font-weight: bold;
-                            width: 100%;
-                            margin: 10px 0;
-                            transition: all 0.3s ease;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'" 
-                           onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
-                            🔗 {news_title}
-                        </button>
-                    </a>
