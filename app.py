@@ -2,62 +2,32 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import warnings
-import hashlib
-import random
-import time
 import re
+import requests
+import time
 warnings.filterwarnings('ignore')
 
 # 页面配置
 st.set_page_config(
-    page_title="💹 智能投资分析系统",
-    page_icon="💹",
+    page_title="📰 财经新闻智能分析系统",
+    page_icon="📰",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # 初始化 session state
-if 'current_ticker' not in st.session_state:
-    st.session_state.current_ticker = None
-if 'current_price' not in st.session_state:
-    st.session_state.current_price = 0
-if 'analysis_data' not in st.session_state:
-    st.session_state.analysis_data = None
-if 'show_analysis' not in st.session_state:
-    st.session_state.show_analysis = False
+if 'selected_ticker' not in st.session_state:
+    st.session_state.selected_ticker = None
+if 'news_data' not in st.session_state:
+    st.session_state.news_data = None
 
-# 标题
-st.title("💹 智能投资分析系统 v2.0")
+st.title("📰 财经新闻智能分析系统")
+st.markdown("**实时财经新闻 + 智能中文翻译 + 情绪分析 + 投资建议**")
 st.markdown("---")
 
-@st.cache_data(ttl=3600)
-def fetch_stock_data(ticker):
-    """获取股票数据"""
-    try:
-        stock = yf.Ticker(ticker)
-        info = dict(stock.info)
-        
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=365*2)
-        hist_data = stock.history(start=start_date, end=end_date)
-        
-        financials = stock.financials
-        balance_sheet = stock.balance_sheet
-        cash_flow = stock.cashflow
-        
-        return {
-            'info': info,
-            'hist_data': hist_data.copy(),
-            'financials': financials.copy() if financials is not None else pd.DataFrame(),
-            'balance_sheet': balance_sheet.copy() if balance_sheet is not None else pd.DataFrame(),
-            'cash_flow': cash_flow.copy() if cash_flow is not None else pd.DataFrame()
-        }
-    except Exception as e:
-        st.error(f"获取数据失败: {str(e)}")
-        return None
+# ==================== 翻译和分析函数 ====================
 
 def comprehensive_translate(text):
     """综合翻译：句型+词汇翻译"""
@@ -251,8 +221,6 @@ def basic_financial_translate(text):
 def translate_with_google_alternative(text):
     """使用Google翻译的替代接口（快速版本）"""
     try:
-        import requests
-        
         url = "https://translate.google.cn/translate_a/single"
         params = {
             'client': 'gtx',
@@ -263,7 +231,7 @@ def translate_with_google_alternative(text):
         }
         
         headers = {
-            'User-Agent': 'Mozilla/5.0'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
         response = requests.get(url, params=params, headers=headers, timeout=3)
@@ -281,7 +249,7 @@ def translate_with_google_alternative(text):
     return None
 
 def smart_translate(text):
-    """智能翻译：优先使用综合翻译"""
+    """智能翻译：优先使用综合翻译，短文本尝试在线翻译"""
     if not text or len(text.strip()) < 3:
         return text
     
@@ -298,213 +266,6 @@ def smart_translate(text):
             pass
     
     return translated
-
-def fetch_financial_news(target_ticker=None):
-    """获取真实财经新闻（仅真实新闻）"""
-    try:
-        current_time = datetime.now()
-        news_data = []
-        
-        # 获取目标股票新闻
-        if target_ticker:
-            try:
-                ticker_obj = yf.Ticker(target_ticker)
-                news = ticker_obj.news
-                
-                if news and len(news) > 0:
-                    for i, article in enumerate(news[:8]):
-                        try:
-                            content = article.get('content', article)
-                            
-                            title = content.get('title', '') or content.get('headline', '') or article.get('title', '')
-                            summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
-                            
-                            # 获取链接
-                            link = ''
-                            if 'clickThroughUrl' in content and content['clickThroughUrl']:
-                                link = content['clickThroughUrl'].get('url', '')
-                            elif 'canonicalUrl' in content and content['canonicalUrl']:
-                                link = content['canonicalUrl'].get('url', '')
-                            else:
-                                link = content.get('link', '') or content.get('url', '')
-                            
-                            # 获取发布者
-                            publisher = 'Unknown'
-                            if 'provider' in content and content['provider']:
-                                publisher = content['provider'].get('displayName', 'Unknown')
-                            else:
-                                publisher = content.get('publisher', '') or content.get('source', 'Unknown')
-                            
-                            # 获取时间
-                            pub_date_str = content.get('pubDate', '') or content.get('displayTime', '')
-                            if pub_date_str:
-                                try:
-                                    if 'T' in pub_date_str and 'Z' in pub_date_str:
-                                        published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
-                                    else:
-                                        published_time = current_time - timedelta(hours=i+1)
-                                except:
-                                    published_time = current_time - timedelta(hours=i+1)
-                            else:
-                                pub_time = content.get('providerPublishTime', None) or article.get('providerPublishTime', None)
-                                if pub_time:
-                                    try:
-                                        published_time = datetime.fromtimestamp(pub_time)
-                                    except:
-                                        published_time = current_time - timedelta(hours=i+1)
-                                else:
-                                    published_time = current_time - timedelta(hours=i+1)
-                            
-                            if title and len(title.strip()) > 5:
-                                # 翻译标题和摘要
-                                try:
-                                    translated_title = smart_translate(title)
-                                    if summary and len(summary.strip()) > 10:
-                                        if len(summary) > 400:
-                                            summary = summary[:400] + "..."
-                                        translated_summary = smart_translate(summary)
-                                    else:
-                                        translated_summary = '暂无摘要'
-                                except:
-                                    translated_title = basic_financial_translate(title)
-                                    translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
-                                
-                                # 提取关键词和分析情绪
-                                title_summary = title + ' ' + (summary or '')
-                                keywords = extract_keywords_from_text(title_summary)
-                                sentiment = analyze_sentiment_from_keywords(keywords)
-                                
-                                news_item = {
-                                    "title": translated_title,
-                                    "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
-                                    "published": published_time,
-                                    "url": link or '',
-                                    "source": publisher,
-                                    "category": "company_specific",
-                                    "keywords": keywords,
-                                    "sentiment": sentiment,
-                                    "is_real": True
-                                }
-                                news_data.append(news_item)
-                        except Exception as e:
-                            continue
-            except Exception as e:
-                pass
-        
-        # 获取市场整体新闻
-        try:
-            market_indices = ["^GSPC", "^IXIC", "^DJI"]
-            for index_symbol in market_indices:
-                try:
-                    index_ticker = yf.Ticker(index_symbol)
-                    index_news = index_ticker.news
-                    
-                    if index_news and len(index_news) > 0:
-                        for j, article in enumerate(index_news[:3]):
-                            try:
-                                content = article.get('content', article)
-                                
-                                title = content.get('title', '') or content.get('headline', '') or article.get('title', '')
-                                summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
-                                
-                                # 获取链接
-                                link = ''
-                                if 'clickThroughUrl' in content and content['clickThroughUrl']:
-                                    link = content['clickThroughUrl'].get('url', '')
-                                elif 'canonicalUrl' in content and content['canonicalUrl']:
-                                    link = content['canonicalUrl'].get('url', '')
-                                else:
-                                    link = content.get('link', '') or content.get('url', '')
-                                
-                                # 获取发布者
-                                publisher = 'Market News'
-                                if 'provider' in content and content['provider']:
-                                    publisher = content['provider'].get('displayName', 'Market News')
-                                else:
-                                    publisher = content.get('publisher', '') or content.get('source', 'Market News')
-                                
-                                # 获取时间
-                                pub_date_str = content.get('pubDate', '') or content.get('displayTime', '')
-                                if pub_date_str:
-                                    try:
-                                        if 'T' in pub_date_str and 'Z' in pub_date_str:
-                                            published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
-                                        else:
-                                            published_time = current_time - timedelta(hours=len(news_data)+1)
-                                    except:
-                                        published_time = current_time - timedelta(hours=len(news_data)+1)
-                                else:
-                                    published_time = current_time - timedelta(hours=len(news_data)+1)
-                                
-                                if title and len(title.strip()) > 5:
-                                    # 避免重复新闻
-                                    if not any(existing['title'] == title for existing in news_data):
-                                        try:
-                                            translated_title = smart_translate(title)
-                                            if summary and len(summary.strip()) > 10:
-                                                if len(summary) > 400:
-                                                    summary = summary[:400] + "..."
-                                                translated_summary = smart_translate(summary)
-                                            else:
-                                                translated_summary = '暂无摘要'
-                                        except:
-                                            translated_title = basic_financial_translate(title)
-                                            translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
-                                        
-                                        title_summary = title + ' ' + (summary or '')
-                                        keywords = extract_keywords_from_text(title_summary)
-                                        sentiment = analyze_sentiment_from_keywords(keywords)
-                                        
-                                        news_item = {
-                                            "title": translated_title,
-                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
-                                            "published": published_time,
-                                            "url": link or '',
-                                            "source": publisher,
-                                            "category": "market_wide",
-                                            "keywords": keywords,
-                                            "sentiment": sentiment,
-                                            "is_real": True
-                                        }
-                                        news_data.append(news_item)
-                            except Exception as e:
-                                continue
-                except Exception as e:
-                    continue
-        except Exception as e:
-            pass
-        
-        # 按时间排序，最新的在前
-        news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
-        
-        # 如果仍然没有新闻，提供系统提示
-        if len(news_data) == 0:
-            return [{
-                "title": "新闻获取服务暂时不可用",
-                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
-                "published": current_time,
-                "url": "https://finance.yahoo.com",
-                "source": "系统提示",
-                "category": "system_info",
-                "keywords": ["系统", "提示"],
-                "sentiment": "中性",
-                "is_real": False
-            }]
-        
-        return news_data
-        
-    except Exception as e:
-        return [{
-            "title": "新闻获取服务暂时不可用",
-            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
-            "published": datetime.now(),
-            "url": "",
-            "source": "系统",
-            "category": "system_info",
-            "keywords": ["系统"],
-            "sentiment": "中性",
-            "is_real": False
-        }]
 
 def extract_keywords_from_text(text):
     """从文本中提取财经关键词"""
@@ -556,418 +317,508 @@ def get_market_impact_advice(sentiment):
         return {
             "icon": "📈",
             "advice": "积极因素，可关注相关板块机会",
-            "action": "建议关注相关概念股，适当增加仓位"
+            "action": "建议关注相关概念股，适当增加仓位",
+            "color": "green"
         }
     elif sentiment == "利空":
         return {
             "icon": "📉", 
             "advice": "风险因素，建议谨慎操作",
-            "action": "降低风险敞口，关注防御性板块"
+            "action": "降低风险敞口，关注防御性板块",
+            "color": "red"
         }
     else:
         return {
             "icon": "📊",
             "advice": "中性影响，维持现有策略",
-            "action": "密切关注后续发展，保持灵活操作"
+            "action": "密切关注后续发展，保持灵活操作",
+            "color": "gray"
         }
 
-def calculate_technical_indicators(hist_data):
-    """计算技术指标"""
-    try:
-        hist_data['MA10'] = hist_data['Close'].rolling(window=10).mean()
-        hist_data['MA20'] = hist_data['Close'].rolling(window=20).mean()
-        hist_data['MA60'] = hist_data['Close'].rolling(window=60).mean()
-        
-        exp1 = hist_data['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = hist_data['Close'].ewm(span=26, adjust=False).mean()
-        hist_data['MACD'] = exp1 - exp2
-        hist_data['Signal'] = hist_data['MACD'].ewm(span=9, adjust=False).mean()
-        hist_data['MACD_Histogram'] = hist_data['MACD'] - hist_data['Signal']
-        
-        delta = hist_data['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        hist_data['RSI'] = 100 - (100 / (1 + rs))
-        
-        hist_data['BB_Middle'] = hist_data['Close'].rolling(window=20).mean()
-        bb_std = hist_data['Close'].rolling(window=20).std()
-        hist_data['BB_Upper'] = hist_data['BB_Middle'] + (bb_std * 2)
-        hist_data['BB_Lower'] = hist_data['BB_Middle'] - (bb_std * 2)
-        
-        return hist_data
-    except Exception as e:
-        st.warning(f"技术指标计算失败: {str(e)}")
-        return hist_data
+# ==================== 新闻获取函数 ====================
 
-def calculate_piotroski_score(data):
-    """计算Piotroski F-Score"""
-    score = 0
-    reasons = []
+@st.cache_data(ttl=1800)  # 缓存30分钟
+def fetch_financial_news(target_ticker=None):
+    """获取真实财经新闻"""
+    try:
+        current_time = datetime.now()
+        news_data = []
+        
+        # 获取目标股票新闻
+        if target_ticker:
+            try:
+                ticker_obj = yf.Ticker(target_ticker)
+                news = ticker_obj.news
+                
+                if news and len(news) > 0:
+                    for i, article in enumerate(news[:8]):
+                        try:
+                            # 处理不同的新闻数据结构
+                            if isinstance(article, dict):
+                                content = article
+                            else:
+                                content = article.get('content', article)
+                            
+                            title = content.get('title', '') or content.get('headline', '')
+                            summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
+                            
+                            # 获取链接
+                            link = ''
+                            if 'clickThroughUrl' in content and content['clickThroughUrl']:
+                                link = content['clickThroughUrl'].get('url', '')
+                            elif 'canonicalUrl' in content and content['canonicalUrl']:
+                                link = content['canonicalUrl'].get('url', '')
+                            else:
+                                link = content.get('link', '') or content.get('url', '')
+                            
+                            # 获取发布者
+                            publisher = 'Unknown'
+                            if 'provider' in content and content['provider']:
+                                publisher = content['provider'].get('displayName', 'Unknown')
+                            else:
+                                publisher = content.get('publisher', '') or content.get('source', 'Unknown')
+                            
+                            # 获取时间
+                            published_time = current_time - timedelta(hours=i+1)
+                            if 'pubDate' in content:
+                                pub_date_str = content['pubDate']
+                            elif 'displayTime' in content:
+                                pub_date_str = content['displayTime']
+                            else:
+                                pub_date_str = ''
+                            
+                            if pub_date_str:
+                                try:
+                                    if 'T' in pub_date_str and 'Z' in pub_date_str:
+                                        published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                                    elif isinstance(pub_date_str, str) and len(pub_date_str) > 10:
+                                        published_time = datetime.strptime(pub_date_str[:19], '%Y-%m-%d %H:%M:%S') if ':' in pub_date_str else published_time
+                                except:
+                                    pass
+                            
+                            # 处理providerPublishTime
+                            if 'providerPublishTime' in content and content['providerPublishTime']:
+                                try:
+                                    published_time = datetime.fromtimestamp(content['providerPublishTime'])
+                                except:
+                                    pass
+                            
+                            if title and len(title.strip()) > 5:
+                                # 翻译标题和摘要
+                                try:
+                                    translated_title = smart_translate(title)
+                                    if summary and len(summary.strip()) > 10:
+                                        if len(summary) > 400:
+                                            summary = summary[:400] + "..."
+                                        translated_summary = smart_translate(summary)
+                                    else:
+                                        translated_summary = '暂无摘要'
+                                except Exception as e:
+                                    translated_title = basic_financial_translate(title)
+                                    translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
+                                
+                                # 提取关键词和分析情绪
+                                title_summary = title + ' ' + (summary or '')
+                                keywords = extract_keywords_from_text(title_summary)
+                                sentiment = analyze_sentiment_from_keywords(keywords)
+                                
+                                news_item = {
+                                    "title": translated_title,
+                                    "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
+                                    "published": published_time,
+                                    "url": link or '',
+                                    "source": publisher,
+                                    "category": "company_specific",
+                                    "keywords": keywords,
+                                    "sentiment": sentiment,
+                                    "is_real": True,
+                                    "ticker": target_ticker
+                                }
+                                news_data.append(news_item)
+                        except Exception as e:
+                            continue
+            except Exception as e:
+                st.warning(f"获取 {target_ticker} 新闻时出错: {str(e)}")
+        
+        # 获取市场整体新闻
+        try:
+            market_indices = ["^GSPC", "^IXIC", "^DJI"]
+            for index_symbol in market_indices:
+                try:
+                    index_ticker = yf.Ticker(index_symbol)
+                    index_news = index_ticker.news
+                    
+                    if index_news and len(index_news) > 0:
+                        for j, article in enumerate(index_news[:3]):
+                            try:
+                                if isinstance(article, dict):
+                                    content = article
+                                else:
+                                    content = article.get('content', article)
+                                
+                                title = content.get('title', '') or content.get('headline', '')
+                                summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
+                                
+                                # 获取链接
+                                link = ''
+                                if 'clickThroughUrl' in content and content['clickThroughUrl']:
+                                    link = content['clickThroughUrl'].get('url', '')
+                                elif 'canonicalUrl' in content and content['canonicalUrl']:
+                                    link = content['canonicalUrl'].get('url', '')
+                                else:
+                                    link = content.get('link', '') or content.get('url', '')
+                                
+                                # 获取发布者
+                                publisher = 'Market News'
+                                if 'provider' in content and content['provider']:
+                                    publisher = content['provider'].get('displayName', 'Market News')
+                                else:
+                                    publisher = content.get('publisher', '') or content.get('source', 'Market News')
+                                
+                                # 获取时间
+                                published_time = current_time - timedelta(hours=len(news_data)+1)
+                                if 'providerPublishTime' in content and content['providerPublishTime']:
+                                    try:
+                                        published_time = datetime.fromtimestamp(content['providerPublishTime'])
+                                    except:
+                                        pass
+                                
+                                if title and len(title.strip()) > 5:
+                                    # 避免重复新闻
+                                    if not any(existing['title'] == title for existing in news_data):
+                                        try:
+                                            translated_title = smart_translate(title)
+                                            if summary and len(summary.strip()) > 10:
+                                                if len(summary) > 400:
+                                                    summary = summary[:400] + "..."
+                                                translated_summary = smart_translate(summary)
+                                            else:
+                                                translated_summary = '暂无摘要'
+                                        except:
+                                            translated_title = basic_financial_translate(title)
+                                            translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
+                                        
+                                        title_summary = title + ' ' + (summary or '')
+                                        keywords = extract_keywords_from_text(title_summary)
+                                        sentiment = analyze_sentiment_from_keywords(keywords)
+                                        
+                                        news_item = {
+                                            "title": translated_title,
+                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
+                                            "published": published_time,
+                                            "url": link or '',
+                                            "source": publisher,
+                                            "category": "market_wide",
+                                            "keywords": keywords,
+                                            "sentiment": sentiment,
+                                            "is_real": True,
+                                            "ticker": index_symbol
+                                        }
+                                        news_data.append(news_item)
+                            except Exception as e:
+                                continue
+                except Exception as e:
+                    continue
+        except Exception as e:
+            pass
+        
+        # 按时间排序，最新的在前
+        news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
+        
+        # 如果仍然没有新闻，提供系统提示
+        if len(news_data) == 0:
+            return [{
+                "title": "新闻获取服务暂时不可用",
+                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
+                "published": current_time,
+                "url": "https://finance.yahoo.com",
+                "source": "系统提示",
+                "category": "system_info",
+                "keywords": ["系统", "提示"],
+                "sentiment": "中性",
+                "is_real": False,
+                "ticker": ""
+            }]
+        
+        return news_data
+        
+    except Exception as e:
+        st.error(f"新闻获取出错: {str(e)}")
+        return [{
+            "title": "新闻获取服务暂时不可用",
+            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
+            "published": datetime.now(),
+            "url": "",
+            "source": "系统",
+            "category": "system_info",
+            "keywords": ["系统"],
+            "sentiment": "中性",
+            "is_real": False,
+            "ticker": ""
+        }]
+
+# ==================== 侧边栏 ====================
+with st.sidebar:
+    st.header("📰 新闻分析设置")
     
-    try:
-        financials = data['financials']
-        balance_sheet = data['balance_sheet']
-        cash_flow = data['cash_flow']
-        
-        if financials.empty or balance_sheet.empty or cash_flow.empty:
-            return 0, ["❌ 财务数据不完整"]
-        
-        # 1. 净利润
-        if len(financials.columns) >= 1 and 'Net Income' in financials.index:
-            net_income = financials.loc['Net Income'].iloc[0]
-            if net_income > 0:
-                score += 1
-                reasons.append("✅ 净利润为正")
-            else:
-                reasons.append("❌ 净利润为负")
-        
-        # 2. 经营现金流
-        if len(cash_flow.columns) >= 1 and 'Operating Cash Flow' in cash_flow.index:
-            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
-            if ocf > 0:
-                score += 1
-                reasons.append("✅ 经营现金流为正")
-            else:
-                reasons.append("❌ 经营现金流为负")
-        
-        # 简化其他指标
-        score += 5
-        reasons.append("📊 其他财务指标基础分: 5分")
-        
-    except Exception as e:
-        return 0, ["❌ 计算过程出现错误"]
+    # 股票选择
+    popular_stocks = {
+        "市场综合新闻": "",
+        "Apple (AAPL)": "AAPL",
+        "Microsoft (MSFT)": "MSFT", 
+        "Tesla (TSLA)": "TSLA",
+        "Amazon (AMZN)": "AMZN",
+        "Google (GOOGL)": "GOOGL",
+        "Meta (META)": "META",
+        "NVIDIA (NVDA)": "NVDA",
+        "Netflix (NFLX)": "NFLX"
+    }
     
-    return score, reasons
-
-def calculate_dcf_valuation(data):
-    """DCF估值模型"""
-    try:
-        info = data['info']
-        cash_flow = data['cash_flow']
-        
-        if cash_flow.empty:
-            return None, None
-        
-        # 获取自由现金流
-        fcf = 0
-        if 'Free Cash Flow' in cash_flow.index and len(cash_flow.columns) > 0:
-            fcf = cash_flow.loc['Free Cash Flow'].iloc[0]
-        elif 'Operating Cash Flow' in cash_flow.index and len(cash_flow.columns) > 0:
-            ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
-            capex = cash_flow.loc['Capital Expenditure'].iloc[0] if 'Capital Expenditure' in cash_flow.index else 0
-            fcf = ocf + capex  # capex usually negative, so we add it
-            
-        if fcf <= 0:
-            return None, "自由现金流为负，无法计算DCF估值"
-        
-        # 假设增长率和折现率
-        growth_rate = 0.05  # 5% 增长率
-        discount_rate = 0.10  # 10% 折现率
-        terminal_growth = 0.03  # 3% 永续增长率
-        
-        # 预测未来5年现金流
-        future_fcf = []
-        for year in range(1, 6):
-            future_fcf.append(fcf * (1 + growth_rate) ** year)
-        
-        # 计算终值
-        terminal_value = future_fcf[-1] * (1 + terminal_growth) / (discount_rate - terminal_growth)
-        
-        # 折现到现值
-        pv_fcf = sum([cf / (1 + discount_rate) ** (i + 1) for i, cf in enumerate(future_fcf)])
-        pv_terminal = terminal_value / (1 + discount_rate) ** 5
-        
-        enterprise_value = pv_fcf + pv_terminal
-        
-        # 获取股本数量
-        shares_outstanding = info.get('sharesOutstanding', info.get('impliedSharesOutstanding', 1))
-        if shares_outstanding:
-            fair_value = enterprise_value / shares_outstanding
-            current_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-            
-            if current_price > 0:
-                upside = (fair_value - current_price) / current_price * 100
-                return fair_value, f"DCF估值: ${fair_value:.2f}, 当前价格: ${current_price:.2f}, 潜在涨幅: {upside:.1f}%"
-        
-        return None, "无法获取完整的DCF估值数据"
-        
-    except Exception as e:
-        return None, f"DCF计算错误: {str(e)}"
-
-def generate_investment_advice(data, dcf_result=None):
-    """生成投资建议"""
-    try:
-        info = data['info']
-        hist_data = data['hist_data']
-        
-        current_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-        pe_ratio = info.get('trailingPE', 0)
-        pb_ratio = info.get('priceToBook', 0)
-        debt_to_equity = info.get('debtToEquity', 0)
-        
-        advice_points = []
-        risk_level = "中等"
-        
-        # 技术分析
-        if not hist_data.empty and len(hist_data) > 20:
-            recent_data = hist_data.tail(20)
-            ma20 = recent_data['Close'].mean()
-            volatility = recent_data['Close'].std() / ma20
-            
-            if current_price > ma20:
-                advice_points.append("✅ 股价在20日均线之上，技术面相对强势")
-            else:
-                advice_points.append("⚠️ 股价在20日均线之下，技术面偏弱")
-            
-            if volatility > 0.05:
-                risk_level = "较高"
-                advice_points.append("⚠️ 股价波动较大，风险较高")
-            elif volatility < 0.02:
-                advice_points.append("✅ 股价相对稳定")
-        
-        # 估值分析
-        if pe_ratio and 0 < pe_ratio < 15:
-            advice_points.append("✅ PE估值相对合理")
-        elif pe_ratio and pe_ratio > 30:
-            advice_points.append("⚠️ PE估值偏高，需谨慎")
-        
-        if pb_ratio and 0 < pb_ratio < 2:
-            advice_points.append("✅ PB估值合理")
-        elif pb_ratio and pb_ratio > 5:
-            advice_points.append("⚠️ PB估值偏高")
-        
-        # DCF结果
-        if dcf_result and dcf_result[0]:
-            advice_points.append(f"📊 {dcf_result[1]}")
-        
-        # 财务健康度
-        if debt_to_equity and debt_to_equity < 50:
-            advice_points.append("✅ 财务杠杆适中")
-        elif debt_to_equity and debt_to_equity > 100:
-            advice_points.append("⚠️ 债务水平较高")
-            risk_level = "较高"
-        
-        return {
-            "advice_points": advice_points,
-            "risk_level": risk_level,
-            "overall_rating": "谨慎乐观" if len([p for p in advice_points if "✅" in p]) > len([p for p in advice_points if "⚠️" in p]) else "保持谨慎"
-        }
-        
-    except Exception as e:
-        return {
-            "advice_points": ["❌ 无法生成投资建议"],
-            "risk_level": "未知",
-            "overall_rating": "需要更多数据"
-        }
-
-# 主界面
-def main():
-    # 侧边栏股票选择
-    with st.sidebar:
-        st.header("📈 股票选择")
-        
-        # 预定义股票列表
-        popular_stocks = {
-            "Apple (AAPL)": "AAPL",
-            "Microsoft (MSFT)": "MSFT", 
-            "Tesla (TSLA)": "TSLA",
-            "Amazon (AMZN)": "AMZN",
-            "Google (GOOGL)": "GOOGL",
-            "Meta (META)": "META",
-            "NVIDIA (NVDA)": "NVDA",
-            "Netflix (NFLX)": "NFLX"
-        }
-        
-        selected_stock = st.selectbox(
-            "选择热门股票:",
-            options=list(popular_stocks.keys()),
-            index=0
-        )
-        
-        # 或者手动输入股票代码
-        manual_ticker = st.text_input(
-            "或输入股票代码:",
-            placeholder="例如: AAPL, TSLA, MSFT"
-        ).upper()
-        
-        # 确定要分析的股票
-        if manual_ticker:
-            ticker = manual_ticker
-        else:
-            ticker = popular_stocks[selected_stock]
-        
-        # 分析按钮
-        if st.button("🔍 开始分析", type="primary"):
-            st.session_state.current_ticker = ticker
-            st.session_state.show_analysis = True
+    selected_stock = st.selectbox(
+        "选择关注股票:",
+        options=list(popular_stocks.keys()),
+        index=0
+    )
     
-    # 主内容区域
-    if st.session_state.show_analysis and st.session_state.current_ticker:
-        ticker = st.session_state.current_ticker
-        
-        st.header(f"📊 {ticker} 综合分析报告")
-        
-        # 获取股票数据
-        with st.spinner("正在获取股票数据..."):
-            data = fetch_stock_data(ticker)
-        
-        if data is None:
-            st.error("无法获取股票数据，请检查股票代码是否正确")
-            return
-        
-        # 基本信息展示
-        info = data['info']
-        hist_data = data['hist_data']
-        
-        # 基本信息面板
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            current_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-            st.metric("当前价格", f"${current_price:.2f}")
-        
-        with col2:
-            market_cap = info.get('marketCap', 0)
-            if market_cap:
-                st.metric("市值", f"${market_cap/1e9:.1f}B")
-        
-        with col3:
-            pe_ratio = info.get('trailingPE', 0)
-            if pe_ratio:
-                st.metric("PE比率", f"{pe_ratio:.2f}")
-        
-        with col4:
-            dividend_yield = info.get('dividendYield', 0)
-            if dividend_yield:
-                st.metric("股息收益率", f"{dividend_yield*100:.2f}%")
-        
-        # 技术分析
-        st.subheader("📈 技术分析")
-        
-        if not hist_data.empty:
-            hist_data = calculate_technical_indicators(hist_data)
-            
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-            
-            # 价格和移动平均线
-            ax1.plot(hist_data.index, hist_data['Close'], label='收盘价', linewidth=2)
-            ax1.plot(hist_data.index, hist_data['MA10'], label='MA10', alpha=0.7)
-            ax1.plot(hist_data.index, hist_data['MA20'], label='MA20', alpha=0.7)
-            ax1.plot(hist_data.index, hist_data['MA60'], label='MA60', alpha=0.7)
-            ax1.set_title(f'{ticker} 股价走势')
-            ax1.legend()
-            ax1.grid(True, alpha=0.3)
-            
-            # MACD
-            ax2.plot(hist_data.index, hist_data['MACD'], label='MACD', color='blue')
-            ax2.plot(hist_data.index, hist_data['Signal'], label='Signal', color='red')
-            ax2.bar(hist_data.index, hist_data['MACD_Histogram'], label='Histogram', alpha=0.3)
-            ax2.set_title('MACD指标')
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-        
-        # 财务分析
-        st.subheader("💰 财务分析")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Piotroski F-Score
-            score, reasons = calculate_piotroski_score(data)
-            st.metric("Piotroski F-Score", f"{score}/9")
-            
-            with st.expander("查看详细评分"):
-                for reason in reasons:
-                    st.write(reason)
-        
-        with col2:
-            # DCF估值
-            dcf_value, dcf_explanation = calculate_dcf_valuation(data)
-            if dcf_value:
-                st.metric("DCF估值", f"${dcf_value:.2f}")
-                st.write(dcf_explanation)
-            else:
-                st.write("DCF估值: 数据不足")
-                if dcf_explanation:
-                    st.write(dcf_explanation)
-        
-        # 投资建议
-        st.subheader("💡 投资建议")
-        
-        advice = generate_investment_advice(data, (dcf_value, dcf_explanation))
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.write("**分析要点:**")
-            for point in advice['advice_points']:
-                st.write(point)
-        
-        with col2:
-            st.metric("风险等级", advice['risk_level'])
-            st.metric("综合评级", advice['overall_rating'])
-        
-        # 财经新闻
-        st.subheader("📰 相关新闻")
-        
+    # 或者手动输入股票代码
+    manual_ticker = st.text_input(
+        "或输入股票代码:",
+        placeholder="例如: AAPL, TSLA, MSFT"
+    ).upper()
+    
+    # 确定要分析的股票
+    if manual_ticker:
+        ticker = manual_ticker
+    else:
+        ticker = popular_stocks[selected_stock]
+    
+    # 新闻筛选选项
+    st.markdown("---")
+    st.subheader("🔍 新闻筛选")
+    
+    sentiment_filter = st.selectbox(
+        "情绪筛选:",
+        ["全部", "利好", "利空", "中性"]
+    )
+    
+    time_filter = st.selectbox(
+        "时间筛选:",
+        ["全部", "今日", "近3天", "一周内"]
+    )
+    
+    keyword_filter = st.multiselect(
+        "关键词筛选:",
+        ["科技", "金融", "能源", "上涨", "下跌", "利率", "通胀", "政策", "经济增长", "市场"]
+    )
+    
+    # 获取新闻按钮
+    if st.button("🔍 获取最新新闻", type="primary"):
+        st.session_state.selected_ticker = ticker
         with st.spinner("正在获取最新财经新闻..."):
-            news_data = fetch_financial_news(ticker)
+            news_data = fetch_financial_news(ticker if ticker else None)
+            st.session_state.news_data = news_data
+    
+    # 清除缓存按钮
+    if st.button("🔄 刷新新闻"):
+        fetch_financial_news.clear()
+        st.session_state.news_data = None
+        st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 📊 使用说明")
+    st.markdown("""
+    **功能特色:**
+    - 🔄 实时获取Yahoo Finance新闻
+    - 🌐 智能中文翻译
+    - 🎯 关键词提取
+    - 📈 情绪分析
+    - 💡 投资建议
+    
+    **使用步骤:**
+    1. 选择关注股票或输入代码
+    2. 设置筛选条件
+    3. 点击获取最新新闻
+    4. 查看分析结果
+    """)
+
+# ==================== 主界面 ====================
+if st.session_state.news_data is not None:
+    news_data = st.session_state.news_data
+    
+    # 应用筛选条件
+    filtered_news = news_data.copy()
+    
+    # 情绪筛选
+    if sentiment_filter != "全部":
+        filtered_news = [news for news in filtered_news if news['sentiment'] == sentiment_filter]
+    
+    # 时间筛选
+    if time_filter != "全部":
+        now = datetime.now()
+        if time_filter == "今日":
+            filtered_news = [news for news in filtered_news if news['published'].date() == now.date()]
+        elif time_filter == "近3天":
+            filtered_news = [news for news in filtered_news if (now - news['published']).days <= 3]
+        elif time_filter == "一周内":
+            filtered_news = [news for news in filtered_news if (now - news['published']).days <= 7]
+    
+    # 关键词筛选
+    if keyword_filter:
+        filtered_news = [news for news in filtered_news if any(kw in news['keywords'] for kw in keyword_filter)]
+    
+    # 显示统计信息
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_news = len(filtered_news)
+        st.metric("📰 新闻总数", total_news)
+    
+    with col2:
+        bullish_count = len([n for n in filtered_news if n['sentiment'] == '利好'])
+        st.metric("📈 利好新闻", bullish_count, delta=f"{bullish_count/total_news*100:.0f}%" if total_news > 0 else "0%")
+    
+    with col3:
+        bearish_count = len([n for n in filtered_news if n['sentiment'] == '利空'])
+        st.metric("📉 利空新闻", bearish_count, delta=f"{bearish_count/total_news*100:.0f}%" if total_news > 0 else "0%")
+    
+    with col4:
+        neutral_count = len([n for n in filtered_news if n['sentiment'] == '中性'])
+        st.metric("📊 中性新闻", neutral_count, delta=f"{neutral_count/total_news*100:.0f}%" if total_news > 0 else "0%")
+    
+    # 情绪分析总结
+    if total_news > 0:
+        if bullish_count > bearish_count:
+            overall_sentiment = "整体偏向利好"
+            sentiment_color = "green"
+            sentiment_icon = "📈"
+        elif bearish_count > bullish_count:
+            overall_sentiment = "整体偏向利空"
+            sentiment_color = "red"
+            sentiment_icon = "📉"
+        else:
+            overall_sentiment = "情绪相对平衡"
+            sentiment_color = "gray"
+            sentiment_icon = "📊"
         
-        if news_data:
-            for i, news in enumerate(news_data[:5]):  # 显示前5条新闻
-                with st.expander(f"📰 {news['title']}", expanded=i==0):
-                    col1, col2 = st.columns([3, 1])
+        st.markdown(f"### {sentiment_icon} 市场情绪总结: <span style='color:{sentiment_color}'>{overall_sentiment}</span>", unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # 显示新闻列表
+    if len(filtered_news) > 0:
+        st.subheader(f"📰 最新财经新闻 ({len(filtered_news)} 条)")
+        
+        for i, news in enumerate(filtered_news):
+            # 获取情绪建议
+            impact_info = get_market_impact_advice(news['sentiment'])
+            
+            with st.container():
+                # 新闻卡片样式
+                col_main, col_side = st.columns([3, 1])
+                
+                with col_main:
+                    # 标题和时间
+                    time_str = news['published'].strftime('%Y-%m-%d %H:%M')
+                    if news['is_real']:
+                        st.markdown(f"### 📰 {news['title']}")
+                    else:
+                        st.markdown(f"### ℹ️ {news['title']}")
                     
-                    with col1:
-                        st.write(news['summary'])
-                        st.caption(f"发布时间: {news['published'].strftime('%Y-%m-%d %H:%M')}")
-                        if news['url']:
-                            st.link_button("阅读原文", news['url'])
+                    st.caption(f"🕒 {time_str} | 📰 {news['source']}")
                     
-                    with col2:
-                        sentiment_info = get_market_impact_advice(news['sentiment'])
-                        st.write(f"{sentiment_info['icon']} **{news['sentiment']}**")
-                        st.write(sentiment_info['advice'])
-                        
-                        if news['keywords']:
-                            st.write("**关键词:**")
-                            st.write(" • ".join(news['keywords']))
+                    # 摘要
+                    st.write(news['summary'])
+                    
+                    # 关键词
+                    if news['keywords']:
+                        keywords_str = " ".join([f"`{kw}`" for kw in news['keywords']])
+                        st.markdown(f"**🔍 关键词:** {keywords_str}")
+                    
+                    # 链接
+                    if news['url']:
+                        st.markdown(f"🔗 [阅读原文]({news['url']})")
+                
+                with col_side:
+                    # 情绪分析
+                    sentiment_color = impact_info['color']
+                    st.markdown(f"### {impact_info['icon']}")
+                    st.markdown(f"**<span style='color:{sentiment_color}'>{news['sentiment']}</span>**", unsafe_allow_html=True)
+                    
+                    # 投资建议
+                    st.write(f"**📋 影响:**")
+                    st.write(impact_info['advice'])
+                    
+                    st.write(f"**💡 建议:**")
+                    st.write(impact_info['action'])
+                
+                st.markdown("---")
     
     else:
-        # 欢迎页面
+        st.info("📭 根据当前筛选条件，暂无相关新闻")
+
+else:
+    # 欢迎页面
+    st.markdown("""
+    ## 🎯 功能介绍
+    
+    ### 📰 实时新闻获取
+    - 📡 从Yahoo Finance获取最新财经新闻
+    - 🎯 支持特定股票新闻和市场整体新闻
+    - 🔄 自动更新，确保信息时效性
+    
+    ### 🌐 智能中文翻译
+    - 📝 专业财经术语翻译
+    - 🔤 英文句型结构转换
+    - 🎯 上下文语境理解
+    - 🚀 快速响应翻译
+    
+    ### 📊 情绪分析系统
+    - 🔍 关键词自动提取
+    - 📈 多维度情绪分析
+    - 💡 投资影响评估
+    - 🎯 操作建议生成
+    
+    ### 🔧 高级筛选功能
+    - 😊 按情绪筛选 (利好/利空/中性)
+    - 📅 按时间筛选 (今日/近期/一周)
+    - 🏷️ 按关键词筛选
+    - 📊 统计分析展示
+    
+    ---
+    
+    **👈 请在左侧选择股票并点击"获取最新新闻"开始使用**
+    
+    **⚠️ 免责声明:** 本系统仅供参考，不构成投资建议。投资有风险，决策需谨慎。
+    """)
+    
+    # 示例展示
+    with st.expander("🎬 功能演示"):
         st.markdown("""
-        ## 🎯 功能特色
+        ### 📊 新闻展示示例
         
-        ### 📊 综合技术分析
-        - 移动平均线分析
-        - MACD、RSI等技术指标
-        - 布林带支撑阻力分析
+        **标题:** 苹果公司宣布新一代AI芯片技术突破
         
-        ### 💰 深度财务分析  
-        - Piotroski F-Score评分
-        - DCF估值模型
-        - 财务健康度评估
+        **摘要:** 苹果公司在最新财报中透露，其自研的M4芯片在AI处理能力方面取得重大突破，预计将显著提升Mac和iPad产品的人工智能表现...
         
-        ### 📰 智能新闻分析
-        - 实时财经新闻获取
-        - 中文智能翻译
-        - 情绪分析和投资影响
+        **关键词:** `科技` `人工智能` `芯片` `上涨`
         
-        ### 🎯 个性化投资建议
-        - 风险等级评估
-        - 综合投资评级
-        - 操作建议指导
+        **情绪分析:** 📈 利好
+        
+        **投资建议:** 积极因素，可关注相关板块机会。建议关注相关概念股，适当增加仓位。
         
         ---
         
-        **💡 使用方法:** 在左侧选择股票代码，点击"开始分析"即可获得全面的投资分析报告
+        ### 🔍 智能翻译示例
         
-        **⚠️ 免责声明:** 本系统仅供参考，不构成投资建议。投资有风险，决策需谨慎。
+        **原文:** "Apple announced that its Q3 revenue increased by 15% year-over-year, beating expectations."
+        
+        **智能翻译:** "苹果宣布其第三季度营收同比增长15%，超预期。"
+        
+        **关键词提取:** 苹果、营收增长、超预期、上涨
+        
+        **情绪判断:** 利好 → 推荐关注
         """)
 
-if __name__ == "__main__":
-    main()
+# 页脚
+st.markdown("---")
+st.markdown("📰 财经新闻智能分析系统 | 🔄 实时新闻 | 🌐 智能翻译 | 📊 情绪分析 | 💡 投资建议")
