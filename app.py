@@ -55,136 +55,26 @@ def fetch_stock_data(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
-def generate_company_news(company_info, current_time):
-    """根据公司信息生成相关新闻"""
-    news_list = []
-    
-    if not company_info or not company_info.get('ticker'):
-        return [{
-            "title": "市场整体表现稳健，投资机会显现",
-            "summary": "当前市场环境下，多个板块显示出投资价值，投资者可关注基本面良好的优质企业。",
-            "published": current_time - timedelta(hours=5),
-            "source": "市场分析",
-            "category": "company_specific",
-            "keywords": ["市场", "投资"],
-            "sentiment": "中性"
-        }]
-    
-    company_name = company_info.get('name', company_info.get('ticker'))
-    sector = company_info.get('sector', '')
-    industry = company_info.get('industry', '')
-    ticker = company_info.get('ticker')
-    
-    # 科技行业新闻
-    if 'Technology' in sector or 'tech' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"科技股{company_name}受益于AI发展趋势",
-                "summary": f"{company_name}作为科技行业领军企业，预计将从人工智能技术发展浪潮中获益。",
-                "published": current_time - timedelta(hours=3),
-                "source": "科技行业分析",
-                "category": "company_specific",
-                "keywords": ["科技", "AI"],
-                "sentiment": "利好"
-            },
-            {
-                "title": f"半导体行业整体向好，{ticker}等龙头股受关注",
-                "summary": f"随着全球数字化转型加速，半导体需求持续增长。{company_name}等企业有望受益。",
-                "published": current_time - timedelta(hours=8),
-                "source": "行业研究",
-                "category": "industry_specific",
-                "keywords": ["科技", "增长"],
-                "sentiment": "利好"
-            }
-        ])
-    
-    # 金融行业新闻
-    elif 'Financial' in sector or 'bank' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"银行股{company_name}受益于利率政策预期",
-                "summary": f"市场对利率政策的预期变化对银行股形成利好。{company_name}有望受益于净息差改善。",
-                "published": current_time - timedelta(hours=5),
-                "source": "金融行业",
-                "category": "company_specific",
-                "keywords": ["金融", "利率"],
-                "sentiment": "利好"
-            }
-        ])
-    
-    # 医药行业新闻
-    elif 'Healthcare' in sector or 'health' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"医药行业{company_name}新药研发进展受关注",
-                "summary": f"{company_name}在新药研发领域的最新进展引起市场关注。",
-                "published": current_time - timedelta(hours=4),
-                "source": "医药行业",
-                "category": "company_specific",
-                "keywords": ["医药", "研发"],
-                "sentiment": "利好"
-            }
-        ])
-    
-    # 汽车行业新闻
-    elif 'automotive' in industry.lower() or 'motor' in industry.lower():
-        news_list.extend([
-            {
-                "title": f"新能源汽车行业增长强劲，{company_name}前景看好",
-                "summary": f"全球新能源汽车销量持续高速增长，{company_name}在电动车领域前景看好。",
-                "published": current_time - timedelta(hours=6),
-                "source": "汽车行业",
-                "category": "company_specific",
-                "keywords": ["新能源", "增长"],
-                "sentiment": "利好"
-            }
-        ])
-    
-    # 通用新闻
-    else:
-        news_list.extend([
-            {
-                "title": f"{company_name}业绩表现稳健，投资价值凸显",
-                "summary": f"{company_name}作为{industry}领域的重要企业，在当前市场环境下表现稳健。",
-                "published": current_time - timedelta(hours=5),
-                "source": "行业分析",
-                "category": "company_specific",
-                "keywords": ["业绩", "稳健"],
-                "sentiment": "中性"
-            }
-        ])
-    
-    return news_list[:4]
-
 def fetch_financial_news(target_ticker=None):
-    """获取真实财经新闻"""
+    """获取真实财经新闻（仅真实新闻）"""
     try:
         current_time = datetime.now()
         news_data = []
         
         st.info("🔄 正在获取真实新闻数据...")
         
-        # 方法1: 从yfinance获取真实新闻
+        # 获取目标股票新闻
         if target_ticker:
             try:
                 st.write(f"🔍 正在获取 {target_ticker} 的新闻...")
                 ticker_obj = yf.Ticker(target_ticker)
-                
-                # 获取公司信息
-                info = ticker_obj.info
-                company_info = {
-                    'name': info.get('longName', target_ticker),
-                    'sector': info.get('sector', ''),
-                    'industry': info.get('industry', ''),
-                    'ticker': target_ticker
-                }
                 
                 # 获取真实新闻
                 news = ticker_obj.news
                 st.write(f"📰 获取到 {len(news) if news else 0} 条 {target_ticker} 新闻")
                 
                 if news and len(news) > 0:
-                    for i, article in enumerate(news[:6]):  # 获取前6条真实新闻
+                    for i, article in enumerate(news[:8]):  # 获取前8条真实新闻
                         try:
                             title = article.get('title', '')
                             summary = article.get('summary', '')
@@ -218,7 +108,7 @@ def fetch_financial_news(target_ticker=None):
             except Exception as e:
                 st.error(f"❌ 获取{target_ticker}新闻失败: {str(e)}")
         
-        # 方法2: 获取市场整体新闻
+        # 获取市场整体新闻
         try:
             st.write("🌍 正在获取市场整体新闻...")
             market_indices = ["^GSPC", "^IXIC", "^DJI"]
@@ -229,7 +119,7 @@ def fetch_financial_news(target_ticker=None):
                     
                     if index_news and len(index_news) > 0:
                         st.write(f"📊 从 {index_symbol} 获取到 {len(index_news)} 条市场新闻")
-                        for article in index_news[:2]:  # 每个指数取2条
+                        for article in index_news[:3]:  # 每个指数取3条
                             try:
                                 title = article.get('title', '')
                                 summary = article.get('summary', '')
@@ -265,48 +155,21 @@ def fetch_financial_news(target_ticker=None):
         except Exception as e:
             st.error(f"❌ 获取市场新闻失败: {str(e)}")
         
-        st.success(f"🎉 成功获取 {len(news_data)} 条真实新闻")
-        
-        # 如果真实新闻不足，补充模拟新闻
-        if len(news_data) < 10:
-            needed = 10 - len(news_data)
-            st.info(f"📝 补充 {needed} 条模拟新闻")
-            
-            # 获取公司信息用于生成补充新闻
-            company_info = {}
-            if target_ticker:
-                try:
-                    ticker_obj = yf.Ticker(target_ticker)
-                    info = ticker_obj.info
-                    company_info = {
-                        'name': info.get('longName', target_ticker),
-                        'sector': info.get('sector', ''),
-                        'industry': info.get('industry', ''),
-                        'ticker': target_ticker
-                    }
-                except:
-                    company_info = {'name': target_ticker, 'sector': '', 'industry': '', 'ticker': target_ticker}
-            
-            # 补充新闻
-            supplement_news = generate_supplement_news(company_info, current_time, len(news_data))
-            if supplement_news:
-                for sim_news in supplement_news:
-                    sim_news["is_real"] = False
-                news_data.extend(supplement_news)
-        
         # 按时间排序，最新的在前
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
         # 显示最终统计
-        real_count = len([n for n in news_data if n.get('is_real', False)])
-        fake_count = len(news_data) - real_count
-        st.success(f"📊 最终结果: {real_count} 条真实新闻 + {fake_count} 条模拟新闻 = {len(news_data)} 条总新闻")
+        st.success(f"📊 成功获取 {len(news_data)} 条真实新闻")
         
-        return news_data[:10]
+        if len(news_data) == 0:
+            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
+            return []
+        
+        return news_data
         
     except Exception as e:
         st.error(f"❌ 新闻获取过程出现严重错误: {str(e)}")
-        return generate_fallback_news()
+        return []
 
 def extract_keywords_from_text(text):
     """从文本中提取财经关键词"""
@@ -352,59 +215,6 @@ def analyze_sentiment_from_keywords(keywords):
         return "利空"
     else:
         return "中性"
-
-def generate_supplement_news(company_info, current_time, existing_count):
-    """生成补充新闻（当真实新闻不足时）"""
-    if existing_count >= 10:
-        return []
-    
-    supplement_news = []
-    
-    # 通用市场新闻
-    market_news_templates = [
-        {
-            "title": "全球股市波动加剧，投资者关注央行政策动向",
-            "summary": "受多重因素影响，全球主要股指出现波动。投资者密切关注各国央行的货币政策走向，市场避险情绪有所升温。",
-            "category": "market_wide",
-            "keywords": ["市场", "政策", "投资"],
-            "sentiment": "中性"
-        },
-        {
-            "title": "科技股集体反弹，AI概念再度受到市场追捧",
-            "summary": "人工智能相关企业股价普遍上涨，市场对科技创新的乐观情绪回升。分析师认为科技股仍具备长期投资价值。",
-            "category": "market_wide", 
-            "keywords": ["科技", "上涨", "人工智能"],
-            "sentiment": "利好"
-        }
-    ]
-    
-    # 根据需要添加补充新闻
-    remaining_slots = 10 - existing_count
-    for i, template in enumerate(market_news_templates[:remaining_slots]):
-        supplement_news.append({
-            **template,
-            "published": current_time - timedelta(hours=20 + i * 2),
-            "url": "",
-            "source": "Market Analysis"
-        })
-    
-    return supplement_news
-
-def generate_fallback_news():
-    """生成备用新闻（完全无法获取真实新闻时）"""
-    current_time = datetime.now()
-    return [{
-        "title": "无法获取实时新闻数据",
-        "summary": "当前网络环境无法访问新闻API，建议直接访问主要财经网站获取最新市场动态。",
-        "published": current_time,
-        "url": "",
-        "source": "系统提示",
-        "category": "system",
-        "keywords": ["系统", "网络"],
-        "sentiment": "中性"
-    }]
-
-import time
 
 def get_market_impact_advice(sentiment):
     """根据情绪给出市场影响建议"""
@@ -566,13 +376,17 @@ with st.sidebar:
         st.markdown("""
         ### 系统功能
         1. **股票分析**: 财务指标、技术分析、估值模型
-        2. **新闻分析**: 10条相关新闻，支持分页浏览
+        2. **新闻分析**: 真实新闻获取与分析
         3. **止盈止损**: 智能策略建议
         
         ### 操作方法
         1. 输入股票代码（如AAPL、TSLA、MSFT）
         2. 点击"开始分析"
         3. 查看分析结果和新闻
+        
+        ### 注意事项
+        - 仅显示真实新闻，无模拟内容
+        - 新闻数量取决于实际可获取的数据
         """)
 
 # 主界面逻辑
@@ -595,7 +409,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
     ticker = st.session_state.current_ticker
     
     # 主功能标签页
-    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 最新时事分析"])
+    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 真实新闻分析"])
     
     with main_tab1:
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -705,262 +519,238 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 st.info("📊 持仓正常")
     
     with main_tab2:
-        st.subheader("📰 最新时事分析")
-        st.info("💡 基于最新财经新闻的市场影响分析")
+        st.subheader("📰 真实新闻分析")
+        st.info("💡 基于真实财经新闻的市场影响分析（不含任何模拟内容）")
         
-        # 获取新闻数据
+        # 获取真实新闻数据
         news_data = fetch_financial_news(ticker)
         
-        # 新闻统计
-        total_news = len(news_data)
-        company_news = len([n for n in news_data if n.get('category') == 'company_specific'])
-        market_news = len([n for n in news_data if n.get('category') == 'market_wide'])
-        
-        col_stat1, col_stat2, col_stat3 = st.columns(3)
-        with col_stat1:
-            st.metric("📰 总新闻数", total_news)
-        with col_stat2:
-            st.metric("🏢 公司相关", company_news)
-        with col_stat3:
-            st.metric("🌍 市场影响", market_news)
-        
-        st.markdown("---")
-        
-        # 分页设置
-        news_per_page = 5
-        total_pages = (len(news_data) + news_per_page - 1) // news_per_page
-        
-        # 初始化当前页
-        if 'current_news_page' not in st.session_state:
-            st.session_state.current_news_page = 1
-        
-        # 确保页数在有效范围内
-        if st.session_state.current_news_page > total_pages:
-            st.session_state.current_news_page = total_pages
-        if st.session_state.current_news_page < 1:
-            st.session_state.current_news_page = 1
-        
-        current_page = st.session_state.current_news_page
-        
-        # 计算当前页新闻
-        start_idx = (current_page - 1) * news_per_page
-        end_idx = min(start_idx + news_per_page, len(news_data))
-        current_news = news_data[start_idx:end_idx]
-        
-        st.markdown(f"### 📄 第 {current_page} 页 (显示第 {start_idx + 1}-{end_idx} 条新闻)")
-        
-        # 显示新闻
-        for i, news in enumerate(current_news):
-            category = news.get('category', 'general')
+        if len(news_data) == 0:
+            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试或检查网络连接")
+            st.info("💡 建议直接访问财经网站获取最新市场动态")
+        else:
+            # 新闻统计
+            total_news = len(news_data)
+            company_news = len([n for n in news_data if n.get('category') == 'company_specific'])
+            market_news = len([n for n in news_data if n.get('category') == 'market_wide'])
             
-            # 设置边框颜色
-            if category == 'company_specific':
-                border_color = "#4CAF50"  # 绿色
-            elif category == 'market_wide':
-                border_color = "#2196F3"  # 蓝色
-            else:
-                border_color = "#FF9800"  # 橙色
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            with col_stat1:
+                st.metric("📰 真实新闻", total_news)
+            with col_stat2:
+                st.metric("🏢 公司相关", company_news)
+            with col_stat3:
+                st.metric("🌍 市场影响", market_news)
             
-            # 分类标签
-            category_labels = {
-                'company_specific': f'🏢 {ticker}相关',
-                'market_wide': '🌍 市场影响',
-                'industry_specific': '🏭 行业动态'
-            }
-            category_label = category_labels.get(category, '📰 一般新闻')
+            st.markdown("---")
             
-            news_number = start_idx + i + 1
+            # 分页设置
+            news_per_page = 5
+            total_pages = (len(news_data) + news_per_page - 1) // news_per_page
             
-            st.markdown(f"""
-            <div style="border: 2px solid {border_color}; border-radius: 10px; padding: 15px; margin: 10px 0;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span style="background-color: {border_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;">
-                        {news_number}. {category_label}
-                    </span>
-                    <span style="font-size: 11px; color: #999;">📰 {news.get('source', '')}</span>
-                </div>
-                <p style="color: #666; margin: 10px 0;">{news.get('summary', '')}</p>
-                <p style="font-size: 12px; color: #999;">
-                    📅 {news.get('published', datetime.now()).strftime('%Y-%m-%d %H:%M')} | 
-                    🏷️ 关键词: {', '.join(news.get('keywords', []))}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            # 初始化当前页
+            if 'current_news_page' not in st.session_state:
+                st.session_state.current_news_page = 1
             
-            # 新闻标题按钮（可点击链接）
-            news_url = news.get('url', '')
-            news_title = news.get('title', '无标题')
+            # 确保页数在有效范围内
+            if st.session_state.current_news_page > total_pages:
+                st.session_state.current_news_page = total_pages
+            if st.session_state.current_news_page < 1:
+                st.session_state.current_news_page = 1
             
-            if news_url and news_url.startswith('http'):
-                # 真实新闻链接
+            current_page = st.session_state.current_news_page
+            
+            # 计算当前页新闻
+            start_idx = (current_page - 1) * news_per_page
+            end_idx = min(start_idx + news_per_page, len(news_data))
+            current_news = news_data[start_idx:end_idx]
+            
+            st.markdown(f"### 📄 第 {current_page} 页 (显示第 {start_idx + 1}-{end_idx} 条新闻)")
+            
+            # 显示新闻
+            for i, news in enumerate(current_news):
+                category = news.get('category', 'general')
+                
+                # 设置边框颜色
+                if category == 'company_specific':
+                    border_color = "#4CAF50"  # 绿色
+                elif category == 'market_wide':
+                    border_color = "#2196F3"  # 蓝色
+                else:
+                    border_color = "#FF9800"  # 橙色
+                
+                # 分类标签
+                category_labels = {
+                    'company_specific': f'🏢 {ticker}相关',
+                    'market_wide': '🌍 市场影响',
+                    'industry_specific': '🏭 行业动态'
+                }
+                category_label = category_labels.get(category, '📰 一般新闻')
+                
+                news_number = start_idx + i + 1
+                
                 st.markdown(f"""
-                <a href="{news_url}" target="_blank" style="text-decoration: none;">
+                <div style="border: 2px solid {border_color}; border-radius: 10px; padding: 15px; margin: 10px 0;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="background-color: {border_color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px;">
+                            {news_number}. {category_label} | ✅ 真实新闻
+                        </span>
+                        <span style="font-size: 11px; color: #999;">📰 {news.get('source', '')}</span>
+                    </div>
+                    <p style="color: #666; margin: 10px 0;">{news.get('summary', '')}</p>
+                    <p style="font-size: 12px; color: #999;">
+                        📅 {news.get('published', datetime.now()).strftime('%Y-%m-%d %H:%M')} | 
+                        🏷️ 关键词: {', '.join(news.get('keywords', []))}
+                    </p>
+                </div>
+                                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
                     <button style="
-                        background: linear-gradient(45deg, {border_color}, {border_color}dd);
+                        background: linear-gradient(45deg, #999, #777);
                         color: white;
                         border: none;
                         padding: 12px 20px;
                         border-radius: 8px;
-                        cursor: pointer;
                         font-size: 14px;
                         font-weight: bold;
                         width: 100%;
                         margin: 10px 0;
-                        transition: all 0.3s ease;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'" 
-                       onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
-                        🔗 {news_title}
+                        opacity: 0.7;
+                        cursor: not-allowed;
+                    " disabled>
+                        📄 {news_title} (无有效链接)
                     </button>
-                </a>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                
+                # 市场影响分析
+                col_sentiment, col_impact = st.columns([1, 2])
+                
+                with col_sentiment:
+                    sentiment = news.get('sentiment', '中性')
+                    if sentiment == "利好":
+                        st.success(f"📈 **{sentiment}**")
+                    elif sentiment == "利空":
+                        st.error(f"📉 **{sentiment}**")
+                    else:
+                        st.info(f"📊 **{sentiment}**")
+                
+                with col_impact:
+                    impact_info = get_market_impact_advice(sentiment)
+                    st.write(f"{impact_info['icon']} {impact_info['advice']}")
+                    st.caption(f"💡 操作建议: {impact_info['action']}")
+                
+                st.markdown("---")
+            
+            # 页面底部的翻页按钮
+            if total_pages > 1:
+                st.markdown("### 📄 页面导航")
+                
+                # 创建翻页按钮布局
+                nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 1, 1, 1])
+                
+                with nav_col1:
+                    if current_page > 1:
+                        if st.button("⬅️ 上一页", key="prev_page_btn", use_container_width=True):
+                            st.session_state.current_news_page = current_page - 1
+                            st.rerun()
+                    else:
+                        st.button("⬅️ 上一页", key="prev_page_btn_disabled", disabled=True, use_container_width=True)
+                
+                with nav_col2:
+                    if st.button("📖 第1页", key="page_1_btn", use_container_width=True, 
+                               type="primary" if current_page == 1 else "secondary"):
+                        st.session_state.current_news_page = 1
+                        st.rerun()
+                
+                with nav_col3:
+                    st.markdown(f"<div style='text-align: center; padding: 10px; font-weight: bold; color: #666;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
+                
+                with nav_col4:
+                    if total_pages >= 2:
+                        if st.button("📄 第2页", key="page_2_btn", use_container_width=True,
+                                   type="primary" if current_page == 2 else "secondary"):
+                            st.session_state.current_news_page = 2
+                            st.rerun()
+                    else:
+                        st.button("📄 第2页", key="page_2_btn_disabled", disabled=True, use_container_width=True)
+                
+                with nav_col5:
+                    if current_page < total_pages:
+                        if st.button("下一页 ➡️", key="next_page_btn", use_container_width=True):
+                            st.session_state.current_news_page = current_page + 1
+                            st.rerun()
+                    else:
+                        st.button("下一页 ➡️", key="next_page_btn_disabled", disabled=True, use_container_width=True)
+                
+                # 页面状态指示器
+                st.markdown("---")
+                progress_text = f"🔖 当前浏览: 第{current_page}页，共{total_pages}页 | 显示新闻 {start_idx + 1}-{end_idx} / {len(news_data)}"
+                st.info(progress_text)
+            
+            # 整体市场情绪分析
+            st.subheader("📊 整体市场情绪分析")
+            
+            bullish_count = sum(1 for news in news_data if news.get('sentiment') == '利好')
+            bearish_count = sum(1 for news in news_data if news.get('sentiment') == '利空')
+            neutral_count = sum(1 for news in news_data if news.get('sentiment') == '中性')
+            
+            col_stats1, col_stats2, col_stats3 = st.columns(3)
+            with col_stats1:
+                st.metric("📈 利好消息", bullish_count)
+            with col_stats2:
+                st.metric("📉 利空消息", bearish_count)
+            with col_stats3:
+                st.metric("📊 中性消息", neutral_count)
+            
+            # 整体建议
+            if bullish_count > bearish_count:
+                st.success("🟢 **整体市场情绪**: 偏向乐观")
+                st.info("💡 **投资建议**: 市场利好因素较多，可适当关注优质标的投资机会。")
+            elif bearish_count > bullish_count:
+                st.error("🔴 **整体市场情绪**: 偏向谨慎")
+                st.warning("⚠️ **投资建议**: 市场风险因素增加，建议降低仓位，关注防御性资产。")
             else:
-                # 模拟新闻（无链接）
-                st.markdown(f"""
-                <button style="
-                    background: linear-gradient(45deg, #999, #777);
-                    color: white;
-                    border: none;
-                    padding: 12px 20px;
-                    border-radius: 8px;
-                    font-size: 14px;
-                    font-weight: bold;
-                    width: 100%;
-                    margin: 10px 0;
-                    opacity: 0.7;
-                    cursor: not-allowed;
-                " disabled>
-                    📄 {news_title} (模拟新闻)
-                </button>
-                """, unsafe_allow_html=True)
+                st.info("🟡 **整体市场情绪**: 相对平衡")
+                st.info("📊 **投资建议**: 市场情绪相对平衡，建议保持现有投资策略。")
             
-            # 市场影响分析
-            col_sentiment, col_impact = st.columns([1, 2])
+            # 关键词分析
+            st.subheader("🔍 热点关键词")
+            all_keywords = []
+            for news in news_data:
+                all_keywords.extend(news.get('keywords', []))
             
-            with col_sentiment:
-                sentiment = news.get('sentiment', '中性')
-                if sentiment == "利好":
-                    st.success(f"📈 **{sentiment}**")
-                elif sentiment == "利空":
-                    st.error(f"📉 **{sentiment}**")
-                else:
-                    st.info(f"📊 **{sentiment}**")
+            keyword_count = {}
+            for keyword in all_keywords:
+                keyword_count[keyword] = keyword_count.get(keyword, 0) + 1
             
-            with col_impact:
-                impact_info = get_market_impact_advice(sentiment)
-                st.write(f"{impact_info['icon']} {impact_info['advice']}")
-                st.caption(f"💡 操作建议: {impact_info['action']}")
+            sorted_keywords = sorted(keyword_count.items(), key=lambda x: x[1], reverse=True)[:8]
+            
+            cols = st.columns(4)
+            for i, (keyword, count) in enumerate(sorted_keywords):
+                with cols[i % 4]:
+                    st.metric(f"🏷️ {keyword}", f"{count}次")
+            
+            # 投资建议
+            st.subheader("💡 基于真实时事的投资提醒")
+            
+            suggestions = []
+            for keyword, count in sorted_keywords:
+                if keyword in ["利率", "降息"]:
+                    suggestions.append("🟢 关注利率敏感行业：房地产、银行、基建等")
+                elif keyword in ["科技", "AI"]:
+                    suggestions.append("🔵 关注科技成长股：人工智能、芯片、软件等")
+                elif keyword in ["新能源"]:
+                    suggestions.append("⚡ 关注新能源产业链：电动车、光伏、电池等")
+            
+            unique_suggestions = list(set(suggestions))
+            for suggestion in unique_suggestions[:5]:
+                st.write(suggestion)
             
             st.markdown("---")
-        
-        # 页面底部的翻页按钮
-        if total_pages > 1:
-            st.markdown("### 📄 页面导航")
-            
-            # 创建翻页按钮布局
-            nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([1, 1, 1, 1, 1])
-            
-            with nav_col1:
-                if current_page > 1:
-                    if st.button("⬅️ 上一页", key="prev_page_btn", use_container_width=True):
-                        st.session_state.current_news_page = current_page - 1
-                        st.rerun()
-                else:
-                    st.button("⬅️ 上一页", key="prev_page_btn_disabled", disabled=True, use_container_width=True)
-            
-            with nav_col2:
-                if st.button("📖 第1页", key="page_1_btn", use_container_width=True, 
-                           type="primary" if current_page == 1 else "secondary"):
-                    st.session_state.current_news_page = 1
-                    st.rerun()
-            
-            with nav_col3:
-                st.markdown(f"<div style='text-align: center; padding: 10px; font-weight: bold; color: #666;'>第 {current_page} / {total_pages} 页</div>", unsafe_allow_html=True)
-            
-            with nav_col4:
-                if total_pages >= 2:
-                    if st.button("📄 第2页", key="page_2_btn", use_container_width=True,
-                               type="primary" if current_page == 2 else "secondary"):
-                        st.session_state.current_news_page = 2
-                        st.rerun()
-                else:
-                    st.button("📄 第2页", key="page_2_btn_disabled", disabled=True, use_container_width=True)
-            
-            with nav_col5:
-                if current_page < total_pages:
-                    if st.button("下一页 ➡️", key="next_page_btn", use_container_width=True):
-                        st.session_state.current_news_page = current_page + 1
-                        st.rerun()
-                else:
-                    st.button("下一页 ➡️", key="next_page_btn_disabled", disabled=True, use_container_width=True)
-            
-            # 页面状态指示器
-            st.markdown("---")
-            progress_text = f"🔖 当前浏览: 第{current_page}页，共{total_pages}页 | 显示新闻 {start_idx + 1}-{end_idx} / {len(news_data)}"
-            st.info(progress_text)
-        
-        # 整体市场情绪分析
-        st.subheader("📊 整体市场情绪分析")
-        
-        bullish_count = sum(1 for news in news_data if news.get('sentiment') == '利好')
-        bearish_count = sum(1 for news in news_data if news.get('sentiment') == '利空')
-        neutral_count = sum(1 for news in news_data if news.get('sentiment') == '中性')
-        
-        col_stats1, col_stats2, col_stats3 = st.columns(3)
-        with col_stats1:
-            st.metric("📈 利好消息", bullish_count)
-        with col_stats2:
-            st.metric("📉 利空消息", bearish_count)
-        with col_stats3:
-            st.metric("📊 中性消息", neutral_count)
-        
-        # 整体建议
-        if bullish_count > bearish_count:
-            st.success("🟢 **整体市场情绪**: 偏向乐观")
-            st.info("💡 **投资建议**: 市场利好因素较多，可适当关注优质标的投资机会。")
-        elif bearish_count > bullish_count:
-            st.error("🔴 **整体市场情绪**: 偏向谨慎")
-            st.warning("⚠️ **投资建议**: 市场风险因素增加，建议降低仓位，关注防御性资产。")
-        else:
-            st.info("🟡 **整体市场情绪**: 相对平衡")
-            st.info("📊 **投资建议**: 市场情绪相对平衡，建议保持现有投资策略。")
-        
-        # 关键词分析
-        st.subheader("🔍 热点关键词")
-        all_keywords = []
-        for news in news_data:
-            all_keywords.extend(news.get('keywords', []))
-        
-        keyword_count = {}
-        for keyword in all_keywords:
-            keyword_count[keyword] = keyword_count.get(keyword, 0) + 1
-        
-        sorted_keywords = sorted(keyword_count.items(), key=lambda x: x[1], reverse=True)[:8]
-        
-        cols = st.columns(4)
-        for i, (keyword, count) in enumerate(sorted_keywords):
-            with cols[i % 4]:
-                st.metric(f"🏷️ {keyword}", f"{count}次")
-        
-        # 投资建议
-        st.subheader("💡 基于时事的投资提醒")
-        
-        suggestions = []
-        for keyword, count in sorted_keywords:
-            if keyword in ["利率", "降息"]:
-                suggestions.append("🟢 关注利率敏感行业：房地产、银行、基建等")
-            elif keyword in ["科技", "AI"]:
-                suggestions.append("🔵 关注科技成长股：人工智能、芯片、软件等")
-            elif keyword in ["新能源"]:
-                suggestions.append("⚡ 关注新能源产业链：电动车、光伏、电池等")
-        
-        unique_suggestions = list(set(suggestions))
-        for suggestion in unique_suggestions[:5]:
-            st.write(suggestion)
-        
-        st.markdown("---")
-        st.caption("📝 **数据来源**: 基于Yahoo Finance等财经数据源")
-        st.caption("⚠️ **免责声明**: 所有分析仅供参考，不构成投资建议。投资有风险，入市需谨慎。")
+            st.caption("📝 **数据来源**: 基于Yahoo Finance等真实财经数据源")
+            st.caption("✅ **真实性保证**: 所有新闻均为真实获取，无任何模拟内容")
+            st.caption("⚠️ **免责声明**: 所有分析仅供参考，不构成投资建议。投资有风险，入市需谨慎。")
 
 else:
     st.info("👈 请在左侧输入股票代码并点击分析按钮开始")
@@ -976,22 +766,25 @@ else:
         - 技术指标分析（RSI、均线等）
         - 智能止盈止损建议
         
-        **📰 新闻分析**
-        - 10条相关新闻（公司+行业+市场）
+        **📰 真实新闻分析**
+        - 获取真实财经新闻（公司+行业+市场）
         - 智能分页浏览（每页5条）
         - 自动情绪分析（利好/利空/中性）
         - 市场影响评估和操作建议
         - 热点关键词统计
         - 整体市场情绪分析
+        - **100%真实新闻，绝无模拟内容**
         
         ### 🚀 使用方法
         1. 在侧边栏输入股票代码（如AAPL、TSLA、MSFT等）
         2. 点击"🔍 开始分析"按钮
         3. 查看"📊 股票分析"标签页的财务和技术分析
-        4. 切换到"📰 最新时事分析"查看相关新闻
+        4. 切换到"📰 真实新闻分析"查看相关新闻
         5. 使用分页功能浏览所有新闻内容
         
         ### 📋 注意事项
+        - 本系统仅显示真实财经新闻
+        - 新闻数量取决于实际可获取的数据
         - 本系统仅供参考，不构成投资建议
         - 请结合其他信息进行综合判断
         - 投资有风险，入市需谨慎
@@ -1008,4 +801,30 @@ with col_footer2:
         st.session_state.analysis_data = None
         st.rerun()
 
-st.markdown("💹 智能投资分析系统 v2.0 | 仅供参考，投资需谨慎")
+st.markdown("💹 智能投资分析系统 v2.0 | 仅真实新闻 | 投资需谨慎")
+                
+                # 新闻标题按钮（真实链接）
+                news_url = news.get('url', '')
+                news_title = news.get('title', '无标题')
+                
+                if news_url and news_url.startswith('http'):
+                    st.markdown(f"""
+                    <a href="{news_url}" target="_blank" style="text-decoration: none;">
+                        <button style="
+                            background: linear-gradient(45deg, {border_color}, {border_color}dd);
+                            color: white;
+                            border: none;
+                            padding: 12px 20px;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            font-weight: bold;
+                            width: 100%;
+                            margin: 10px 0;
+                            transition: all 0.3s ease;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'" 
+                           onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)'">
+                            🔗 {news_title}
+                        </button>
+                    </a>
