@@ -55,46 +55,305 @@ def fetch_stock_data(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
-def simple_translate_key_terms(text):
-    """简单翻译关键财经术语"""
+import hashlib
+import random
+import time
+
+def translate_with_baidu(text, app_id=None, secret_key=None):
+    """使用百度翻译API"""
+    try:
+        import requests
+        import hashlib
+        import random
+        import time
+        
+        # 如果没有提供API密钥，使用免费的方式
+        if not app_id or not secret_key:
+            return None
+            
+        # 百度翻译API
+        url = 'https://fanyi-api.baidu.com/api/trans/vip/translate'
+        salt = random.randint(32768, 65536)
+        sign = hashlib.md5((app_id + text + str(salt) + secret_key).encode('utf-8')).hexdigest()
+        
+        params = {
+            'q': text,
+            'from': 'en',
+            'to': 'zh',
+            'appid': app_id,
+            'salt': salt,
+            'sign': sign
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            if 'trans_result' in result:
+                return result['trans_result'][0]['dst']
+    except:
+        pass
+    return None
+
+def translate_with_youdao(text):
+    """使用有道翻译免费接口"""
+    try:
+        import requests
+        import json
+        
+        url = "https://fanyi.youdao.com/translate"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://fanyi.youdao.com/',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        }
+        
+        data = {
+            'i': text,
+            'from': 'en',
+            'to': 'zh-CHS',
+            'smartresult': 'dict',
+            'client': 'fanyideskweb',
+            'salt': str(int(time.time() * 1000)),
+            'sign': hashlib.md5(('fanyideskweb' + text + str(int(time.time() * 1000)) + 'Ygy_4c=r#e#4EX^NUGUc5').encode()).hexdigest(),
+            'ts': str(int(time.time() * 1000)),
+            'bv': hashlib.md5('5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'.encode()).hexdigest(),
+            'doctype': 'json',
+            'version': '2.1',
+            'keyfrom': 'fanyi.web',
+            'action': 'FY_BY_REALTlME'
+        }
+        
+        response = requests.post(url, headers=headers, data=data, timeout=8)
+        if response.status_code == 200:
+            result = response.json()
+            if 'translateResult' in result and result['translateResult']:
+                return result['translateResult'][0][0]['tgt']
+    except:
+        pass
+    return None
+
+def translate_with_google_alternative(text):
+    """使用Google翻译的替代接口"""
+    try:
+        import requests
+        
+        # 使用translate.google.cn域名
+        url = "https://translate.google.cn/translate_a/single"
+        params = {
+            'client': 'webapp',
+            'sl': 'en',
+            'tl': 'zh',
+            'hl': 'zh',
+            'dt': ['t', 'bd', 'qc', 'rm', 'ex'],
+            'otf': 1,
+            'ssel': 0,
+            'tsel': 0,
+            'tk': '',
+            'q': text
+        }
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': 'https://translate.google.cn/',
+            'Accept': '*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            if result and len(result) > 0 and result[0]:
+                translated_parts = []
+                for item in result[0]:
+                    if item and len(item) > 0 and item[0]:
+                        translated_parts.append(item[0])
+                if translated_parts:
+                    return ''.join(translated_parts)
+    except:
+        pass
+    return None
+
+def translate_with_deepl_free(text):
+    """使用DeepL免费接口"""
+    try:
+        import requests
+        
+        url = "https://www2.deepl.com/jsonrpc"
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        data = {
+            "jsonrpc": "2.0",
+            "method": "LMT_handle_jobs",
+            "params": {
+                "jobs": [{"kind": "default", "raw_en_sentence": text}],
+                "lang": {"user_preferred_langs": ["ZH"], "source_lang_user_selected": "EN", "target_lang": "ZH"},
+                "priority": -1
+            },
+            "id": random.randint(1, 100000)
+        }
+        
+        response = requests.post(url, headers=headers, json=data, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            if 'result' in result and 'translations' in result['result']:
+                return result['result']['translations'][0]['beams'][0]['postprocessed_sentence']
+    except:
+        pass
+    return None
+
+def smart_translate(text):
+    """智能翻译：尝试多个翻译源"""
+    if not text or len(text.strip()) < 3:
+        return text
+    
+    # 限制长度避免API限制
+    if len(text) > 1000:
+        text = text[:997] + "..."
+    
+    # 翻译方法优先级
+    translation_methods = [
+        translate_with_google_alternative,
+        translate_with_youdao, 
+        translate_with_deepl_free,
+        # translate_with_baidu  # 需要API密钥，暂时注释
+    ]
+    
+    for method in translation_methods:
+        try:
+            result = method(text)
+            if result and len(result.strip()) > 5:
+                # 简单验证翻译质量
+                if not any(char in result for char in ['翻译', 'translate', 'error', 'Error']):
+                    return result.strip()
+            time.sleep(0.2)  # 避免请求过快
+        except:
+            continue
+    
+    # 如果所有方法都失败，使用基础词汇翻译
+    return basic_financial_translate(text)
+
+def basic_financial_translate(text):
+    """基础财经术语翻译（作为最后备选）"""
     if not text:
         return text
     
-    # 核心财经术语翻译（避免混杂翻译）
-    key_terms = {
+    # 完整的财经翻译词典
+    financial_dict = {
+        # 完整句式
+        'said in a statement': '在声明中表示',
+        'according to': '据',
+        'is expected to': '预计将',
+        'announced today': '今日宣布',
+        'reported earnings': '公布财报',
+        'shares rose': '股价上涨',
+        'shares fell': '股价下跌',
+        'market cap': '市值',
+        'revenue growth': '营收增长',
+        'quarterly results': '季度业绩',
+        
+        # 公司名称
+        'Apple Inc': '苹果公司',
         'Apple': '苹果公司',
-        'AAPL': '苹果',
-        'Tesla': '特斯拉', 
-        'TSLA': '特斯拉',
+        'Tesla Inc': '特斯拉公司', 
+        'Tesla': '特斯拉',
         'Microsoft': '微软',
-        'MSFT': '微软',
         'Amazon': '亚马逊',
         'Google': '谷歌',
-        'Meta': 'Meta',
+        'Meta': 'Meta公司',
         'NVIDIA': '英伟达',
-        'NVDA': '英伟达',
+        'Netflix': '奈飞',
+        'Facebook': '脸书',
         
+        # 股票代码
+        'AAPL': '苹果(AAPL)',
+        'TSLA': '特斯拉(TSLA)',
+        'MSFT': '微软(MSFT)',
+        'AMZN': '亚马逊(AMZN)',
+        'GOOGL': '谷歌(GOOGL)',
+        'META': 'Meta(META)',
+        'NVDA': '英伟达(NVDA)',
+        'NFLX': '奈飞(NFLX)',
+        
+        # 财经术语
+        'artificial intelligence': '人工智能',
         'AI': '人工智能',
-        'iPhone': 'iPhone',
-        'WWDC': '苹果开发者大会',
-        'earnings': '财报',
+        'machine learning': '机器学习',
+        'quarterly earnings': '季度财报',
+        'earnings report': '财报',
+        'revenue': '营收',
+        'profit': '利润',
+        'loss': '亏损',
+        'dividend': '分红',
+        'stock price': '股价',
+        'market value': '市值',
+        'stock market': '股市',
+        'investment': '投资',
+        'investor': '投资者',
+        'shareholder': '股东',
+        'CEO': '首席执行官',
+        'CFO': '首席财务官',
+        
+        # 行业术语
+        'technology': '科技',
+        'semiconductor': '半导体',
+        'electric vehicle': '电动汽车',
+        'renewable energy': '可再生能源',
+        'cloud computing': '云计算',
+        'e-commerce': '电子商务',
+        'social media': '社交媒体',
+        'streaming': '流媒体',
+        
+        # 数值表达
         'billion': '十亿',
         'million': '百万',
-        'stock': '股票',
-        'stocks': '股票',
-        'investor': '投资者',
-        'investors': '投资者',
+        'trillion': '万亿',
+        'percent': '百分比',
+        'percentage': '百分比',
+        
+        # 时间表达
+        'this year': '今年',
+        'last year': '去年',
+        'next year': '明年',
+        'this quarter': '本季度',
+        'last quarter': '上季度',
+        'Q1': '第一季度',
+        'Q2': '第二季度', 
+        'Q3': '第三季度',
+        'Q4': '第四季度',
+        
+        # 市场动作
+        'announced': '宣布',
+        'reported': '报告',
+        'released': '发布',
+        'launched': '推出',
+        'acquired': '收购',
+        'merged': '合并',
+        'partnership': '合作',
         'investment': '投资',
-        'market': '市场',
-        'CEO': '首席执行官'
+        'funding': '融资',
+        
+        # 其他常用词
+        'growth': '增长',
+        'decline': '下降',
+        'increase': '增加',
+        'decrease': '减少',
+        'performance': '表现',
+        'results': '结果',
+        'forecast': '预测',
+        'outlook': '展望',
+        'guidance': '指导',
+        'target': '目标'
     }
     
     result = text
-    for en, zh in key_terms.items():
-        # 只替换完整单词，避免部分替换
+    for en, zh in financial_dict.items():
+        # 使用词边界匹配，避免部分替换
         import re
         pattern = r'\b' + re.escape(en) + r'\b'
-        result = re.sub(pattern, zh, result)
+        result = re.sub(pattern, zh, result, flags=re.IGNORECASE)
     
     return result
 
@@ -156,17 +415,104 @@ def fetch_financial_news(target_ticker=None):
                                     except:
                                         published_time = current_time - timedelta(hours=i+1)
                                 else:
-                                    published_time = current_time - timedelta(hours=i+1)
+                                    published_time = current_time - timedelta(hours=len(news_data)+1)
+                                
+                                if title and len(title.strip()) > 5:  # 确保标题有实际内容
+                                    # 避免重复新闻
+                                    if not any(existing['title'] == title for existing in news_data):
+                                        # 翻译标题和摘要
+                                        try:
+                                            translated_title = smart_translate(title)
+                                            if summary and len(summary.strip()) > 10:
+                                                if len(summary) > 400:
+                                                    summary = summary[:400] + "..."
+                                                translated_summary = smart_translate(summary)
+                                            else:
+                                                translated_summary = '暂无摘要'
+                                        except:
+                                            translated_title = basic_financial_translate(title)
+                                            translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
+                                        
+                                        title_summary = title + ' ' + (summary or '')
+                                        keywords = extract_keywords_from_text(title_summary)
+                                        sentiment = analyze_sentiment_from_keywords(keywords)
+                                        
+                                        news_item = {
+                                            "title": translated_title,
+                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
+                                            "published": published_time,
+                                            "url": link or '',
+                                            "source": publisher,
+                                            "category": "market_wide",
+                                            "keywords": keywords,
+                                            "sentiment": sentiment,
+                                            "is_real": True
+                                        }
+                                        news_data.append(news_item)
+                            except Exception as e:
+                                continue
+                except Exception as e:
+                    continue
+        except Exception as e:
+            pass
+        
+        # 按时间排序，最新的在前
+        news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
+        
+        # 如果仍然没有新闻，提供系统提示
+        if len(news_data) == 0:
+            return [{
+                "title": "新闻获取服务暂时不可用",
+                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
+                "published": current_time,
+                "url": "https://finance.yahoo.com",
+                "source": "系统提示",
+                "category": "system_info",
+                "keywords": ["系统", "提示"],
+                "sentiment": "中性",
+                "is_real": False
+            }]
+        
+        return news_data
+        
+    except Exception as e:
+        # 返回一个基本的系统信息
+        return [{
+            "title": "新闻获取服务暂时不可用",
+            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
+            "published": datetime.now(),
+            "url": "",
+            "source": "系统",
+            "category": "system_info",
+            "keywords": ["系统"],
+            "sentiment": "中性",
+            "is_real": False
+        }]time = current_time - timedelta(hours=i+1)
                             
                             if title and len(title.strip()) > 5:  # 确保标题有实际内容
+                                # 翻译标题和摘要
+                                try:
+                                    translated_title = smart_translate(title)
+                                    if summary and len(summary.strip()) > 10:
+                                        # 对长摘要进行截取后翻译
+                                        if len(summary) > 400:
+                                            summary = summary[:400] + "..."
+                                        translated_summary = smart_translate(summary)
+                                    else:
+                                        translated_summary = '暂无摘要'
+                                except:
+                                    # 翻译失败时使用基础翻译
+                                    translated_title = basic_financial_translate(title)
+                                    translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
+                                
                                 # 提取关键词和分析情绪
                                 title_summary = title + ' ' + (summary or '')
                                 keywords = extract_keywords_from_text(title_summary)
                                 sentiment = analyze_sentiment_from_keywords(keywords)
                                 
                                 news_item = {
-                                    "title": title,  # 保持英文原文
-                                    "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
+                                    "title": translated_title,
+                                    "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
                                     "published": published_time,
                                     "url": link or '',
                                     "source": publisher,
@@ -227,6 +573,78 @@ def fetch_financial_news(target_ticker=None):
                                         published_time = current_time - timedelta(hours=len(news_data)+1)
                                 else:
                                     published_time = current_time - timedelta(hours=len(news_data)+1)
+                                
+                                if title and len(title.strip()) > 5:  # 确保标题有实际内容
+                                    # 避免重复新闻
+                                    if not any(existing['title'] == title for existing in news_data):
+                                        # 翻译标题和摘要
+                                        try:
+                                            translated_title = smart_translate(title)
+                                            if summary and len(summary.strip()) > 10:
+                                                if len(summary) > 400:
+                                                    summary = summary[:400] + "..."
+                                                translated_summary = smart_translate(summary)
+                                            else:
+                                                translated_summary = '暂无摘要'
+                                        except:
+                                            translated_title = basic_financial_translate(title)
+                                            translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
+                                        
+                                        title_summary = title + ' ' + (summary or '')
+                                        keywords = extract_keywords_from_text(title_summary)
+                                        sentiment = analyze_sentiment_from_keywords(keywords)
+                                        
+                                        news_item = {
+                                            "title": translated_title,
+                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
+                                            "published": published_time,
+                                            "url": link or '',
+                                            "source": publisher,
+                                            "category": "market_wide",
+                                            "keywords": keywords,
+                                            "sentiment": sentiment,
+                                            "is_real": True
+                                        }
+                                        news_data.append(news_item)
+                            except Exception as e:
+                                continue
+                except Exception as e:
+                    continue
+        except Exception as e:
+            pass
+        
+        # 按时间排序，最新的在前
+        news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
+        
+        # 如果仍然没有新闻，提供系统提示
+        if len(news_data) == 0:
+            return [{
+                "title": "新闻获取服务暂时不可用",
+                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
+                "published": current_time,
+                "url": "https://finance.yahoo.com",
+                "source": "系统提示",
+                "category": "system_info",
+                "keywords": ["系统", "提示"],
+                "sentiment": "中性",
+                "is_real": False
+            }]
+        
+        return news_data
+        
+    except Exception as e:
+        # 返回一个基本的系统信息
+        return [{
+            "title": "新闻获取服务暂时不可用",
+            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
+            "published": datetime.now(),
+            "url": "",
+            "source": "系统",
+            "category": "system_info",
+            "keywords": ["系统"],
+            "sentiment": "中性",
+            "is_real": False
+        }]time = current_time - timedelta(hours=len(news_data)+1)
                                 
                                 if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                     # 避免重复新闻
