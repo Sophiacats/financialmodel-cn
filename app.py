@@ -55,23 +55,135 @@ def fetch_stock_data(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
+def translate_to_chinese(text):
+    """简单的英文翻译成中文"""
+    if not text:
+        return text
+    
+    # 常见财经词汇翻译字典
+    translation_dict = {
+        # 基本词汇
+        'Stock': '股票', 'Stocks': '股票', 'stock': '股票', 'stocks': '股票',
+        'Market': '市场', 'market': '市场', 'Markets': '市场', 'markets': '市场',
+        'Apple': '苹果公司', 'AAPL': '苹果', 'iPhone': 'iPhone',
+        'Tesla': '特斯拉', 'TSLA': '特斯拉',
+        'Microsoft': '微软', 'MSFT': '微软',
+        'Amazon': '亚马逊', 'AMZN': '亚马逊',
+        'Google': '谷歌', 'GOOGL': '谷歌',
+        'Meta': 'Meta', 'Facebook': '脸书',
+        
+        # 财经术语
+        'earnings': '财报', 'Earnings': '财报',
+        'revenue': '营收', 'Revenue': '营收',
+        'profit': '利润', 'Profit': '利润',
+        'dividend': '分红', 'Dividend': '分红', 'dividends': '分红', 'Dividends': '分红',
+        'billion': '十亿', 'Billion': '十亿',
+        'million': '百万', 'Million': '百万',
+        'AI': '人工智能', 'artificial intelligence': '人工智能',
+        'portfolio': '投资组合', 'Portfolio': '投资组合',
+        'investment': '投资', 'Investment': '投资',
+        'investor': '投资者', 'Investor': '投资者', 'investors': '投资者',
+        'trading': '交易', 'Trading': '交易',
+        'trader': '交易员', 'Trader': '交易员', 'traders': '交易员',
+        'price': '价格', 'Price': '价格',
+        'share': '股份', 'Share': '股份', 'shares': '股份', 'Shares': '股份',
+        'CEO': '首席执行官',
+        'CFO': '首席财务官',
+        'IPO': '首次公开募股',
+        'SEC': '证券交易委员会',
+        'FDA': '食品药品监督管理局',
+        
+        # 行业术语
+        'technology': '科技', 'Technology': '科技', 'tech': '科技', 'Tech': '科技',
+        'semiconductor': '半导体', 'Semiconductor': '半导体',
+        'chip': '芯片', 'Chip': '芯片', 'chips': '芯片',
+        'electric vehicle': '电动汽车', 'EV': '电动汽车',
+        'renewable energy': '可再生能源',
+        'solar': '太阳能', 'Solar': '太阳能',
+        'battery': '电池', 'Battery': '电池',
+        
+        # 市场动作
+        'rise': '上涨', 'Rise': '上涨', 'rising': '上涨',
+        'fall': '下跌', 'Fall': '下跌', 'falling': '下跌',
+        'gain': '上涨', 'Gain': '上涨', 'gains': '上涨',
+        'loss': '下跌', 'Loss': '下跌', 'losses': '下跌',
+        'surge': '大涨', 'Surge': '大涨',
+        'decline': '下降', 'Decline': '下降',
+        'rally': '反弹', 'Rally': '反弹',
+        'crash': '暴跌', 'Crash': '暴跌',
+        'volatility': '波动', 'Volatility': '波动',
+        
+        # 时间词汇
+        'today': '今日', 'Today': '今日',
+        'yesterday': '昨日', 'Yesterday': '昨日',
+        'week': '周', 'Week': '周',
+        'month': '月', 'Month': '月',
+        'year': '年', 'Year': '年', 'years': '年', 'Years': '年',
+        'quarter': '季度', 'Quarter': '季度',
+        'daily': '每日', 'Daily': '每日',
+        'weekly': '每周', 'Weekly': '每周',
+        'monthly': '每月', 'Monthly': '每月',
+        'annually': '每年', 'Annually': '每年',
+        
+        # 其他常用词
+        'report': '报告', 'Report': '报告',
+        'analysis': '分析', 'Analysis': '分析',
+        'forecast': '预测', 'Forecast': '预测',
+        'outlook': '展望', 'Outlook': '展望',
+        'guidance': '指引', 'Guidance': '指引',
+        'target': '目标', 'Target': '目标',
+        'expected': '预期', 'Expected': '预期',
+        'announced': '宣布', 'Announced': '宣布',
+        'launched': '推出', 'Launched': '推出',
+        'released': '发布', 'Released': '发布',
+        'unveiled': '公布', 'Unveiled': '公布',
+        'acquisition': '收购', 'Acquisition': '收购',
+        'merger': '合并', 'Merger': '合并',
+        'partnership': '合作', 'Partnership': '合作',
+        'deal': '交易', 'Deal': '交易',
+        'agreement': '协议', 'Agreement': '协议',
+        'contract': '合同', 'Contract': '合同',
+        
+        # 监管和政策
+        'regulation': '监管', 'Regulation': '监管',
+        'policy': '政策', 'Policy': '政策',
+        'government': '政府', 'Government': '政府',
+        'federal': '联邦', 'Federal': '联邦',
+        'rate': '利率', 'Rate': '利率', 'rates': '利率',
+        'inflation': '通胀', 'Inflation': '通胀',
+        'GDP': '国内生产总值',
+        'economy': '经济', 'Economy': '经济', 'economic': '经济',
+        
+        # 特定事件
+        'WWDC': '苹果全球开发者大会',
+        'earnings report': '财报',
+        'earnings call': '财报电话会议',
+        'conference call': '电话会议',
+        'press release': '新闻稿',
+        'shareholder': '股东', 'shareholders': '股东',
+        'board of directors': '董事会',
+        'buyback': '回购', 'stock buyback': '股票回购',
+        'split': '拆股', 'stock split': '股票拆分'
+    }
+    
+    # 进行翻译替换
+    translated_text = text
+    for english, chinese in translation_dict.items():
+        translated_text = translated_text.replace(english, chinese)
+    
+    return translated_text
+
 def fetch_financial_news(target_ticker=None):
     """获取真实财经新闻（仅真实新闻）"""
     try:
         current_time = datetime.now()
         news_data = []
         
-        st.info("🔄 正在获取真实新闻数据...")
-        
         # 获取目标股票新闻
         if target_ticker:
             try:
-                st.write(f"🔍 正在获取 {target_ticker} 的新闻...")
                 ticker_obj = yf.Ticker(target_ticker)
-                
-                # 获取真实新闻
                 news = ticker_obj.news
-                st.write(f"📰 获取到 {len(news) if news else 0} 条 {target_ticker} 新闻")
                 
                 if news and len(news) > 0:
                     for i, article in enumerate(news[:8]):  # 获取前8条真实新闻
@@ -121,17 +233,19 @@ def fetch_financial_news(target_ticker=None):
                                 else:
                                     published_time = current_time - timedelta(hours=i+1)
                             
-                            st.write(f"📝 解析结果 {i+1}: 标题='{title}', 发布者='{publisher}', 时间={published_time}")
-                            
                             if title and len(title.strip()) > 5:  # 确保标题有实际内容
+                                # 翻译标题和摘要
+                                translated_title = translate_to_chinese(title)
+                                translated_summary = translate_to_chinese(summary) if summary else '暂无摘要'
+                                
                                 # 提取关键词和分析情绪
                                 title_summary = title + ' ' + (summary or '')
                                 keywords = extract_keywords_from_text(title_summary)
                                 sentiment = analyze_sentiment_from_keywords(keywords)
                                 
                                 news_item = {
-                                    "title": title,
-                                    "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
+                                    "title": translated_title,
+                                    "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
                                     "published": published_time,
                                     "url": link or '',
                                     "source": publisher,
@@ -141,19 +255,14 @@ def fetch_financial_news(target_ticker=None):
                                     "is_real": True
                                 }
                                 news_data.append(news_item)
-                                st.success(f"✅ 成功处理新闻 {i+1}: {title[:50]}...")
-                            else:
-                                st.warning(f"⚠️ 新闻 {i+1} 标题为空或太短，跳过")
                         except Exception as e:
-                            st.error(f"❌ 处理第{i+1}条新闻时出错: {str(e)}")
                             continue
                             
             except Exception as e:
-                st.error(f"❌ 获取{target_ticker}新闻失败: {str(e)}")
+                pass
         
         # 获取市场整体新闻
         try:
-            st.write("🌍 正在获取市场整体新闻...")
             market_indices = ["^GSPC", "^IXIC", "^DJI"]
             for index_symbol in market_indices:
                 try:
@@ -161,7 +270,6 @@ def fetch_financial_news(target_ticker=None):
                     index_news = index_ticker.news
                     
                     if index_news and len(index_news) > 0:
-                        st.write(f"📊 从 {index_symbol} 获取到 {len(index_news)} 条市场新闻")
                         for j, article in enumerate(index_news[:3]):  # 每个指数取3条
                             try:
                                 # 新的API结构：数据在content字段里
@@ -202,13 +310,17 @@ def fetch_financial_news(target_ticker=None):
                                 if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
+                                        # 翻译标题和摘要
+                                        translated_title = translate_to_chinese(title)
+                                        translated_summary = translate_to_chinese(summary) if summary else '暂无摘要'
+                                        
                                         title_summary = title + ' ' + (summary or '')
                                         keywords = extract_keywords_from_text(title_summary)
                                         sentiment = analyze_sentiment_from_keywords(keywords)
                                         
                                         news_item = {
-                                            "title": title,
-                                            "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
+                                            "title": translated_title,
+                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
                                             "published": published_time,
                                             "url": link or '',
                                             "source": publisher,
@@ -218,26 +330,18 @@ def fetch_financial_news(target_ticker=None):
                                             "is_real": True
                                         }
                                         news_data.append(news_item)
-                                        st.success(f"✅ 获取市场新闻: {title[:50]}...")
                             except Exception as e:
-                                st.warning(f"⚠️ 处理市场新闻时出错: {str(e)}")
                                 continue
                 except Exception as e:
-                    st.warning(f"⚠️ 获取{index_symbol}新闻失败: {str(e)}")
                     continue
         except Exception as e:
-            st.error(f"❌ 获取市场新闻失败: {str(e)}")
+            pass
         
         # 按时间排序，最新的在前
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
-        # 显示最终统计
-        st.success(f"📊 最终成功获取 {len(news_data)} 条新闻数据")
-        
         # 如果仍然没有新闻，提供系统提示
         if len(news_data) == 0:
-            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
-            st.info("🔍 可能的原因：网络连接问题、API限制或新闻源暂时不可用")
             return [{
                 "title": "新闻获取服务暂时不可用",
                 "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
@@ -253,7 +357,6 @@ def fetch_financial_news(target_ticker=None):
         return news_data
         
     except Exception as e:
-        st.error(f"❌ 新闻获取过程出现严重错误: {str(e)}")
         # 返回一个基本的系统信息
         return [{
             "title": "新闻获取服务暂时不可用",
