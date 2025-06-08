@@ -1573,22 +1573,194 @@ def basic_financial_translate(text):
     
     return result
 
+def comprehensive_translate(text):
+    """综合翻译：句型+词汇翻译"""
+    if not text:
+        return text
+    
+    # 先进行句型翻译
+    sentence_patterns = {
+        # 新闻开头常见句型
+        r'(\w+)\s+announced\s+that': r'\1宣布',
+        r'(\w+)\s+reported\s+that': r'\1报告称',
+        r'(\w+)\s+said\s+that': r'\1表示',
+        r'(\w+)\s+revealed\s+that': r'\1透露',
+        r'(\w+)\s+disclosed\s+that': r'\1披露',
+        r'(\w+)\s+confirmed\s+that': r'\1确认',
+        r'according\s+to\s+(\w+)': r'据\1',
+        r'sources\s+close\s+to\s+(\w+)': r'接近\1的消息人士',
+        
+        # 财报相关句型
+        r'(\w+)\s+posted\s+(\w+)\s+earnings': r'\1公布了\2财报',
+        r'(\w+)\s+beat\s+earnings\s+expectations': r'\1财报超预期',
+        r'(\w+)\s+missed\s+earnings\s+expectations': r'\1财报不及预期',
+        r'(\w+)\s+reported\s+revenue\s+of\s+\$([0-9.]+)\s+billion': r'\1报告营收\2十亿美元',
+        r'(\w+)\s+reported\s+revenue\s+of\s+\$([0-9.]+)\s+million': r'\1报告营收\2百万美元',
+        r'revenue\s+increased\s+by\s+([0-9.]+)%': r'营收增长\1%',
+        r'revenue\s+decreased\s+by\s+([0-9.]+)%': r'营收下降\1%',
+        r'net\s+income\s+rose\s+([0-9.]+)%': r'净利润上升\1%',
+        r'net\s+income\s+fell\s+([0-9.]+)%': r'净利润下降\1%',
+        
+        # 股价相关句型
+        r'(\w+)\s+shares\s+rose\s+([0-9.]+)%': r'\1股价上涨\2%',
+        r'(\w+)\s+shares\s+fell\s+([0-9.]+)%': r'\1股价下跌\2%',
+        r'(\w+)\s+shares\s+gained\s+([0-9.]+)%': r'\1股价上涨\2%',
+        r'(\w+)\s+shares\s+dropped\s+([0-9.]+)%': r'\1股价下跌\2%',
+        r'(\w+)\s+stock\s+surged\s+([0-9.]+)%': r'\1股票飙升\2%',
+        r'(\w+)\s+stock\s+plunged\s+([0-9.]+)%': r'\1股票暴跌\2%',
+        r'shares\s+closed\s+at\s+\$([0-9.]+)': r'股价收于\1美元',
+        r'stock\s+price\s+reached\s+\$([0-9.]+)': r'股价达到\1美元',
+        
+        # 公司行动句型
+        r'(\w+)\s+will\s+acquire\s+(\w+)': r'\1将收购\2',
+        r'(\w+)\s+acquired\s+(\w+)': r'\1收购了\2',
+        r'(\w+)\s+merged\s+with\s+(\w+)': r'\1与\2合并',
+        r'(\w+)\s+launched\s+a?\s*new\s+(\w+)': r'\1推出新\2',
+        r'(\w+)\s+introduced\s+(\w+)': r'\1推出\2',
+        r'(\w+)\s+unveiled\s+(\w+)': r'\1发布\2',
+        r'(\w+)\s+plans\s+to\s+(\w+)': r'\1计划\2',
+        r'(\w+)\s+expects\s+to\s+(\w+)': r'\1预计将\2',
+        r'(\w+)\s+is\s+expected\s+to\s+(\w+)': r'\1预计将\2',
+        
+        # 市场评价句型
+        r'analysts\s+expect': '分析师预期',
+        r'wall\s+street\s+expects': '华尔街预期',
+        r'investors\s+are\s+watching': '投资者正在关注',
+        r'the\s+market\s+reacted\s+positively': '市场反应积极',
+        r'the\s+market\s+reacted\s+negatively': '市场反应消极',
+        r'trading\s+volume\s+increased': '交易量增加',
+        r'trading\s+volume\s+decreased': '交易量减少',
+        
+        # 时间表达
+        r'this\s+quarter': '本季度',
+        r'last\s+quarter': '上季度',
+        r'next\s+quarter': '下季度',
+        r'this\s+year': '今年',
+        r'last\s+year': '去年',
+        r'next\s+year': '明年',
+        r'in\s+Q([1-4])': r'在第\1季度',
+        r'during\s+Q([1-4])': r'在第\1季度期间',
+        r'for\s+the\s+quarter': '本季度',
+        r'for\s+the\s+year': '本年度',
+        
+        # 比较句型
+        r'compared\s+to\s+last\s+year': '与去年相比',
+        r'compared\s+to\s+the\s+previous\s+quarter': '与上季度相比',
+        r'year-over-year': '同比',
+        r'quarter-over-quarter': '环比',
+        
+        # 预测句型
+        r'is\s+projected\s+to': '预计将',
+        r'is\s+forecast\s+to': '预测将',
+        r'is\s+estimated\s+to': '估计将',
+        r'outlook\s+for': '对...的展望',
+        r'guidance\s+for': '对...的指引',
+        
+        # 常见连接词
+        r'however': '然而',
+        r'meanwhile': '与此同时',
+        r'furthermore': '此外',
+        r'moreover': '此外',
+        r'in\s+addition': '此外',
+        r'on\s+the\s+other\s+hand': '另一方面',
+        r'as\s+a\s+result': '因此',
+        r'therefore': '因此',
+        r'consequently': '因此',
+        r'in\s+conclusion': '总之',
+        
+        # 数字表达
+        r'\$([0-9.]+)\s+billion': r'\1十亿美元',
+        r'\$([0-9.]+)\s+million': r'\1百万美元',
+        r'\$([0-9.]+)\s+thousand': r'\1千美元',
+        r'([0-9.]+)\s+billion': r'\1十亿',
+        r'([0-9.]+)\s+million': r'\1百万',
+        r'([0-9.]+)%': r'\1%',
+        
+        # 常见短语
+        r'beat\s+expectations': '超预期',
+        r'missed\s+expectations': '不及预期',
+        r'in\s+line\s+with\s+expectations': '符合预期',
+        r'better\s+than\s+expected': '好于预期',
+        r'worse\s+than\s+expected': '差于预期',
+        r'record\s+high': '历史新高',
+        r'record\s+low': '历史新低',
+        r'all-time\s+high': '历史最高',
+        r'52-week\s+high': '52周新高',
+        r'52-week\s+low': '52周新低',
+        r'market\s+cap': '市值',
+        r'market\s+capitalization': '市值',
+        r'enterprise\s+value': '企业价值',
+        r'price-to-earnings': '市盈率',
+        r'p/e\s+ratio': '市盈率',
+        r'earnings\s+per\s+share': '每股收益',
+        r'return\s+on\s+equity': '净资产收益率',
+        r'return\s+on\s+investment': '投资回报率',
+        r'gross\s+margin': '毛利率',
+        r'operating\s+margin': '营业利润率',
+        r'net\s+margin': '净利率',
+        r'cash\s+flow': '现金流',
+        r'free\s+cash\s+flow': '自由现金流',
+        r'working\s+capital': '营运资本',
+        r'debt\s+to\s+equity': '负债权益比',
+        r'current\s+ratio': '流动比率',
+        r'quick\s+ratio': '速动比率',
+        
+        # 行业术语
+        r'artificial\s+intelligence': '人工智能',
+        r'machine\s+learning': '机器学习',
+        r'cloud\s+computing': '云计算',
+        r'electric\s+vehicles?': '电动汽车',
+        r'renewable\s+energy': '可再生能源',
+        r'social\s+media': '社交媒体',
+        r'e-commerce': '电子商务',
+        r'supply\s+chain': '供应链',
+        r'research\s+and\s+development': '研发',
+        r'mergers?\s+and\s+acquisitions?': '并购',
+        r'initial\s+public\s+offering': '首次公开募股',
+        r'venture\s+capital': '风险投资',
+        r'private\s+equity': '私募股权',
+        r'hedge\s+funds?': '对冲基金',
+        r'mutual\s+funds?': '共同基金',
+        r'exchange.traded\s+funds?': '交易所交易基金',
+        r'real\s+estate': '房地产',
+        r'pharmaceutical': '制药',
+        r'biotechnology': '生物技术',
+        r'semiconductors?': '半导体',
+        r'telecommunications?': '电信',
+        r'financial\s+services': '金融服务',
+        r'healthcare': '医疗保健',
+        r'consumer\s+goods': '消费品',
+        r'industrial': '工业',
+        r'energy\s+sector': '能源行业',
+        r'technology\s+sector': '科技行业',
+        r'financial\s+sector': '金融行业',
+    }
+    
+    result = text
+    
+    # 应用句型翻译
+    for pattern, replacement in sentence_patterns.items():
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    
+    # 然后应用词汇翻译
+    result = basic_financial_translate(result)
+    
+    return result
+
 def smart_translate(text):
-    """智能翻译：快速翻译策略"""
+    """智能翻译：优先使用综合翻译"""
     if not text or len(text.strip()) < 3:
         return text
     
-    # 首先使用快速的基础翻译
-    translated = basic_financial_translate(text)
+    # 使用综合翻译
+    translated = comprehensive_translate(text)
     
-    # 如果基础翻译效果不好，尝试在线翻译（但有超时限制）
-    if translated == text:  # 说明基础翻译没有效果
+    # 如果翻译效果还是不够好，尝试在线翻译（仅限短文本）
+    if len(text) < 200 and translated == text:
         try:
-            # 只对较短的文本使用在线翻译
-            if len(text) < 200:
-                online_result = translate_with_google_alternative(text)
-                if online_result and len(online_result.strip()) > 5:
-                    return online_result
+            online_result = translate_with_google_alternative(text)
+            if online_result and len(online_result.strip()) > 5:
+                return online_result
         except:
             pass
     
