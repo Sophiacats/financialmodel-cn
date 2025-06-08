@@ -657,3 +657,44 @@ def calculate_dcf_valuation(data):
             ocf = cash_flow.loc['Operating Cash Flow'].iloc[0]
             capex = cash_flow.loc['Capital Expenditure'].iloc[0] if 'Capital Expenditure' in cash_flow.index else 0
             fcf = ocf + capex
+        
+        if fcf <= 0:
+            return None, None
+        
+        # DCF参数
+        growth_rate = 0.05
+        discount_rate = 0.10
+        terminal_growth = 0.02
+        forecast_years = 5
+        
+        # 计算预测期现金流现值
+        dcf_value = 0
+        for i in range(1, forecast_years + 1):
+            future_fcf = fcf * (1 + growth_rate) ** i
+            pv = future_fcf / (1 + discount_rate) ** i
+            dcf_value += pv
+        
+        # 计算终值
+        terminal_fcf = fcf * (1 + growth_rate) ** forecast_years * (1 + terminal_growth)
+        terminal_value = terminal_fcf / (discount_rate - terminal_growth)
+        terminal_pv = terminal_value / (1 + discount_rate) ** forecast_years
+        
+        enterprise_value = dcf_value + terminal_pv
+        
+        shares = info.get('sharesOutstanding', 0)
+        if shares <= 0:
+            return None, None
+            
+        fair_value_per_share = enterprise_value / shares
+        
+        if fair_value_per_share < 0 or fair_value_per_share > 10000:
+            return None, None
+            
+        return fair_value_per_share, {
+            'growth_rate': growth_rate,
+            'discount_rate': discount_rate,
+            'terminal_growth': terminal_growth,
+            'enterprise_value': enterprise_value
+        }
+    except Exception as e:
+        return None, None
