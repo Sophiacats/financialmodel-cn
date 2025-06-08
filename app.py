@@ -55,113 +55,48 @@ def fetch_stock_data(ticker):
         st.error(f"获取数据失败: {str(e)}")
         return None
 
-def translate_to_chinese(text):
-    """使用在线翻译服务将英文翻译成中文"""
-    if not text or len(text.strip()) < 3:
+def simple_translate_key_terms(text):
+    """简单翻译关键财经术语"""
+    if not text:
         return text
     
-    try:
-        import requests
-        import json
-        import time
+    # 核心财经术语翻译（避免混杂翻译）
+    key_terms = {
+        'Apple': '苹果公司',
+        'AAPL': '苹果',
+        'Tesla': '特斯拉', 
+        'TSLA': '特斯拉',
+        'Microsoft': '微软',
+        'MSFT': '微软',
+        'Amazon': '亚马逊',
+        'Google': '谷歌',
+        'Meta': 'Meta',
+        'NVIDIA': '英伟达',
+        'NVDA': '英伟达',
         
-        # 方法1: 使用Google翻译免费API
-        try:
-            url = "https://translate.googleapis.com/translate_a/single"
-            params = {
-                'client': 'gtx',
-                'sl': 'en',
-                'tl': 'zh-cn',
-                'dt': 't',
-                'q': text[:1000]  # 限制长度避免API限制
-            }
-            
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            
-            response = requests.get(url, params=params, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                try:
-                    result = response.json()
-                    if result and len(result) > 0 and result[0]:
-                        translated_parts = []
-                        for item in result[0]:
-                            if item and len(item) > 0 and item[0]:
-                                translated_parts.append(item[0])
-                        
-                        if translated_parts:
-                            translated_text = ''.join(translated_parts)
-                            # 基本清理
-                            translated_text = translated_text.strip()
-                            if len(translated_text) > 5:  # 确保翻译有效
-                                return translated_text
-                except:
-                    pass
-        except:
-            pass
-        
-        # 方法2: 使用Microsoft翻译API (备用)
-        try:
-            url = "https://api.cognitive.microsofttranslator.com/translate"
-            headers = {
-                'Content-Type': 'application/json',
-                'X-RapidAPI-Host': 'microsoft-translator-text.p.rapidapi.com'
-            }
-            data = [{
-                'text': text[:1000]
-            }]
-            params = {
-                'to': 'zh-Hans',
-                'from': 'en',
-                'api-version': '3.0'
-            }
-            
-            # 这个需要API密钥，跳过
-            pass
-        except:
-            pass
-        
-        # 方法3: 使用简化的翻译逻辑（最后备用）
-        try:
-            # 如果在线翻译都失败，使用改进的本地翻译
-            simplified_dict = {
-                'has a stunning': '拥有出色的',
-                'track record': '业绩记录',
-                'regularly delivering': '定期提供',
-                'double-digit percentage': '两位数百分比',
-                'annual returns': '年回报率',
-                'money-losing': '亏损',
-                'In recent times': '最近',
-                'has benefited from': '受益于',
-                'top growth': '顶级成长',
-                'Any of us can look at': '我们任何人都可以看看',
-                'the moves made by': '由...做出的举措',
-                'most successful': '最成功的',
-                'and follow': '并跟随',
-                'investment': '投资', 'investments': '投资',
-                'investor': '投资者', 'investors': '投资者',
-                'stocks': '股票', 'stock': '股票',
-                'years': '年', 'year': '年',
-                'today': '今天', 'today\'s': '今天的',
-                'billion': '十亿',
-                'billionaire': '亿万富翁'
-            }
-            
-            result = text
-            for eng, chi in simplified_dict.items():
-                result = result.replace(eng, chi)
-            
-            return result
-        except:
-            pass
-        
-        # 如果所有方法都失败，返回原文
-        return text
-        
-    except Exception as e:
-        return text
+        'AI': '人工智能',
+        'iPhone': 'iPhone',
+        'WWDC': '苹果开发者大会',
+        'earnings': '财报',
+        'billion': '十亿',
+        'million': '百万',
+        'stock': '股票',
+        'stocks': '股票',
+        'investor': '投资者',
+        'investors': '投资者',
+        'investment': '投资',
+        'market': '市场',
+        'CEO': '首席执行官'
+    }
+    
+    result = text
+    for en, zh in key_terms.items():
+        # 只替换完整单词，避免部分替换
+        import re
+        pattern = r'\b' + re.escape(en) + r'\b'
+        result = re.sub(pattern, zh, result)
+    
+    return result
 
 def fetch_financial_news(target_ticker=None):
     """获取真实财经新闻（仅真实新闻）"""
@@ -224,38 +159,14 @@ def fetch_financial_news(target_ticker=None):
                                     published_time = current_time - timedelta(hours=i+1)
                             
                             if title and len(title.strip()) > 5:  # 确保标题有实际内容
-                                # 翻译标题和摘要
-                                try:
-                                    # 先翻译标题
-                                    translated_title = translate_to_chinese(title)
-                                    # 再翻译摘要（如果存在且足够长）
-                                    if summary and len(summary.strip()) > 10:
-                                        # 对于长摘要，分段翻译
-                                        if len(summary) > 500:
-                                            # 取前200字符翻译
-                                            short_summary = summary[:200] + "..."
-                                            translated_summary = translate_to_chinese(short_summary)
-                                        else:
-                                            translated_summary = translate_to_chinese(summary)
-                                    else:
-                                        translated_summary = '暂无摘要'
-                                        
-                                    # 添加延迟避免API限制
-                                    time.sleep(0.1)
-                                    
-                                except Exception as e:
-                                    # 如果翻译失败，使用原文
-                                    translated_title = title
-                                    translated_summary = summary or '暂无摘要'
-                                
                                 # 提取关键词和分析情绪
                                 title_summary = title + ' ' + (summary or '')
                                 keywords = extract_keywords_from_text(title_summary)
                                 sentiment = analyze_sentiment_from_keywords(keywords)
                                 
                                 news_item = {
-                                    "title": translated_title,
-                                    "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
+                                    "title": title,  # 保持英文原文
+                                    "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
                                     "published": published_time,
                                     "url": link or '',
                                     "source": publisher,
@@ -320,32 +231,13 @@ def fetch_financial_news(target_ticker=None):
                                 if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
-                                        # 翻译标题和摘要
-                                        try:
-                                            translated_title = translate_to_chinese(title)
-                                            if summary and len(summary.strip()) > 10:
-                                                if len(summary) > 500:
-                                                    short_summary = summary[:200] + "..."
-                                                    translated_summary = translate_to_chinese(short_summary)
-                                                else:
-                                                    translated_summary = translate_to_chinese(summary)
-                                            else:
-                                                translated_summary = '暂无摘要'
-                                            
-                                            time.sleep(0.1)  # 避免API限制
-                                            
-                                        except:
-                                            # 如果翻译失败，使用原文
-                                            translated_title = title
-                                            translated_summary = summary or '暂无摘要'
-                                        
                                         title_summary = title + ' ' + (summary or '')
                                         keywords = extract_keywords_from_text(title_summary)
                                         sentiment = analyze_sentiment_from_keywords(keywords)
                                         
                                         news_item = {
-                                            "title": translated_title,
-                                            "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
+                                            "title": title,  # 保持英文原文
+                                            "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
                                             "published": published_time,
                                             "url": link or '',
                                             "source": publisher,
