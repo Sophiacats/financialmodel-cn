@@ -712,7 +712,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
     ticker = st.session_state.current_ticker
     
     # 主功能标签页
-    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 中文新闻分析"])
+    main_tab1, main_tab2 = st.tabs(["📊 股票分析", "📰 最新时事分析"])
     
     with main_tab1:
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -822,11 +822,12 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
                 st.info("📊 持仓正常")
     
     with main_tab2:
-        st.subheader("📰 中文新闻分析")
+        st.subheader("📰 最新时事分析")
         st.info("💡 自动翻译最新财经新闻为中文")
         
         # 获取新闻数据
-        news_data = fetch_financial_news(ticker)
+        with st.spinner("正在获取和翻译新闻..."):
+            news_data = fetch_financial_news(ticker)
         
         if len(news_data) == 0:
             st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
@@ -839,7 +840,7 @@ if st.session_state.show_analysis and st.session_state.analysis_data is not None
             
             col_stat1, col_stat2, col_stat3 = st.columns(3)
             with col_stat1:
-                st.metric("📰 中文新闻", total_news)
+                st.metric("📰 翻译新闻", total_news)
             with col_stat2:
                 st.metric("🏢 公司相关", company_news)
             with col_stat3:
@@ -1060,7 +1061,7 @@ else:
         - 技术指标分析（RSI、均线等）
         - 智能止盈止损建议
         
-        **📰 中文新闻分析**
+        **📰 最新时事分析**
         - 自动获取真实财经新闻
         - 多源专业翻译服务（Google、有道等）
         - 智能分页浏览（每页5条）
@@ -1073,7 +1074,7 @@ else:
         1. 在侧边栏输入股票代码（如AAPL、TSLA、MSFT等）
         2. 点击"🔍 开始分析"按钮
         3. 查看"📊 股票分析"标签页的财务和技术分析
-        4. 切换到"📰 中文新闻分析"查看翻译后的新闻
+        4. 切换到"📰 最新时事分析"查看翻译后的新闻
         5. 使用分页功能浏览所有新闻内容
         
         ### 📋 注意事项
