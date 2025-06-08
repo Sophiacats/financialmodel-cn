@@ -80,19 +80,31 @@ def fetch_financial_news(target_ticker=None):
                             summary = article.get('summary', '')
                             link = article.get('link', '')
                             publisher = article.get('publisher', 'Unknown')
-                            pub_time = article.get('providerPublishTime', 0)
+                            pub_time = article.get('providerPublishTime', None)
                             
-                            if title and pub_time:
+                            # 调试信息
+                            st.write(f"📝 处理新闻 {i+1}: 标题='{title[:30]}...', 时间={pub_time}")
+                            
+                            if title:  # 只要有标题就处理
+                                # 处理时间戳
+                                if pub_time:
+                                    try:
+                                        published_time = datetime.fromtimestamp(pub_time)
+                                    except:
+                                        published_time = current_time - timedelta(hours=i+1)
+                                else:
+                                    published_time = current_time - timedelta(hours=i+1)
+                                
                                 # 提取关键词和分析情绪
-                                title_summary = title + ' ' + summary
+                                title_summary = title + ' ' + (summary or '')
                                 keywords = extract_keywords_from_text(title_summary)
                                 sentiment = analyze_sentiment_from_keywords(keywords)
                                 
                                 news_item = {
                                     "title": title,
-                                    "summary": summary[:300] + '...' if len(summary) > 300 else summary,
-                                    "published": datetime.fromtimestamp(pub_time),
-                                    "url": link,
+                                    "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
+                                    "published": published_time,
+                                    "url": link or '',
                                     "source": publisher,
                                     "category": "company_specific",
                                     "keywords": keywords,
@@ -100,7 +112,7 @@ def fetch_financial_news(target_ticker=None):
                                     "is_real": True
                                 }
                                 news_data.append(news_item)
-                                st.success(f"✅ 获取新闻 {i+1}: {title[:50]}...")
+                                st.success(f"✅ 成功处理新闻 {i+1}: {title[:50]}...")
                         except Exception as e:
                             st.warning(f"⚠️ 处理第{i+1}条新闻时出错: {str(e)}")
                             continue
@@ -119,26 +131,35 @@ def fetch_financial_news(target_ticker=None):
                     
                     if index_news and len(index_news) > 0:
                         st.write(f"📊 从 {index_symbol} 获取到 {len(index_news)} 条市场新闻")
-                        for article in index_news[:3]:  # 每个指数取3条
+                        for j, article in enumerate(index_news[:3]):  # 每个指数取3条
                             try:
                                 title = article.get('title', '')
                                 summary = article.get('summary', '')
                                 link = article.get('link', '')
                                 publisher = article.get('publisher', 'Market News')
-                                pub_time = article.get('providerPublishTime', 0)
+                                pub_time = article.get('providerPublishTime', None)
                                 
-                                if title and pub_time:
+                                if title:  # 只要有标题就处理
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
-                                        title_summary = title + ' ' + summary
+                                        # 处理时间戳
+                                        if pub_time:
+                                            try:
+                                                published_time = datetime.fromtimestamp(pub_time)
+                                            except:
+                                                published_time = current_time - timedelta(hours=len(news_data)+1)
+                                        else:
+                                            published_time = current_time - timedelta(hours=len(news_data)+1)
+                                        
+                                        title_summary = title + ' ' + (summary or '')
                                         keywords = extract_keywords_from_text(title_summary)
                                         sentiment = analyze_sentiment_from_keywords(keywords)
                                         
                                         news_item = {
                                             "title": title,
-                                            "summary": summary[:300] + '...' if len(summary) > 300 else summary,
-                                            "published": datetime.fromtimestamp(pub_time),
-                                            "url": link,
+                                            "summary": summary[:300] + '...' if summary and len(summary) > 300 else (summary or '暂无摘要'),
+                                            "published": published_time,
+                                            "url": link or '',
                                             "source": publisher,
                                             "category": "market_wide",
                                             "keywords": keywords,
@@ -148,6 +169,7 @@ def fetch_financial_news(target_ticker=None):
                                         news_data.append(news_item)
                                         st.success(f"✅ 获取市场新闻: {title[:50]}...")
                             except Exception as e:
+                                st.warning(f"⚠️ 处理市场新闻时出错: {str(e)}")
                                 continue
                 except Exception as e:
                     st.warning(f"⚠️ 获取{index_symbol}新闻失败: {str(e)}")
@@ -159,10 +181,11 @@ def fetch_financial_news(target_ticker=None):
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
         # 显示最终统计
-        st.success(f"📊 成功获取 {len(news_data)} 条真实新闻")
+        st.success(f"📊 最终成功获取 {len(news_data)} 条真实新闻")
         
         if len(news_data) == 0:
             st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
+            st.info("🔍 可能的原因：网络连接问题、API限制或新闻源暂时不可用")
             return []
         
         return news_data
