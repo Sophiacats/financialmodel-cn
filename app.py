@@ -337,74 +337,136 @@ def get_market_impact_advice(sentiment):
 
 # ==================== 新闻获取函数 ====================
 
-@st.cache_data(ttl=1800)  # 缓存30分钟
-def fetch_financial_news(target_ticker=None):
-    """获取真实财经新闻"""
+def debug_yfinance_news(ticker):
+    """调试 yfinance 新闻获取"""
+    debug_info = {
+        'ticker': ticker,
+        'success': False,
+        'error': None,
+        'news_count': 0,
+        'news_structure': None
+    }
+    
     try:
-        current_time = datetime.now()
-        news_data = []
+        stock = yf.Ticker(ticker)
+        debug_info['stock_created'] = True
         
+        # 获取基本信息验证连接
+        info = stock.info
+        debug_info['info_available'] = bool(info)
+        debug_info['company_name'] = info.get('longName', 'N/A')
+        
+        # 获取新闻
+        news = stock.news
+        debug_info['news_type'] = str(type(news))
+        
+        if news:
+            debug_info['news_count'] = len(news) if hasattr(news, '__len__') else 0
+            if len(news) > 0:
+                debug_info['success'] = True
+                debug_info['first_news_keys'] = list(news[0].keys()) if isinstance(news[0], dict) else 'Not dict'
+                # 检查第一条新闻的结构
+                first_news = news[0]
+                debug_info['news_structure'] = {
+                    'has_title': 'title' in first_news if isinstance(first_news, dict) else False,
+                    'has_summary': any(key in first_news for key in ['summary', 'description']) if isinstance(first_news, dict) else False,
+                    'has_link': any(key in first_news for key in ['link', 'url']) if isinstance(first_news, dict) else False,
+                    'keys': list(first_news.keys()) if isinstance(first_news, dict) else []
+                }
+    except Exception as e:
+        debug_info['error'] = str(e)
+    
+    return debug_info
+
+@st.cache_data(ttl=1800)  # 缓存30分钟
+def fetch_financial_news(target_ticker=None, debug_mode=False):
+    """获取真实财经新闻"""
+    current_time = datetime.now()
+    news_data = []
+    debug_results = []
+    
+    # 如果开启调试模式，先进行调试
+    if debug_mode and target_ticker:
+        debug_info = debug_yfinance_news(target_ticker)
+        debug_results.append(debug_info)
+        st.sidebar.write("🔍 调试信息:", debug_info)
+    
+    try:
         # 获取目标股票新闻
         if target_ticker:
             try:
                 ticker_obj = yf.Ticker(target_ticker)
-                news = ticker_obj.news
                 
-                if news and len(news) > 0:
+                # 尝试多种方式获取新闻
+                news = None
+                try:
+                    news = ticker_obj.news
+                except Exception as e1:
+                    st.sidebar.warning(f"方法1失败: {str(e1)}")
+                    try:
+                        # 备选方法：直接调用
+                        news = getattr(ticker_obj, 'news', None)
+                    except Exception as e2:
+                        st.sidebar.warning(f"方法2失败: {str(e2)}")
+                
+                    st.sidebar.success(f"✅ 成功获取 {target_ticker} 新闻: {len(news)} 条")
+                    
                     for i, article in enumerate(news[:8]):
                         try:
-                            # 处理不同的新闻数据结构
-                            if isinstance(article, dict):
-                                content = article
-                            else:
-                                content = article.get('content', article)
+                            # 更强健的数据结构处理
+                            content = article if isinstance(article, dict) else {}
                             
-                            title = content.get('title', '') or content.get('headline', '')
-                            summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
+                            # 多种方式获取标题
+                            title = (content.get('title', '') or 
+                                   content.get('headline', '') or 
+                                   content.get('shortName', '') or
+                                   content.get('longName', ''))
                             
-                            # 获取链接
+                            # 多种方式获取摘要
+                            summary = (content.get('summary', '') or 
+                                     content.get('description', '') or 
+                                     content.get('snippet', '') or
+                                     content.get('content', ''))
+                            
+                            # 获取链接 - 更全面的尝试
                             link = ''
-                            if 'clickThroughUrl' in content and content['clickThroughUrl']:
-                                link = content['clickThroughUrl'].get('url', '')
-                            elif 'canonicalUrl' in content and content['canonicalUrl']:
-                                link = content['canonicalUrl'].get('url', '')
-                            else:
-                                link = content.get('link', '') or content.get('url', '')
+                            for url_key in ['link', 'url', 'clickThroughUrl', 'canonicalUrl']:
+                                if url_key in content:
+                                    url_val = content[url_key]
+                                    if isinstance(url_val, dict):
+                                        link = url_val.get('url', '')
+                                    elif isinstance(url_val, str):
+                                        link = url_val
+                                    if link:
+                                        break
                             
                             # 获取发布者
                             publisher = 'Unknown'
-                            if 'provider' in content and content['provider']:
+                            if 'provider' in content and isinstance(content['provider'], dict):
                                 publisher = content['provider'].get('displayName', 'Unknown')
                             else:
-                                publisher = content.get('publisher', '') or content.get('source', 'Unknown')
+                                publisher = content.get('publisher', content.get('source', 'Unknown'))
                             
-                            # 获取时间
+                            # 时间处理 - 更强健
                             published_time = current_time - timedelta(hours=i+1)
-                            if 'pubDate' in content:
-                                pub_date_str = content['pubDate']
-                            elif 'displayTime' in content:
-                                pub_date_str = content['displayTime']
-                            else:
-                                pub_date_str = ''
                             
-                            if pub_date_str:
-                                try:
-                                    if 'T' in pub_date_str and 'Z' in pub_date_str:
-                                        published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
-                                    elif isinstance(pub_date_str, str) and len(pub_date_str) > 10:
-                                        published_time = datetime.strptime(pub_date_str[:19], '%Y-%m-%d %H:%M:%S') if ':' in pub_date_str else published_time
-                                except:
-                                    pass
-                            
-                            # 处理providerPublishTime
-                            if 'providerPublishTime' in content and content['providerPublishTime']:
-                                try:
-                                    published_time = datetime.fromtimestamp(content['providerPublishTime'])
-                                except:
-                                    pass
+                            # 尝试多个时间字段
+                            time_fields = ['providerPublishTime', 'pubDate', 'displayTime', 'publishedAt']
+                            for time_field in time_fields:
+                                if time_field in content and content[time_field]:
+                                    try:
+                                        time_val = content[time_field]
+                                        if isinstance(time_val, (int, float)):
+                                            published_time = datetime.fromtimestamp(time_val)
+                                        elif isinstance(time_val, str):
+                                            if 'T' in time_val and 'Z' in time_val:
+                                                published_time = datetime.fromisoformat(time_val.replace('Z', '+00:00')).replace(tzinfo=None)
+                                        break
+                                    except:
+                                        continue
                             
                             if title and len(title.strip()) > 5:
-                                # 翻译标题和摘要
+                                # 翻译处理
                                 try:
                                     translated_title = smart_translate(title)
                                     if summary and len(summary.strip()) > 10:
@@ -417,7 +479,7 @@ def fetch_financial_news(target_ticker=None):
                                     translated_title = basic_financial_translate(title)
                                     translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
                                 
-                                # 提取关键词和分析情绪
+                                # 关键词和情绪分析
                                 title_summary = title + ' ' + (summary or '')
                                 keywords = extract_keywords_from_text(title_summary)
                                 sentiment = analyze_sentiment_from_keywords(keywords)
@@ -436,67 +498,50 @@ def fetch_financial_news(target_ticker=None):
                                 }
                                 news_data.append(news_item)
                         except Exception as e:
+                            if debug_mode:
+                                st.sidebar.error(f"处理第{i+1}条新闻失败: {str(e)}")
                             continue
-            except Exception as e:
-                st.warning(f"获取 {target_ticker} 新闻时出错: {str(e)}")
-        
-        # 获取市场整体新闻
-        try:
-            market_indices = ["^GSPC", "^IXIC", "^DJI"]
-            for index_symbol in market_indices:
-                try:
-                    index_ticker = yf.Ticker(index_symbol)
-                    index_news = index_ticker.news
+                else:
+                    st.sidebar.warning(f"⚠️ {target_ticker} 返回的新闻为空")
                     
-                    if index_news and len(index_news) > 0:
-                        for j, article in enumerate(index_news[:3]):
-                            try:
-                                if isinstance(article, dict):
-                                    content = article
-                                else:
-                                    content = article.get('content', article)
-                                
-                                title = content.get('title', '') or content.get('headline', '')
-                                summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
-                                
-                                # 获取链接
-                                link = ''
-                                if 'clickThroughUrl' in content and content['clickThroughUrl']:
-                                    link = content['clickThroughUrl'].get('url', '')
-                                elif 'canonicalUrl' in content and content['canonicalUrl']:
-                                    link = content['canonicalUrl'].get('url', '')
-                                else:
-                                    link = content.get('link', '') or content.get('url', '')
-                                
-                                # 获取发布者
-                                publisher = 'Market News'
-                                if 'provider' in content and content['provider']:
-                                    publisher = content['provider'].get('displayName', 'Market News')
-                                else:
-                                    publisher = content.get('publisher', '') or content.get('source', 'Market News')
-                                
-                                # 获取时间
-                                published_time = current_time - timedelta(hours=len(news_data)+1)
-                                if 'providerPublishTime' in content and content['providerPublishTime']:
-                                    try:
-                                        published_time = datetime.fromtimestamp(content['providerPublishTime'])
-                                    except:
-                                        pass
-                                
-                                if title and len(title.strip()) > 5:
+            except Exception as e:
+                error_msg = f"获取 {target_ticker} 新闻时出错: {str(e)}"
+                st.sidebar.error(error_msg)
+                if debug_mode:
+                    st.sidebar.write("详细错误信息:", str(e))
+        # 获取市场整体新闻 - 简化版本，优先保证基本功能
+        if len(news_data) < 3:  # 如果个股新闻不足，补充市场新闻
+            try:
+                market_indices = ["^GSPC", "^IXIC"]  # 减少指数数量，提高成功率
+                for index_symbol in market_indices:
+                    try:
+                        index_ticker = yf.Ticker(index_symbol)
+                        index_news = getattr(index_ticker, 'news', [])
+                        
+                        if index_news and len(index_news) > 0:
+                            st.sidebar.info(f"✅ 获取到 {index_symbol} 市场新闻: {len(index_news)} 条")
+                            
+                            for j, article in enumerate(index_news[:2]):  # 每个指数只取2条
+                                try:
+                                    content = article if isinstance(article, dict) else {}
+                                    
+                                    title = (content.get('title', '') or 
+                                           content.get('headline', '') or 
+                                           f"市场新闻 {j+1}")
+                                    
+                                    summary = (content.get('summary', '') or 
+                                             content.get('description', '') or 
+                                             content.get('snippet', '') or
+                                             '市场相关新闻摘要')
+                                    
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
                                         try:
                                             translated_title = smart_translate(title)
-                                            if summary and len(summary.strip()) > 10:
-                                                if len(summary) > 400:
-                                                    summary = summary[:400] + "..."
-                                                translated_summary = smart_translate(summary)
-                                            else:
-                                                translated_summary = '暂无摘要'
+                                            translated_summary = smart_translate(summary) if len(summary) > 10 else '市场新闻摘要'
                                         except:
                                             translated_title = basic_financial_translate(title)
-                                            translated_summary = basic_financial_translate(summary) if summary else '暂无摘要'
+                                            translated_summary = basic_financial_translate(summary) if summary else '市场新闻摘要'
                                         
                                         title_summary = title + ' ' + (summary or '')
                                         keywords = extract_keywords_from_text(title_summary)
@@ -505,9 +550,9 @@ def fetch_financial_news(target_ticker=None):
                                         news_item = {
                                             "title": translated_title,
                                             "summary": translated_summary[:300] + '...' if len(translated_summary) > 300 else translated_summary,
-                                            "published": published_time,
-                                            "url": link or '',
-                                            "source": publisher,
+                                            "published": current_time - timedelta(hours=len(news_data)+1),
+                                            "url": '',
+                                            "source": f"{index_symbol} Market News",
                                             "category": "market_wide",
                                             "keywords": keywords,
                                             "sentiment": sentiment,
@@ -515,43 +560,64 @@ def fetch_financial_news(target_ticker=None):
                                             "ticker": index_symbol
                                         }
                                         news_data.append(news_item)
-                            except Exception as e:
-                                continue
-                except Exception as e:
-                    continue
-        except Exception as e:
-            pass
+                                except Exception as e:
+                                    if debug_mode:
+                                        st.sidebar.error(f"处理市场新闻失败: {str(e)}")
+                                    continue
+                        else:
+                            st.sidebar.warning(f"⚠️ {index_symbol} 无市场新闻")
+                    except Exception as e:
+                        if debug_mode:
+                            st.sidebar.error(f"获取 {index_symbol} 失败: {str(e)}")
+                        continue
+            except Exception as e:
+                if debug_mode:
+                    st.sidebar.error(f"市场新闻获取整体失败: {str(e)}")
         
-        # 按时间排序，最新的在前
+        # 按时间排序
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
-        # 如果仍然没有新闻，提供系统提示
+        # 如果仍然没有新闻，检查网络连接并提供备选方案
         if len(news_data) == 0:
+            # 尝试简单的网络测试
+            try:
+                import requests
+                response = requests.get('https://finance.yahoo.com', timeout=5)
+                if response.status_code == 200:
+                    connection_status = "网络连接正常，可能是API限制"
+                else:
+                    connection_status = f"网络响应异常: {response.status_code}"
+            except:
+                connection_status = "网络连接可能存在问题"
+            
             return [{
                 "title": "新闻获取服务暂时不可用",
-                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
+                "summary": f"技术诊断: {connection_status}。建议: 1) 检查网络连接 2) 稍后重试 3) 访问Yahoo Finance、Bloomberg等网站获取最新信息",
                 "published": current_time,
                 "url": "https://finance.yahoo.com",
-                "source": "系统提示",
+                "source": "系统诊断",
                 "category": "system_info",
-                "keywords": ["系统", "提示"],
+                "keywords": ["系统", "网络", "诊断"],
                 "sentiment": "中性",
                 "is_real": False,
                 "ticker": ""
             }]
         
+        st.sidebar.success(f"✅ 成功获取 {len(news_data)} 条新闻")
         return news_data
         
     except Exception as e:
-        st.error(f"新闻获取出错: {str(e)}")
+        error_details = f"新闻获取系统错误: {str(e)}"
+        st.sidebar.error(error_details)
+        
         return [{
-            "title": "新闻获取服务暂时不可用",
-            "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问财经网站获取最新市场信息。",
+            "title": "系统错误 - 新闻服务暂时不可用",
+            "summary": f"错误详情: {error_details}。请稍后重试或联系技术支持。",
             "published": datetime.now(),
             "url": "",
-            "source": "系统",
-            "category": "system_info",
-            "keywords": ["系统"],
+            "source": "系统错误",
+            "category": "system_error",
+            "keywords": ["系统", "错误"],
             "sentiment": "中性",
             "is_real": False,
             "ticker": ""
@@ -611,18 +677,58 @@ with st.sidebar:
         ["科技", "金融", "能源", "上涨", "下跌", "利率", "通胀", "政策", "经济增长", "市场"]
     )
     
+    # 调试模式选项
+    st.markdown("---")
+    st.subheader("🔧 高级选项")
+    
+    debug_mode = st.checkbox("🐛 启用调试模式", help="显示详细的错误信息和API调用状态")
+    
+    if debug_mode:
+        st.info("调试模式已启用，将显示详细诊断信息")
+    
     # 获取新闻按钮
     if st.button("🔍 获取最新新闻", type="primary"):
         st.session_state.selected_ticker = ticker
         with st.spinner("正在获取最新财经新闻..."):
-            news_data = fetch_financial_news(ticker if ticker else None)
+            news_data = fetch_financial_news(ticker if ticker else None, debug_mode=debug_mode)
             st.session_state.news_data = news_data
     
     # 清除缓存按钮
     if st.button("🔄 刷新新闻"):
         fetch_financial_news.clear()
         st.session_state.news_data = None
+        st.success("缓存已清除，请重新获取新闻")
         st.rerun()
+    
+    # 网络诊断工具
+    if st.button("🌐 网络诊断"):
+        with st.spinner("正在诊断网络连接..."):
+            try:
+                import requests
+                
+                # 测试主要财经网站连接
+                test_sites = [
+                    ("Yahoo Finance", "https://finance.yahoo.com"),
+                    ("Google", "https://www.google.com"),
+                    ("YFinance API", "https://query1.finance.yahoo.com")
+                ]
+                
+                results = []
+                for name, url in test_sites:
+                    try:
+                        response = requests.get(url, timeout=5)
+                        if response.status_code == 200:
+                            results.append(f"✅ {name}: 连接正常")
+                        else:
+                            results.append(f"⚠️ {name}: HTTP {response.status_code}")
+                    except Exception as e:
+                        results.append(f"❌ {name}: {str(e)}")
+                
+                for result in results:
+                    st.write(result)
+                    
+            except Exception as e:
+                st.error(f"诊断工具出错: {str(e)}")
     
     st.markdown("---")
     st.markdown("### 📊 使用说明")
