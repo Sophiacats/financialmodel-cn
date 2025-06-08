@@ -74,24 +74,45 @@ def fetch_financial_news(target_ticker=None):
                 st.write(f"📰 获取到 {len(news) if news else 0} 条 {target_ticker} 新闻")
                 
                 if news and len(news) > 0:
-                    # 显示原始数据结构用于调试
-                    st.write(f"🔍 第一条新闻的完整结构: {news[0].keys() if news else 'None'}")
-                    
                     for i, article in enumerate(news[:8]):  # 获取前8条真实新闻
                         try:
-                            # 显示原始数据
-                            st.write(f"📝 原始新闻 {i+1} 数据: {article}")
+                            # 新的API结构：数据在content字段里
+                            content = article.get('content', article)  # 兼容新旧结构
                             
-                            title = article.get('title', '') or article.get('headline', '') or article.get('text', '')
-                            summary = article.get('summary', '') or article.get('description', '') or article.get('snippet', '')
-                            link = article.get('link', '') or article.get('url', '') or article.get('href', '')
-                            publisher = article.get('publisher', '') or article.get('source', '') or article.get('provider', 'Unknown')
-                            pub_time = article.get('providerPublishTime', None) or article.get('publishTime', None) or article.get('timestamp', None)
+                            title = content.get('title', '') or content.get('headline', '') or article.get('title', '')
+                            summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
                             
-                            st.write(f"📝 解析结果 {i+1}: 标题='{title}', 摘要='{summary[:50] if summary else 'None'}', 链接='{link}', 发布者='{publisher}', 时间={pub_time}")
+                            # 获取链接
+                            link = ''
+                            if 'clickThroughUrl' in content and content['clickThroughUrl']:
+                                link = content['clickThroughUrl'].get('url', '')
+                            elif 'canonicalUrl' in content and content['canonicalUrl']:
+                                link = content['canonicalUrl'].get('url', '')
+                            else:
+                                link = content.get('link', '') or content.get('url', '')
                             
-                            if title and len(title.strip()) > 5:  # 确保标题有实际内容
-                                # 处理时间戳
+                            # 获取发布者
+                            publisher = 'Unknown'
+                            if 'provider' in content and content['provider']:
+                                publisher = content['provider'].get('displayName', 'Unknown')
+                            else:
+                                publisher = content.get('publisher', '') or content.get('source', 'Unknown')
+                            
+                            # 获取时间
+                            pub_time = None
+                            pub_date_str = content.get('pubDate', '') or content.get('displayTime', '')
+                            if pub_date_str:
+                                try:
+                                    # 处理ISO格式的时间字符串
+                                    if 'T' in pub_date_str and 'Z' in pub_date_str:
+                                        published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                                    else:
+                                        published_time = current_time - timedelta(hours=i+1)
+                                except:
+                                    published_time = current_time - timedelta(hours=i+1)
+                            else:
+                                # 尝试数字时间戳
+                                pub_time = content.get('providerPublishTime', None) or article.get('providerPublishTime', None)
                                 if pub_time:
                                     try:
                                         published_time = datetime.fromtimestamp(pub_time)
@@ -99,7 +120,10 @@ def fetch_financial_news(target_ticker=None):
                                         published_time = current_time - timedelta(hours=i+1)
                                 else:
                                     published_time = current_time - timedelta(hours=i+1)
-                                
+                            
+                            st.write(f"📝 解析结果 {i+1}: 标题='{title}', 发布者='{publisher}', 时间={published_time}")
+                            
+                            if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                 # 提取关键词和分析情绪
                                 title_summary = title + ' ' + (summary or '')
                                 keywords = extract_keywords_from_text(title_summary)
@@ -140,24 +164,44 @@ def fetch_financial_news(target_ticker=None):
                         st.write(f"📊 从 {index_symbol} 获取到 {len(index_news)} 条市场新闻")
                         for j, article in enumerate(index_news[:3]):  # 每个指数取3条
                             try:
-                                title = article.get('title', '') or article.get('headline', '') or article.get('text', '')
-                                summary = article.get('summary', '') or article.get('description', '') or article.get('snippet', '')
-                                link = article.get('link', '') or article.get('url', '') or article.get('href', '')
-                                publisher = article.get('publisher', '') or article.get('source', '') or article.get('provider', 'Market News')
-                                pub_time = article.get('providerPublishTime', None) or article.get('publishTime', None) or article.get('timestamp', None)
+                                # 新的API结构：数据在content字段里
+                                content = article.get('content', article)
+                                
+                                title = content.get('title', '') or content.get('headline', '') or article.get('title', '')
+                                summary = content.get('summary', '') or content.get('description', '') or content.get('snippet', '')
+                                
+                                # 获取链接
+                                link = ''
+                                if 'clickThroughUrl' in content and content['clickThroughUrl']:
+                                    link = content['clickThroughUrl'].get('url', '')
+                                elif 'canonicalUrl' in content and content['canonicalUrl']:
+                                    link = content['canonicalUrl'].get('url', '')
+                                else:
+                                    link = content.get('link', '') or content.get('url', '')
+                                
+                                # 获取发布者
+                                publisher = 'Market News'
+                                if 'provider' in content and content['provider']:
+                                    publisher = content['provider'].get('displayName', 'Market News')
+                                else:
+                                    publisher = content.get('publisher', '') or content.get('source', 'Market News')
+                                
+                                # 获取时间
+                                pub_date_str = content.get('pubDate', '') or content.get('displayTime', '')
+                                if pub_date_str:
+                                    try:
+                                        if 'T' in pub_date_str and 'Z' in pub_date_str:
+                                            published_time = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                                        else:
+                                            published_time = current_time - timedelta(hours=len(news_data)+1)
+                                    except:
+                                        published_time = current_time - timedelta(hours=len(news_data)+1)
+                                else:
+                                    published_time = current_time - timedelta(hours=len(news_data)+1)
                                 
                                 if title and len(title.strip()) > 5:  # 确保标题有实际内容
                                     # 避免重复新闻
                                     if not any(existing['title'] == title for existing in news_data):
-                                        # 处理时间戳
-                                        if pub_time:
-                                            try:
-                                                published_time = datetime.fromtimestamp(pub_time)
-                                            except:
-                                                published_time = current_time - timedelta(hours=len(news_data)+1)
-                                        else:
-                                            published_time = current_time - timedelta(hours=len(news_data)+1)
-                                        
                                         title_summary = title + ' ' + (summary or '')
                                         keywords = extract_keywords_from_text(title_summary)
                                         sentiment = analyze_sentiment_from_keywords(keywords)
@@ -184,34 +228,27 @@ def fetch_financial_news(target_ticker=None):
         except Exception as e:
             st.error(f"❌ 获取市场新闻失败: {str(e)}")
         
-        # 如果仍然没有新闻，尝试备用方法
-        if len(news_data) == 0:
-            st.info("🔄 尝试备用新闻获取方法...")
-            try:
-                # 创建一些示例新闻作为演示
-                demo_news = [
-                    {
-                        "title": f"{target_ticker or 'Market'} - 实时财经数据获取受限",
-                        "summary": "由于网络限制或API配额限制，暂时无法获取实时财经新闻。建议访问Yahoo Finance、Bloomberg等财经网站获取最新信息。",
-                        "published": current_time,
-                        "url": "https://finance.yahoo.com",
-                        "source": "系统提示",
-                        "category": "system_info",
-                        "keywords": ["系统", "提示"],
-                        "sentiment": "中性",
-                        "is_real": False
-                    }
-                ]
-                news_data.extend(demo_news)
-                st.info("📝 已添加系统提示信息")
-            except Exception as e:
-                st.error(f"创建示例新闻失败: {str(e)}")
-        
         # 按时间排序，最新的在前
         news_data.sort(key=lambda x: x.get('published', datetime.now()), reverse=True)
         
         # 显示最终统计
         st.success(f"📊 最终成功获取 {len(news_data)} 条新闻数据")
+        
+        # 如果仍然没有新闻，提供系统提示
+        if len(news_data) == 0:
+            st.warning("⚠️ 暂时无法获取新闻数据，请稍后重试")
+            st.info("🔍 可能的原因：网络连接问题、API限制或新闻源暂时不可用")
+            return [{
+                "title": "新闻获取服务暂时不可用",
+                "summary": "由于技术原因，暂时无法获取实时财经新闻。请直接访问Yahoo Finance、Bloomberg等财经网站获取最新市场信息。",
+                "published": current_time,
+                "url": "https://finance.yahoo.com",
+                "source": "系统提示",
+                "category": "system_info",
+                "keywords": ["系统", "提示"],
+                "sentiment": "中性",
+                "is_real": False
+            }]
         
         return news_data
         
