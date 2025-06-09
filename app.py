@@ -254,7 +254,7 @@ def try_alternative_news_sources(ticker):
     # 当前返回空列表，等待集成真实API
     return []
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=900)  # 15分钟缓存，提高实时性
 def get_real_financial_news(ticker, debug_mode=False):
     """获取真实财经新闻的主函数"""
     all_news = []
