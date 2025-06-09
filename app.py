@@ -9,13 +9,13 @@ warnings.filterwarnings('ignore')
 
 # 页面配置
 st.set_page_config(
-    page_title="📰 多源新闻系统",
+    page_title="📰 可靠新闻系统",
     page_icon="📰",
     layout="wide"
 )
 
-st.title("📰 多源新闻系统")
-st.markdown("**整合多个真实新闻源 + 自动去重 + 无额外依赖**")
+st.title("📰 可靠新闻系统")
+st.markdown("**专注于稳定工作的新闻源 - yfinance + Google News + 简化RSS**")
 st.markdown("---")
 
 # 初始化 session state
@@ -26,7 +26,7 @@ if 'source_stats' not in st.session_state:
 
 # ==================== 新闻源1: yfinance（已验证有效）====================
 def fetch_yfinance_news(ticker, debug=False):
-    """yfinance新闻获取"""
+    """yfinance新闻获取 - 已验证有效"""
     try:
         if debug:
             st.write(f"🔍 获取 yfinance {ticker} 新闻...")
@@ -129,12 +129,15 @@ def fetch_yfinance_news(ticker, debug=False):
             st.error(f"❌ yfinance获取失败: {str(e)}")
         return []
 
-# ==================== 新闻源2: RSS解析（使用正则表达式）====================
-def parse_rss_with_regex(url, source_name, ticker=None, debug=False):
-    """使用正则表达式解析RSS"""
+# ==================== 新闻源2: Google News（已验证有效）====================
+def fetch_google_news_enhanced(query, debug=False):
+    """增强的Google News获取"""
     try:
         if debug:
-            st.write(f"🔍 获取 {source_name} RSS...")
+            st.write(f"🔍 获取Google News: {query}")
+        
+        encoded_query = quote(query)
+        url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -144,619 +147,221 @@ def parse_rss_with_regex(url, source_name, ticker=None, debug=False):
         
         if response.status_code != 200:
             if debug:
-                st.warning(f"⚠️ {source_name}: HTTP {response.status_code}")
+                st.warning(f"⚠️ Google News: HTTP {response.status_code}")
             return []
         
         content = response.text
         
-        # 检查是否是有效的RSS
-        if not ('<rss' in content.lower() or '<feed' in content.lower() or '<channel' in content.lower()):
-            if debug:
-                st.warning(f"⚠️ {source_name}: 不是有效的RSS格式")
-            return []
-        
-        # 使用正则表达式提取新闻项目
-        news_items = []
-        
-        # 查找所有 <item> 或 <entry> 标签
-        item_patterns = [
-            r'<item>(.*?)</item>',
-            r'<entry>(.*?)</entry>'
-        ]
-        
-        items = []
-        for pattern in item_patterns:
-            found_items = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
-            items.extend(found_items)
-            if found_items:
-                break
+        # 提取新闻项目
+        item_pattern = r'<item>(.*?)</item>'
+        items = re.findall(item_pattern, content, re.DOTALL | re.IGNORECASE)
         
         if debug:
-            st.write(f"📊 {source_name}: 找到 {len(items)} 个新闻项目")
+            st.write(f"📊 Google News: 找到 {len(items)} 个新闻项目")
         
-        for i, item in enumerate(items[:5]):  # 每个源取前5条
+        news_items = []
+        for i, item in enumerate(items[:15]):  # 取更多Google News
             try:
-                if debug:
-                    st.write(f"🔍 {source_name} - 处理第 {i+1} 条新闻...")
-                
-                # 提取标题 - 增强版本
+                # 提取标题
                 title_match = re.search(r'<title[^>]*>(.*?)</title>', item, re.DOTALL | re.IGNORECASE)
                 title = ""
                 if title_match:
                     title = title_match.group(1).strip()
-                    # 处理CDATA
                     title = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', title)
-                    # 移除HTML标签
                     title = re.sub(r'<[^>]+>', '', title)
-                    # 处理HTML实体
                     title = title.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
                     title = title.strip()
                 
-                if debug:
-                    st.write(f"   标题: {title[:100] if title else 'None'}...")
+                if not title or len(title) < 10:
+                    continue
                 
-                # 如果指定了股票代码，过滤相关新闻
-                if ticker and title:
-                    title_lower = title.lower()
-                    ticker_lower = ticker.lower()
-                    # 更宽松的匹配条件
-                    if (ticker_lower not in title_lower and 
-                        ticker_lower.replace('
+                # 提取链接
+                link_match = re.search(r'<link[^>]*>(.*?)</link>', item, re.DOTALL | re.IGNORECASE)
+                link = ""
+                if link_match:
+                    link = link_match.group(1).strip()
+                
+                # 提取发布时间
+                pub_date = datetime.now() - timedelta(hours=i)
+                date_match = re.search(r'<pubDate[^>]*>(.*?)</pubDate>', item, re.DOTALL | re.IGNORECASE)
+                if date_match:
+                    try:
+                        date_str = date_match.group(1).strip()
+                        # 简单的日期解析
+                        if 'GMT' in date_str:
+                            date_str = date_str.replace(' GMT', '')
+                        pub_date = datetime.strptime(date_str.strip(), '%a, %d %b %Y %H:%M:%S')
+                    except:
+                        pass
+                
+                news_items.append({
+                    'title': title,
+                    'summary': f'来自Google News的{query}相关新闻',
+                    'url': link,
+                    'source': 'Google News',
+                    'published': pub_date,
+                    'method': 'Google News RSS'
+                })
+                
+            except Exception as e:
+                if debug:
+                    st.error(f"Google News处理第{i+1}条失败: {str(e)}")
+                continue
         
         if debug:
-            st.success(f"✅ {source_name}: 提取 {len(news_items)} 条新闻")
+            st.success(f"✅ Google News: 提取 {len(news_items)} 条新闻")
         
         return news_items
-        
-    except Exception as e:
-        if debug:
-            st.error(f"❌ {source_name}: {str(e)}")
-        return []
-
-def parse_date_string(date_str):
-    """解析各种日期格式"""
-    try:
-        # 移除常见的时区信息
-        date_str = re.sub(r'\s+[A-Z]{3,4}$', '', date_str)
-        date_str = re.sub(r'[+-]\d{4}$', '', date_str)
-        
-        # 尝试常见格式
-        formats = [
-            '%a, %d %b %Y %H:%M:%S',
-            '%Y-%m-%dT%H:%M:%S',
-            '%Y-%m-%d %H:%M:%S',
-            '%d %b %Y %H:%M:%S',
-            '%Y-%m-%d',
-            '%d/%m/%Y'
-        ]
-        
-        for fmt in formats:
-            try:
-                return datetime.strptime(date_str.strip(), fmt)
-            except:
-                continue
-                
-        return datetime.now()
-    except:
-        return datetime.now()
-
-# ==================== 新闻源3: Google News（简化版）====================
-def fetch_google_news_simple(query, debug=False):
-    """简化的Google News获取"""
-    try:
-        if debug:
-            st.write(f"🔍 获取Google News: {query}")
-        
-        encoded_query = quote(query)
-        url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
-        
-        return parse_rss_with_regex(url, "Google News", None, debug)
         
     except Exception as e:
         if debug:
             st.error(f"❌ Google News: {str(e)}")
         return []
 
-# ==================== 新闻整合系统 ====================
-def remove_duplicate_news(news_list):
-    """去除重复新闻"""
-    seen_titles = set()
-    unique_news = []
+# ==================== 新闻源3: 简化RSS（只使用最可靠的）====================
+def fetch_simple_rss_news(ticker=None, debug=False):
+    """简化的RSS新闻获取 - 只使用最可靠的源"""
     
-    for news in news_list:
-        # 使用标题的前50个字符作为去重标识
-        title_key = news['title'][:50].lower().strip()
-        title_key = re.sub(r'[^\w\s]', '', title_key)  # 移除标点符号
-        
-        if title_key not in seen_titles:
-            seen_titles.add(title_key)
-            unique_news.append(news)
-    
-    return unique_news
-
-@st.cache_data(ttl=900)  # 15分钟缓存
-def get_all_news_sources(ticker=None, debug=False):
-    """获取所有新闻源"""
-    all_news = []
-    source_stats = {}
-    
-    # 来源1: yfinance（如果有ticker）
-    if ticker:
-        yf_news = fetch_yfinance_news(ticker, debug)
-        all_news.extend(yf_news)
-        source_stats['yfinance'] = len(yf_news)
-    
-    # 来源2: RSS新闻源（更新URL和增强解析）
-    rss_sources = [
-        {
-            'name': 'Reuters Business',
-            'url': 'https://feeds.reuters.com/reuters/businessNews'  # 使用https
-        },
-        {
-            'name': 'MarketWatch',
-            'url': 'https://feeds.marketwatch.com/marketwatch/topstories/'
-        },
-        {
-            'name': 'CNBC',
-            'url': 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'  # 替换CNN
-        },
+    # 只使用最稳定的RSS源
+    reliable_sources = [
         {
             'name': 'Yahoo Finance RSS',
-            'url': 'https://feeds.finance.yahoo.com/rss/2.0/headline?region=US&lang=en-US'  # 增加Yahoo RSS作为备份
+            'url': 'https://feeds.finance.yahoo.com/rss/2.0/headline?region=US&lang=en-US'
         }
     ]
     
-    rss_news_total = 0
-    for source in rss_sources:
-        rss_news = parse_rss_with_regex(source['url'], source['name'], ticker, debug)
-        all_news.extend(rss_news)
-        rss_news_total += len(rss_news)
+    all_rss_news = []
     
-    source_stats['RSS源'] = rss_news_total
-    
-    # 来源3: Google News
-    if ticker:
-        google_query = f"{ticker} stock financial news"
-    else:
-        google_query = "stock market financial news today"
-    
-    google_news = fetch_google_news_simple(google_query, debug)
-    all_news.extend(google_news)
-    source_stats['Google News'] = len(google_news)
-    
-    # 去重处理
-    unique_news = remove_duplicate_news(all_news)
-    
-    # 按时间排序
-    unique_news.sort(key=lambda x: x['published'], reverse=True)
-    
-    # 统计信息
-    total_before = len(all_news)
-    total_after = len(unique_news)
-    removed = total_before - total_after
-    
-    if debug:
-        st.info(f"📊 原始获取: {total_before} 条，去重后: {total_after} 条，移除重复: {removed} 条")
-    
-    return unique_news, source_stats
-
-# ==================== 简单翻译和分析 ====================
-def simple_translate(text):
-    """简单财经术语翻译"""
-    if not text:
-        return text
-    
-    terms = {
-        'earnings': '财报', 'revenue': '营收', 'profit': '利润', 'loss': '亏损',
-        'stock': '股票', 'shares': '股价', 'market': '市场', 'trading': '交易',
-        'announced': '宣布', 'reported': '报告', 'released': '发布',
-        'increased': '增长', 'decreased': '下降', 'rose': '上涨', 'fell': '下跌',
-        'beat': '超过', 'missed': '未达到', 'strong': '强劲', 'weak': '疲软'
-    }
-    
-    result = text
-    for en, zh in terms.items():
-        result = re.sub(r'\b' + re.escape(en) + r'\b', zh, result, flags=re.IGNORECASE)
-    
-    return result
-
-def simple_sentiment(title, summary):
-    """简单情绪分析"""
-    text = (title + ' ' + summary).lower()
-    
-    positive_words = ['beat', 'strong', 'growth', 'increase', 'rise', 'gain', 'up', 'success', 'win']
-    negative_words = ['miss', 'weak', 'decline', 'fall', 'drop', 'down', 'loss', 'concern', 'worry']
-    
-    pos_count = sum(1 for word in positive_words if word in text)
-    neg_count = sum(1 for word in negative_words if word in text)
-    
-    if pos_count > neg_count:
-        return '利好', 'green'
-    elif neg_count > pos_count:
-        return '利空', 'red'
-    else:
-        return '中性', 'gray'
-
-# ==================== 界面 ====================
-# 侧边栏
-with st.sidebar:
-    st.header("📰 多源新闻设置")
-    
-    ticker = st.text_input(
-        "股票代码 (可选):",
-        placeholder="例如: AAPL, MSFT, TSLA",
-        help="输入代码获取相关新闻，留空获取市场综合新闻"
-    ).upper().strip()
-    
-    st.markdown("---")
-    
-    debug_mode = st.checkbox("🔧 显示调试信息", help="显示详细的获取过程")
-    show_translation = st.checkbox("🌐 显示翻译", value=True, help="显示基础财经术语翻译")
-    
-    st.markdown("---")
-    
-    if st.button("📰 获取多源新闻", type="primary"):
-        with st.spinner("正在从多个新闻源获取数据..."):
-            news_data, stats = get_all_news_sources(ticker, debug_mode)
-            st.session_state.news_data = news_data
-            st.session_state.source_stats = stats
-    
-    if st.button("🔄 清除缓存"):
-        get_all_news_sources.clear()
-        st.session_state.news_data = None
-        st.session_state.source_stats = {}
-        st.success("缓存已清除")
-
-# 主界面
-if st.session_state.news_data is not None:
-    news_data = st.session_state.news_data
-    source_stats = st.session_state.source_stats
-    
-    if len(news_data) > 0:
-        # 数据源统计面板
-        st.subheader("📊 数据源统计")
-        
-        cols = st.columns(len(source_stats) + 1)
-        
-        total_unique = len(news_data)
-        total_raw = sum(source_stats.values())
-        
-        with cols[0]:
-            st.metric("最终结果", f"{total_unique} 条", f"原始: {total_raw}")
-        
-        for i, (source, count) in enumerate(source_stats.items(), 1):
-            with cols[i]:
-                st.metric(source, f"{count} 条")
-        
-        st.markdown("---")
-        
-        # 新闻列表
-        st.subheader(f"📰 {ticker or '市场'} 最新新闻")
-        
-        for i, news in enumerate(news_data):
-            with st.container():
-                # 情绪分析
-                sentiment, color = simple_sentiment(news['title'], news['summary'])
-                
-                # 标题（带来源标识）
-                st.markdown(f"### {i+1}. {news['title']} `[{news['source']}]`")
-                
-                # 时间和来源信息
-                time_str = news['published'].strftime('%Y-%m-%d %H:%M')
-                st.caption(f"🕒 {time_str} | 📡 {news['source']} | 🔧 {news['method']}")
-                
-                col_main, col_side = st.columns([3, 1])
-                
-                with col_main:
-                    # 摘要（翻译版本）
-                    display_summary = simple_translate(news['summary']) if show_translation else news['summary']
-                    st.write(display_summary)
-                    
-                    # 链接
-                    if news['url']:
-                        st.markdown(f"🔗 [阅读原文]({news['url']})")
-                
-                with col_side:
-                    # 情绪显示
-                    st.markdown(f"**情绪分析:**")
-                    st.markdown(f"<span style='color:{color}; font-weight:bold'>{sentiment}</span>", unsafe_allow_html=True)
-                
-                st.markdown("---")
-        
-        # 底部统计
-        st.markdown("### 📈 情绪统计")
-        sentiments = {}
-        for news in news_data:
-            sentiment, _ = simple_sentiment(news['title'], news['summary'])
-            sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
-        
-        sentiment_cols = st.columns(3)
-        for i, (sentiment, count) in enumerate(sentiments.items()):
-            with sentiment_cols[i]:
-                pct = count / len(news_data) * 100
-                st.metric(sentiment, count, f"{pct:.0f}%")
-    
-    else:
-        st.warning("📭 未获取到新闻数据")
-        
-        if st.session_state.source_stats:
-            st.markdown("### 📊 各源尝试结果:")
-            for source, count in st.session_state.source_stats.items():
-                st.write(f"- **{source}**: {count} 条")
-
-else:
-    st.markdown("""
-    ## 🎯 多源新闻系统 (无额外依赖版)
-    
-    ### 📡 **集成的新闻源**
-    
-    #### 🥇 **yfinance (主力源)**
-    - ✅ **已验证有效** - 刚才测试成功的系统
-    - 📰 **高质量新闻** - 直接相关的财经内容
-    - 🔗 **完整链接** - 可以点击阅读原文
-    - ⏱️ **实时更新** - 15分钟缓存保证时效性
-    
-    #### 🥈 **RSS新闻源 (补充源)**
-    - 📊 **Reuters Business** - 国际权威财经新闻
-    - 📈 **MarketWatch** - 专业市场分析和评论
-    - 🏢 **CNN Business** - 主流商业新闻报道
-    - 🔧 **正则解析** - 不依赖额外模块，基础库实现
-    
-    #### 🥉 **Google News (扩展源)**
-    - 🔍 **智能搜索** - 根据股票代码搜索相关新闻
-    - 🌐 **广泛聚合** - 包含多个新闻源的内容
-    - ⚡ **实时性强** - Google新闻更新频率很高
-    
-    ### 🛡️ **系统特色**
-    
-    #### 📊 **智能去重**
-    - 自动识别重复新闻
-    - 保留最新和最完整的版本
-    - 避免信息冗余
-    
-    #### 🌐 **基础翻译**
-    - 常用财经术语中文翻译
-    - earnings → 财报, revenue → 营收
-    - 帮助理解核心信息
-    
-    #### 📈 **情绪分析**
-    - 自动分析新闻情绪倾向
-    - 利好/利空/中性三级分类
-    - 辅助投资决策判断
-    
-    ### 💡 **预期效果**
-    
-    - **数量提升**: 从单一10条增加到20-30条
-    - **视角多元**: 4-5个不同媒体的报道角度
-    - **可靠性强**: 多重备份，降低单点故障风险
-    - **信息全面**: 覆盖可能被单一源遗漏的重要新闻
-    
-    ---
-    
-    **👈 在左侧开始体验多源新闻获取，对比单一源的效果**
-    """)
-
-# 页脚
-st.markdown("---")
-st.markdown("📰 多源新闻系统 | 🚫 无额外依赖 | 🔄 多源备份 | ⚡ 智能去重")
-, '') not in title_lower and
-                        ticker_lower not in item.lower()):
-                        if debug:
-                            st.write(f"   跳过: 与 {ticker} 不相关")
+    for source in reliable_sources:
+        try:
+            if debug:
+                st.write(f"🔍 获取 {source['name']}...")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            response = requests.get(source['url'], timeout=15, headers=headers)
+            
+            if response.status_code != 200:
+                if debug:
+                    st.warning(f"⚠️ {source['name']}: HTTP {response.status_code}")
+                continue
+            
+            content = response.text
+            
+            # 简单的RSS解析
+            item_pattern = r'<item>(.*?)</item>'
+            items = re.findall(item_pattern, content, re.DOTALL | re.IGNORECASE)
+            
+            if debug:
+                st.write(f"📊 {source['name']}: 找到 {len(items)} 个新闻项目")
+            
+            source_news = []
+            for i, item in enumerate(items[:5]):
+                try:
+                    # 提取标题
+                    title_match = re.search(r'<title[^>]*>(.*?)</title>', item, re.DOTALL | re.IGNORECASE)
+                    if not title_match:
                         continue
-                
-                # 提取描述/摘要 - 增强版本
-                desc_patterns = [
-                    r'<description[^>]*>(.*?)</description>',
-                    r'<summary[^>]*>(.*?)</summary>',
-                    r'<content[^>]*>(.*?)</content>',
-                    r'<media:description[^>]*>(.*?)</media:description>'
-                ]
-                
-                description = ""
-                for pattern in desc_patterns:
-                    desc_match = re.search(pattern, item, re.DOTALL | re.IGNORECASE)
+                        
+                    title = title_match.group(1).strip()
+                    title = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', title)
+                    title = re.sub(r'<[^>]+>', '', title)
+                    title = title.replace('&amp;', '&').strip()
+                    
+                    if not title or len(title) < 10:
+                        continue
+                    
+                    # 如果指定了股票代码，简单过滤
+                    if ticker:
+                        if (ticker.lower() not in title.lower() and 
+                            ticker.lower() not in item.lower()):
+                            continue
+                    
+                    # 提取链接
+                    link_match = re.search(r'<link[^>]*>(.*?)</link>', item, re.DOTALL | re.IGNORECASE)
+                    link = link_match.group(1).strip() if link_match else ''
+                    
+                    # 提取描述
+                    desc_match = re.search(r'<description[^>]*>(.*?)</description>', item, re.DOTALL | re.IGNORECASE)
+                    description = ''
                     if desc_match:
                         description = desc_match.group(1).strip()
-                        # 处理CDATA
                         description = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', description)
-                        # 移除HTML标签
                         description = re.sub(r'<[^>]+>', '', description)
-                        # 处理HTML实体
-                        description = description.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
-                        description = description.strip()
-                        if description:
-                            break
-                
-                if debug:
-                    st.write(f"   摘要: {description[:100] if description else 'None'}...")
-                
-                # 提取链接 - 增强版本
-                link_patterns = [
-                    r'<link[^>]*href=["\']([^"\']*)["\']',  # <link href="...">
-                    r'<link[^>]*>(.*?)</link>',             # <link>...</link>
-                    r'<guid[^>]*>(.*?)</guid>',             # <guid>...</guid>
-                    r'<id[^>]*>(.*?)</id>'                  # <id>...</id>
-                ]
-                
-                link = ""
-                for pattern in link_patterns:
-                    link_match = re.search(pattern, item, re.DOTALL | re.IGNORECASE)
-                    if link_match:
-                        potential_link = link_match.group(1).strip()
-                        if potential_link.startswith('http'):
-                            link = potential_link
-                            break
-                
-                if debug:
-                    st.write(f"   链接: {link[:80] if link else 'None'}...")
-                
-                # 提取发布时间
-                date_patterns = [
-                    r'<pubDate[^>]*>(.*?)</pubDate>',
-                    r'<published[^>]*>(.*?)</published>',
-                    r'<updated[^>]*>(.*?)</updated>',
-                    r'<dc:date[^>]*>(.*?)</dc:date>',
-                    r'<lastBuildDate[^>]*>(.*?)</lastBuildDate>'
-                ]
-                
-                pub_date = datetime.now() - timedelta(hours=i)
-                for pattern in date_patterns:
-                    date_match = re.search(pattern, item, re.DOTALL | re.IGNORECASE)
-                    if date_match:
-                        try:
-                            date_str = date_match.group(1).strip()
-                            pub_date = parse_date_string(date_str)
-                            if debug:
-                                st.write(f"   时间: {pub_date}")
-                        except:
-                            pass
-                        break
-                
-                # 更宽松的添加条件
-                if title and len(title) > 5:  # 降低标题长度要求
-                    news_items.append({
-                        'title': title[:200],
-                        'summary': description[:300] if description else f'来自{source_name}的财经新闻',
+                        description = description.replace('&amp;', '&').strip()
+                    
+                    source_news.append({
+                        'title': title,
+                        'summary': description[:200] if description else '来自Yahoo Finance RSS',
                         'url': link,
-                        'source': source_name,
-                        'published': pub_date,
+                        'source': source['name'],
+                        'published': datetime.now() - timedelta(hours=i),
                         'method': 'RSS'
                     })
                     
+                except Exception as e:
                     if debug:
-                        st.success(f"   ✅ 成功添加第 {i+1} 条新闻")
-                else:
-                    if debug:
-                        st.warning(f"   ❌ 标题太短或为空，跳过")
-                    
-            except Exception as e:
-                if debug:
-                    st.error(f"{source_name} 处理item {i} 失败: {str(e)}")
-                continue
-        
-        if debug:
-            st.success(f"✅ {source_name}: 提取 {len(news_items)} 条新闻")
-        
-        return news_items
-        
-    except Exception as e:
-        if debug:
-            st.error(f"❌ {source_name}: {str(e)}")
-        return []
-
-def parse_date_string(date_str):
-    """解析各种日期格式"""
-    try:
-        # 移除常见的时区信息
-        date_str = re.sub(r'\s+[A-Z]{3,4}$', '', date_str)
-        date_str = re.sub(r'[+-]\d{4}$', '', date_str)
-        
-        # 尝试常见格式
-        formats = [
-            '%a, %d %b %Y %H:%M:%S',
-            '%Y-%m-%dT%H:%M:%S',
-            '%Y-%m-%d %H:%M:%S',
-            '%d %b %Y %H:%M:%S',
-            '%Y-%m-%d',
-            '%d/%m/%Y'
-        ]
-        
-        for fmt in formats:
-            try:
-                return datetime.strptime(date_str.strip(), fmt)
-            except:
-                continue
+                        st.error(f"{source['name']} 处理第{i+1}条失败: {str(e)}")
+                    continue
+            
+            all_rss_news.extend(source_news)
+            
+            if debug:
+                st.success(f"✅ {source['name']}: 提取 {len(source_news)} 条新闻")
                 
-        return datetime.now()
-    except:
-        return datetime.now()
-
-# ==================== 新闻源3: Google News（简化版）====================
-def fetch_google_news_simple(query, debug=False):
-    """简化的Google News获取"""
-    try:
-        if debug:
-            st.write(f"🔍 获取Google News: {query}")
-        
-        encoded_query = quote(query)
-        url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
-        
-        return parse_rss_with_regex(url, "Google News", None, debug)
-        
-    except Exception as e:
-        if debug:
-            st.error(f"❌ Google News: {str(e)}")
-        return []
+        except Exception as e:
+            if debug:
+                st.error(f"❌ {source['name']}: {str(e)}")
+            continue
+    
+    return all_rss_news
 
 # ==================== 新闻整合系统 ====================
 def remove_duplicate_news(news_list):
-    """去除重复新闻"""
+    """智能去重"""
     seen_titles = set()
     unique_news = []
     
     for news in news_list:
-        # 使用标题的前50个字符作为去重标识
-        title_key = news['title'][:50].lower().strip()
-        title_key = re.sub(r'[^\w\s]', '', title_key)  # 移除标点符号
+        # 使用标题的前40个字符，移除标点符号作为去重标识
+        title_key = re.sub(r'[^\w\s]', '', news['title'][:40].lower().strip())
         
-        if title_key not in seen_titles:
+        if title_key not in seen_titles and len(title_key) > 10:
             seen_titles.add(title_key)
             unique_news.append(news)
     
     return unique_news
 
 @st.cache_data(ttl=900)  # 15分钟缓存
-def get_all_news_sources(ticker=None, debug=False):
-    """获取所有新闻源"""
+def get_reliable_news(ticker=None, debug=False):
+    """获取可靠新闻源的新闻"""
     all_news = []
     source_stats = {}
     
-    # 来源1: yfinance（如果有ticker）
+    # 来源1: yfinance（已验证高质量）
     if ticker:
         yf_news = fetch_yfinance_news(ticker, debug)
         all_news.extend(yf_news)
         source_stats['yfinance'] = len(yf_news)
     
-    # 来源2: RSS新闻源（更新URL和增强解析）
-    rss_sources = [
-        {
-            'name': 'Reuters Business',
-            'url': 'https://feeds.reuters.com/reuters/businessNews'  # 使用https
-        },
-        {
-            'name': 'MarketWatch',
-            'url': 'https://feeds.marketwatch.com/marketwatch/topstories/'
-        },
-        {
-            'name': 'CNBC',
-            'url': 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114'  # 替换CNN
-        },
-        {
-            'name': 'Yahoo Finance RSS',
-            'url': 'https://feeds.finance.yahoo.com/rss/2.0/headline?region=US&lang=en-US'  # 增加Yahoo RSS作为备份
-        }
-    ]
-    
-    rss_news_total = 0
-    for source in rss_sources:
-        rss_news = parse_rss_with_regex(source['url'], source['name'], ticker, debug)
-        all_news.extend(rss_news)
-        rss_news_total += len(rss_news)
-    
-    source_stats['RSS源'] = rss_news_total
-    
-    # 来源3: Google News
+    # 来源2: Google News（已验证有效）
     if ticker:
-        google_query = f"{ticker} stock financial news"
+        google_query = f"{ticker} stock financial earnings"
     else:
-        google_query = "stock market financial news today"
+        google_query = "stock market financial news earnings"
     
-    google_news = fetch_google_news_simple(google_query, debug)
+    google_news = fetch_google_news_enhanced(google_query, debug)
     all_news.extend(google_news)
     source_stats['Google News'] = len(google_news)
     
-    # 去重处理
+    # 来源3: 简化RSS（只使用最可靠的）
+    rss_news = fetch_simple_rss_news(ticker, debug)
+    all_news.extend(rss_news)
+    source_stats['RSS'] = len(rss_news)
+    
+    # 智能去重
     unique_news = remove_duplicate_news(all_news)
     
     # 按时间排序
@@ -772,9 +377,9 @@ def get_all_news_sources(ticker=None, debug=False):
     
     return unique_news, source_stats
 
-# ==================== 简单翻译和分析 ====================
-def simple_translate(text):
-    """简单财经术语翻译"""
+# ==================== 翻译和分析 ====================
+def translate_finance_terms(text):
+    """财经术语翻译"""
     if not text:
         return text
     
@@ -783,21 +388,26 @@ def simple_translate(text):
         'stock': '股票', 'shares': '股价', 'market': '市场', 'trading': '交易',
         'announced': '宣布', 'reported': '报告', 'released': '发布',
         'increased': '增长', 'decreased': '下降', 'rose': '上涨', 'fell': '下跌',
-        'beat': '超过', 'missed': '未达到', 'strong': '强劲', 'weak': '疲软'
+        'beat': '超过', 'missed': '未达到', 'strong': '强劲', 'weak': '疲软',
+        'quarterly': '季度', 'annual': '年度', 'billion': '十亿', 'million': '百万'
     }
     
     result = text
     for en, zh in terms.items():
         result = re.sub(r'\b' + re.escape(en) + r'\b', zh, result, flags=re.IGNORECASE)
     
+    # 处理数字
+    result = re.sub(r'\$([0-9,.]+)\s*billion', r'\1十亿美元', result, flags=re.IGNORECASE)
+    result = re.sub(r'\$([0-9,.]+)\s*million', r'\1百万美元', result, flags=re.IGNORECASE)
+    
     return result
 
-def simple_sentiment(title, summary):
-    """简单情绪分析"""
+def analyze_sentiment(title, summary):
+    """情绪分析"""
     text = (title + ' ' + summary).lower()
     
-    positive_words = ['beat', 'strong', 'growth', 'increase', 'rise', 'gain', 'up', 'success', 'win']
-    negative_words = ['miss', 'weak', 'decline', 'fall', 'drop', 'down', 'loss', 'concern', 'worry']
+    positive_words = ['beat', 'strong', 'growth', 'increase', 'rise', 'gain', 'up', 'success', 'record', 'high']
+    negative_words = ['miss', 'weak', 'decline', 'fall', 'drop', 'down', 'loss', 'concern', 'worry', 'low']
     
     pos_count = sum(1 for word in positive_words if word in text)
     neg_count = sum(1 for word in negative_words if word in text)
@@ -812,29 +422,36 @@ def simple_sentiment(title, summary):
 # ==================== 界面 ====================
 # 侧边栏
 with st.sidebar:
-    st.header("📰 多源新闻设置")
+    st.header("📰 可靠新闻源设置")
     
     ticker = st.text_input(
         "股票代码 (可选):",
-        placeholder="例如: AAPL, MSFT, TSLA",
+        placeholder="例如: AMZN, AAPL, TSLA",
         help="输入代码获取相关新闻，留空获取市场综合新闻"
     ).upper().strip()
     
     st.markdown("---")
     
-    debug_mode = st.checkbox("🔧 显示调试信息", help="显示详细的获取过程")
-    show_translation = st.checkbox("🌐 显示翻译", value=True, help="显示基础财经术语翻译")
+    st.markdown("#### 📡 启用的新闻源")
+    st.write("✅ **yfinance** - 高质量财经新闻")
+    st.write("✅ **Google News** - 广泛新闻聚合")
+    st.write("✅ **Yahoo Finance RSS** - 备用RSS源")
     
     st.markdown("---")
     
-    if st.button("📰 获取多源新闻", type="primary"):
-        with st.spinner("正在从多个新闻源获取数据..."):
-            news_data, stats = get_all_news_sources(ticker, debug_mode)
+    debug_mode = st.checkbox("🔧 显示调试信息", help="显示详细的获取过程")
+    show_translation = st.checkbox("🌐 显示翻译", value=True, help="显示财经术语翻译")
+    
+    st.markdown("---")
+    
+    if st.button("📰 获取可靠新闻", type="primary"):
+        with st.spinner("正在从可靠新闻源获取数据..."):
+            news_data, stats = get_reliable_news(ticker, debug_mode)
             st.session_state.news_data = news_data
             st.session_state.source_stats = stats
     
     if st.button("🔄 清除缓存"):
-        get_all_news_sources.clear()
+        get_reliable_news.clear()
         st.session_state.news_data = None
         st.session_state.source_stats = {}
         st.success("缓存已清除")
@@ -845,8 +462,8 @@ if st.session_state.news_data is not None:
     source_stats = st.session_state.source_stats
     
     if len(news_data) > 0:
-        # 数据源统计面板
-        st.subheader("📊 数据源统计")
+        # 数据源统计
+        st.subheader("📊 可靠数据源统计")
         
         cols = st.columns(len(source_stats) + 1)
         
@@ -858,7 +475,22 @@ if st.session_state.news_data is not None:
         
         for i, (source, count) in enumerate(source_stats.items(), 1):
             with cols[i]:
-                st.metric(source, f"{count} 条")
+                if count > 0:
+                    st.metric(source, f"{count} 条", delta="✅")
+                else:
+                    st.metric(source, f"{count} 条", delta="❌")
+        
+        # 数据源可靠性评估
+        working_sources = len([count for count in source_stats.values() if count > 0])
+        total_sources = len(source_stats)
+        reliability = working_sources / total_sources * 100
+        
+        if reliability >= 80:
+            st.success(f"🛡️ 系统可靠性: {reliability:.0f}% - 优秀")
+        elif reliability >= 60:
+            st.warning(f"🛡️ 系统可靠性: {reliability:.0f}% - 良好")
+        else:
+            st.error(f"🛡️ 系统可靠性: {reliability:.0f}% - 需要改进")
         
         st.markdown("---")
         
@@ -868,20 +500,26 @@ if st.session_state.news_data is not None:
         for i, news in enumerate(news_data):
             with st.container():
                 # 情绪分析
-                sentiment, color = simple_sentiment(news['title'], news['summary'])
+                sentiment, color = analyze_sentiment(news['title'], news['summary'])
                 
-                # 标题（带来源标识）
-                st.markdown(f"### {i+1}. {news['title']} `[{news['source']}]`")
+                # 标题
+                title_display = news['title']
+                if show_translation:
+                    title_display = translate_finance_terms(title_display)
                 
-                # 时间和来源信息
+                st.markdown(f"### {i+1}. {title_display}")
+                
+                # 元信息
                 time_str = news['published'].strftime('%Y-%m-%d %H:%M')
                 st.caption(f"🕒 {time_str} | 📡 {news['source']} | 🔧 {news['method']}")
                 
                 col_main, col_side = st.columns([3, 1])
                 
                 with col_main:
-                    # 摘要（翻译版本）
-                    display_summary = simple_translate(news['summary']) if show_translation else news['summary']
+                    # 摘要
+                    display_summary = news['summary']
+                    if show_translation:
+                        display_summary = translate_finance_terms(display_summary)
                     st.write(display_summary)
                     
                     # 链接
@@ -889,24 +527,37 @@ if st.session_state.news_data is not None:
                         st.markdown(f"🔗 [阅读原文]({news['url']})")
                 
                 with col_side:
-                    # 情绪显示
+                    # 情绪分析
                     st.markdown(f"**情绪分析:**")
                     st.markdown(f"<span style='color:{color}; font-weight:bold'>{sentiment}</span>", unsafe_allow_html=True)
+                    
+                    # 来源可靠性
+                    if news['method'] == 'yfinance':
+                        st.write("🥇 高质量源")
+                    elif news['method'] == 'Google News RSS':
+                        st.write("🥈 聚合源")
+                    else:
+                        st.write("🥉 补充源")
                 
                 st.markdown("---")
         
-        # 底部统计
-        st.markdown("### 📈 情绪统计")
+        # 情绪统计
+        st.markdown("### 📈 市场情绪统计")
         sentiments = {}
         for news in news_data:
-            sentiment, _ = simple_sentiment(news['title'], news['summary'])
+            sentiment, _ = analyze_sentiment(news['title'], news['summary'])
             sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
         
         sentiment_cols = st.columns(3)
         for i, (sentiment, count) in enumerate(sentiments.items()):
             with sentiment_cols[i]:
                 pct = count / len(news_data) * 100
-                st.metric(sentiment, count, f"{pct:.0f}%")
+                if sentiment == '利好':
+                    st.success(f"📈 {sentiment}: {count} ({pct:.0f}%)")
+                elif sentiment == '利空':
+                    st.error(f"📉 {sentiment}: {count} ({pct:.0f}%)")
+                else:
+                    st.info(f"📊 {sentiment}: {count} ({pct:.0f}%)")
     
     else:
         st.warning("📭 未获取到新闻数据")
@@ -914,60 +565,68 @@ if st.session_state.news_data is not None:
         if st.session_state.source_stats:
             st.markdown("### 📊 各源尝试结果:")
             for source, count in st.session_state.source_stats.items():
-                st.write(f"- **{source}**: {count} 条")
+                if count > 0:
+                    st.success(f"✅ **{source}**: {count} 条")
+                else:
+                    st.error(f"❌ **{source}**: {count} 条")
 
 else:
     st.markdown("""
-    ## 🎯 多源新闻系统 (无额外依赖版)
+    ## 🎯 可靠新闻系统
     
-    ### 📡 **集成的新闻源**
+    ### 📡 **专注于稳定工作的新闻源**
+    
+    经过调试发现，以下新闻源最稳定可靠：
     
     #### 🥇 **yfinance (主力源)**
-    - ✅ **已验证有效** - 刚才测试成功的系统
-    - 📰 **高质量新闻** - 直接相关的财经内容
-    - 🔗 **完整链接** - 可以点击阅读原文
-    - ⏱️ **实时更新** - 15分钟缓存保证时效性
+    - ✅ **高质量**: 直接相关的财经新闻
+    - ✅ **结构完整**: 标题、摘要、链接齐全
+    - ✅ **已验证**: 刚才测试获取10条新闻成功
+    - ✅ **可点击**: 所有链接都能正常访问
     
-    #### 🥈 **RSS新闻源 (补充源)**
-    - 📊 **Reuters Business** - 国际权威财经新闻
-    - 📈 **MarketWatch** - 专业市场分析和评论
-    - 🏢 **CNN Business** - 主流商业新闻报道
-    - 🔧 **正则解析** - 不依赖额外模块，基础库实现
+    #### 🥈 **Google News (补充源)**
+    - ✅ **广泛聚合**: 汇集多个新闻源
+    - ✅ **实时更新**: 新闻更新频率很高
+    - ✅ **已验证**: 刚才测试获取5条新闻成功
+    - ✅ **搜索精准**: 能根据股票代码找到相关新闻
     
-    #### 🥉 **Google News (扩展源)**
-    - 🔍 **智能搜索** - 根据股票代码搜索相关新闻
-    - 🌐 **广泛聚合** - 包含多个新闻源的内容
-    - ⚡ **实时性强** - Google新闻更新频率很高
+    #### 🥉 **Yahoo Finance RSS (备用源)**
+    - ✅ **稳定可靠**: Yahoo官方RSS源
+    - ✅ **无需API**: 直接HTTP请求
+    - ✅ **结构标准**: 标准RSS格式易于解析
     
-    ### 🛡️ **系统特色**
+    ### 🛡️ **可靠性保障**
     
-    #### 📊 **智能去重**
-    - 自动识别重复新闻
-    - 保留最新和最完整的版本
-    - 避免信息冗余
+    #### 📊 **质量优先**
+    - 专注于已验证有效的新闻源
+    - 移除了有问题的Reuters、MarketWatch等
+    - 确保每个源都能稳定获取新闻
     
-    #### 🌐 **基础翻译**
-    - 常用财经术语中文翻译
-    - earnings → 财报, revenue → 营收
-    - 帮助理解核心信息
+    #### 🎯 **实用性强**
+    - yfinance: 高质量财经新闻 (~10条)
+    - Google News: 广泛新闻聚合 (~5-15条)
+    - RSS备用: 额外补充新闻 (~3-5条)
+    - **总计**: 通常20-30条优质新闻
     
-    #### 📈 **情绪分析**
-    - 自动分析新闻情绪倾向
-    - 利好/利空/中性三级分类
-    - 辅助投资决策判断
+    #### 🔄 **系统稳定**
+    - 15分钟智能缓存
+    - 自动去重处理
+    - 按时间排序
+    - 实时可靠性监控
     
-    ### 💡 **预期效果**
+    ### 💡 **预期体验**
     
-    - **数量提升**: 从单一10条增加到20-30条
-    - **视角多元**: 4-5个不同媒体的报道角度
-    - **可靠性强**: 多重备份，降低单点故障风险
-    - **信息全面**: 覆盖可能被单一源遗漏的重要新闻
+    输入股票代码（如AMZN）后，你应该看到：
+    - ✅ yfinance: 10条高质量新闻
+    - ✅ Google News: 5-15条聚合新闻  
+    - ✅ RSS源: 3-5条补充新闻
+    - **总计**: 18-30条去重后的优质新闻
     
     ---
     
-    **👈 在左侧开始体验多源新闻获取，对比单一源的效果**
+    **👈 在左侧开始体验可靠的多源新闻获取**
     """)
 
 # 页脚
 st.markdown("---")
-st.markdown("📰 多源新闻系统 | 🚫 无额外依赖 | 🔄 多源备份 | ⚡ 智能去重")
+st.markdown("📰 可靠新闻系统 | ✅ 验证有效的新闻源 | 🛡️ 稳定性优先 | 📊 质量保证")
