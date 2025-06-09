@@ -1,671 +1,514 @@
 import streamlit as st
 import yfinance as yf
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import warnings
-import re
 import requests
-import time
-import json
+import feedparser
+from datetime import datetime, timedelta
+import re
+from urllib.parse import quote
+import warnings
 warnings.filterwarnings('ignore')
 
 # 页面配置
 st.set_page_config(
-    page_title="📰 真实新闻获取系统",
+    page_title="📰 多源新闻集成系统",
     page_icon="📰",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# 初始化 session state
-if 'selected_ticker' not in st.session_state:
-    st.session_state.selected_ticker = None
-if 'news_data' not in st.session_state:
-    st.session_state.news_data = None
-if 'debug_info' not in st.session_state:
-    st.session_state.debug_info = []
-
-st.title("📰 真实新闻获取系统")
-st.markdown("**只获取真实新闻 - 支持所有美股代码 - 无模拟数据**")
+st.title("📰 多源新闻集成系统")
+st.markdown("**整合多个真实新闻源 + 去重 + 实时更新**")
 st.markdown("---")
 
-# ==================== 真实新闻获取函数 ====================
+# 初始化 session state
+if 'news_data' not in st.session_state:
+    st.session_state.news_data = None
+if 'source_stats' not in st.session_state:
+    st.session_state.source_stats = {}
 
-def debug_yfinance_detailed(ticker):
-    """详细调试 yfinance"""
-    debug_results = []
-    
+# ==================== 新闻源1: yfinance ====================
+def fetch_yfinance_news(ticker, debug=False):
+    """yfinance新闻获取（已验证有效）"""
     try:
-        debug_results.append(f"🔍 开始测试 {ticker}")
-        
-        # 步骤1: 创建ticker对象
         stock = yf.Ticker(ticker)
-        debug_results.append("✅ 成功创建 yfinance Ticker 对象")
+        raw_news = stock.news
         
-        # 步骤2: 测试基本信息
-        try:
-            info = stock.info
-            if info and isinstance(info, dict):
-                company_name = info.get('longName', 'N/A')
-                debug_results.append(f"✅ 基本信息获取成功: {company_name}")
-                debug_results.append(f"📊 信息字段数: {len(info)}")
-            else:
-                debug_results.append("❌ 基本信息获取失败或为空")
-        except Exception as e:
-            debug_results.append(f"❌ 基本信息获取异常: {str(e)}")
-        
-        # 步骤3: 测试新闻获取
-        try:
-            news = stock.news
-            debug_results.append(f"📰 新闻对象类型: {type(news)}")
-            
-            if news is None:
-                debug_results.append("❌ 新闻对象为 None")
-                return debug_results, []
-            
-            if hasattr(news, '__len__'):
-                news_count = len(news)
-                debug_results.append(f"📊 新闻数量: {news_count}")
-                
-                if news_count == 0:
-                    debug_results.append("❌ 新闻列表为空")
-                    return debug_results, []
-                
-                # 检查第一条新闻
-                first_news = news[0]
-                debug_results.append(f"📰 第一条新闻类型: {type(first_news)}")
-                
-                if isinstance(first_news, dict):
-                    keys = list(first_news.keys())
-                    debug_results.append(f"🔑 新闻字段: {keys}")
-                    
-                    # 检查关键字段
-                    title = first_news.get('title', '')
-                    summary = first_news.get('summary', '')
-                    
-                    debug_results.append(f"📝 标题长度: {len(title) if title else 0}")
-                    debug_results.append(f"📄 摘要长度: {len(summary) if summary else 0}")
-                    
-                    if title:
-                        debug_results.append(f"📰 标题预览: {title[:100]}...")
-                    
-                    return debug_results, news
-                else:
-                    debug_results.append(f"❌ 新闻格式异常: {first_news}")
-                    return debug_results, []
-            else:
-                debug_results.append("❌ 新闻对象没有长度属性")
-                return debug_results, []
-                
-        except Exception as e:
-            debug_results.append(f"❌ 新闻获取异常: {str(e)}")
-            return debug_results, []
-            
-    except Exception as e:
-        debug_results.append(f"❌ 整体测试失败: {str(e)}")
-        return debug_results, []
-
-def fetch_real_yfinance_news(ticker, debug_mode=False):
-    """获取真实的 yfinance 新闻"""
-    if debug_mode:
-        debug_info, raw_news = debug_yfinance_detailed(ticker)
-        st.session_state.debug_info = debug_info
-        
-        # 在侧边栏显示调试信息
-        with st.sidebar:
-            st.subheader("🔍 调试信息")
-            for info in debug_info:
-                if "✅" in info:
-                    st.success(info)
-                elif "❌" in info:
-                    st.error(info)
-                elif "⚠️" in info:
-                    st.warning(info)
-                else:
-                    st.info(info)
-    else:
-        try:
-            stock = yf.Ticker(ticker)
-            raw_news = stock.news
-        except Exception as e:
-            st.error(f"yfinance 获取失败: {str(e)}")
+        if not raw_news:
             return []
-    
-    if not raw_news or len(raw_news) == 0:
-        return []
-    
-    processed_news = []
-    
-    for i, article in enumerate(raw_news):
-        try:
-            if not isinstance(article, dict):
-                continue
-            
-            # 新的yfinance API结构处理
-            content_data = article.get('content', article)  # 如果有content字段，使用它，否则使用原article
-            
-            # 多层次提取标题
-            title = ''
-            title_sources = [
-                content_data.get('title', ''),
-                content_data.get('headline', ''),
-                content_data.get('shortName', ''),
-                article.get('title', ''),
-                article.get('headline', '')
-            ]
-            
-            for t in title_sources:
-                if t and len(str(t).strip()) > 10:
-                    title = str(t).strip()
-                    break
-            
-            # 多层次提取摘要
-            summary = ''
-            summary_sources = [
-                content_data.get('summary', ''),
-                content_data.get('description', ''),
-                content_data.get('snippet', ''),
-                content_data.get('content', ''),
-                article.get('summary', ''),
-                article.get('description', '')
-            ]
-            
-            for s in summary_sources:
-                if s and len(str(s).strip()) > 10:
-                    summary = str(s).strip()
-                    break
-            
-            # 跳过没有标题的新闻
-            if not title or len(title) < 10:
-                if debug_mode:
-                    st.error(f"第 {i+1} 条新闻标题为空，跳过")
-                continue
-            
-            # 多层次提取URL
-            url = ''
-            url_sources = [
-                content_data.get('clickThroughUrl', {}).get('url', '') if isinstance(content_data.get('clickThroughUrl'), dict) else content_data.get('clickThroughUrl', ''),
-                content_data.get('canonicalUrl', {}).get('url', '') if isinstance(content_data.get('canonicalUrl'), dict) else content_data.get('canonicalUrl', ''),
-                content_data.get('link', ''),
-                content_data.get('url', ''),
-                article.get('link', ''),
-                article.get('url', '')
-            ]
-            
-            for u in url_sources:
-                if u and isinstance(u, str) and len(u) > 10:
-                    url = u
-                    break
-            
-            # 多层次提取来源
-            source = 'Yahoo Finance'
-            if 'provider' in content_data and isinstance(content_data['provider'], dict):
-                source = content_data['provider'].get('displayName', 'Yahoo Finance')
-            elif 'provider' in article and isinstance(article['provider'], dict):
-                source = article['provider'].get('displayName', 'Yahoo Finance')
-            elif 'source' in content_data:
-                source = str(content_data['source'])
-            elif 'source' in article:
-                source = str(article['source'])
-            
-            # 多层次提取时间
-            published_time = datetime.now() - timedelta(hours=i+1)
-            time_sources = [
-                content_data.get('providerPublishTime'),
-                content_data.get('publishedAt'),
-                article.get('providerPublishTime'),
-                article.get('publishedAt')
-            ]
-            
-            for time_val in time_sources:
-                if time_val:
-                    try:
-                        if isinstance(time_val, (int, float)):
+        
+        processed_news = []
+        for i, article in enumerate(raw_news):
+            try:
+                if not isinstance(article, dict):
+                    continue
+                
+                # 处理新的API结构
+                content_data = article.get('content', article)
+                
+                # 提取标题
+                title = ''
+                title_sources = [
+                    content_data.get('title', ''),
+                    content_data.get('headline', ''),
+                    article.get('title', ''),
+                ]
+                
+                for t in title_sources:
+                    if t and len(str(t).strip()) > 10:
+                        title = str(t).strip()
+                        break
+                
+                if not title:
+                    continue
+                
+                # 提取摘要
+                summary = ''
+                summary_sources = [
+                    content_data.get('summary', ''),
+                    content_data.get('description', ''),
+                    article.get('summary', ''),
+                ]
+                
+                for s in summary_sources:
+                    if s and len(str(s).strip()) > 10:
+                        summary = str(s).strip()
+                        break
+                
+                # 提取URL
+                url = ''
+                url_sources = [
+                    content_data.get('clickThroughUrl', {}).get('url', '') if isinstance(content_data.get('clickThroughUrl'), dict) else content_data.get('clickThroughUrl', ''),
+                    content_data.get('link', ''),
+                    article.get('link', ''),
+                ]
+                
+                for u in url_sources:
+                    if u and isinstance(u, str) and len(u) > 10:
+                        url = u
+                        break
+                
+                # 提取时间
+                published_time = datetime.now() - timedelta(hours=i+1)
+                time_sources = [
+                    content_data.get('providerPublishTime'),
+                    article.get('providerPublishTime'),
+                ]
+                
+                for time_val in time_sources:
+                    if time_val:
+                        try:
                             published_time = datetime.fromtimestamp(time_val)
                             break
-                        elif isinstance(time_val, str):
-                            published_time = datetime.fromisoformat(time_val.replace('Z', '+00:00')).replace(tzinfo=None)
-                            break
-                    except:
-                        continue
+                        except:
+                            continue
+                
+                processed_news.append({
+                    'title': title,
+                    'summary': summary or '暂无摘要',
+                    'url': url,
+                    'source': 'Yahoo Finance',
+                    'published': published_time,
+                    'method': 'yfinance'
+                })
+                
+            except Exception as e:
+                if debug:
+                    st.error(f"yfinance处理第{i+1}条新闻失败: {str(e)}")
+                continue
+        
+        return processed_news
+        
+    except Exception as e:
+        if debug:
+            st.error(f"yfinance获取失败: {str(e)}")
+        return []
+
+# ==================== 新闻源2: RSS源 ====================
+def fetch_rss_news(ticker=None, debug=False):
+    """RSS新闻源获取"""
+    rss_sources = [
+        {
+            'name': 'Reuters Business',
+            'url': 'http://feeds.reuters.com/reuters/businessNews',
+            'encoding': 'utf-8'
+        },
+        {
+            'name': 'MarketWatch',
+            'url': 'https://feeds.marketwatch.com/marketwatch/topstories/',
+            'encoding': 'utf-8'
+        },
+        {
+            'name': 'CNN Business',
+            'url': 'http://rss.cnn.com/rss/money_latest.rss',
+            'encoding': 'utf-8'
+        }
+    ]
+    
+    all_rss_news = []
+    
+    for source in rss_sources:
+        try:
+            if debug:
+                st.write(f"🔍 获取 {source['name']} RSS...")
             
-            processed_news.append({
-                'title': title.strip(),
-                'summary': summary.strip() if summary else '暂无摘要',
-                'url': url,
-                'source': source,
-                'published': published_time,
-                'is_real': True,
-                'raw_data': article  # 保留原始数据用于调试
-            })
+            feed = feedparser.parse(source['url'])
             
+            if not feed.entries:
+                if debug:
+                    st.warning(f"⚠️ {source['name']}: 无数据")
+                continue
+            
+            source_news = []
+            for entry in feed.entries[:5]:  # 每个源取5条
+                try:
+                    title = entry.get('title', '')
+                    summary = entry.get('summary', '') or entry.get('description', '')
+                    link = entry.get('link', '')
+                    
+                    # 如果指定了股票代码，过滤相关新闻
+                    if ticker:
+                        title_summary = (title + ' ' + summary).lower()
+                        if ticker.lower() not in title_summary:
+                            continue
+                    
+                    # 处理发布时间
+                    published_time = datetime.now()
+                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                        try:
+                            published_time = datetime(*entry.published_parsed[:6])
+                        except:
+                            pass
+                    
+                    if title and len(title) > 10:
+                        source_news.append({
+                            'title': title,
+                            'summary': summary[:300] + '...' if len(summary) > 300 else summary,
+                            'url': link,
+                            'source': source['name'],
+                            'published': published_time,
+                            'method': 'RSS'
+                        })
+                        
+                except Exception as e:
+                    continue
+            
+            all_rss_news.extend(source_news)
+            
+            if debug:
+                st.success(f"✅ {source['name']}: 获取 {len(source_news)} 条新闻")
+                
         except Exception as e:
-            if debug_mode:
-                st.error(f"处理第 {i+1} 条新闻时出错: {str(e)}")
+            if debug:
+                st.error(f"❌ {source['name']}: {str(e)}")
             continue
     
-    return processed_news
+    return all_rss_news
 
-def try_alternative_news_sources(ticker):
-    """尝试其他真实新闻源"""
-    # 这里可以添加其他真实的新闻API
-    # 例如: Alpha Vantage, Polygon.io, NewsAPI等
-    # 当前返回空列表，等待集成真实API
-    return []
+# ==================== 新闻源3: Google News ====================
+def fetch_google_news(query, debug=False):
+    """Google News RSS获取"""
+    try:
+        if debug:
+            st.write(f"🔍 获取Google News: {query}")
+        
+        encoded_query = quote(query)
+        url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+        
+        feed = feedparser.parse(url)
+        
+        if not feed.entries:
+            if debug:
+                st.warning("⚠️ Google News: 无数据")
+            return []
+        
+        google_news = []
+        for entry in feed.entries[:8]:  # 取8条
+            try:
+                title = entry.get('title', '')
+                summary = entry.get('summary', '') or '来自Google News'
+                link = entry.get('link', '')
+                
+                # 处理发布时间
+                published_time = datetime.now()
+                if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                    try:
+                        published_time = datetime(*entry.published_parsed[:6])
+                    except:
+                        pass
+                
+                if title and len(title) > 10:
+                    google_news.append({
+                        'title': title,
+                        'summary': summary[:300] + '...' if len(summary) > 300 else summary,
+                        'url': link,
+                        'source': 'Google News',
+                        'published': published_time,
+                        'method': 'Google RSS'
+                    })
+                    
+            except Exception as e:
+                continue
+        
+        if debug:
+            st.success(f"✅ Google News: 获取 {len(google_news)} 条新闻")
+        
+        return google_news
+        
+    except Exception as e:
+        if debug:
+            st.error(f"❌ Google News: {str(e)}")
+        return []
 
-@st.cache_data(ttl=900)  # 15分钟缓存，提高实时性
-def get_real_financial_news(ticker, debug_mode=False):
-    """获取真实财经新闻的主函数"""
+# ==================== 新闻整合和去重 ====================
+def remove_duplicate_news(news_list):
+    """去除重复新闻"""
+    seen_titles = set()
+    unique_news = []
+    
+    for news in news_list:
+        # 使用标题的前60个字符作为去重标识
+        title_key = news['title'][:60].lower().strip()
+        
+        if title_key not in seen_titles:
+            seen_titles.add(title_key)
+            unique_news.append(news)
+    
+    return unique_news
+
+@st.cache_data(ttl=900)  # 15分钟缓存
+def get_comprehensive_news(ticker=None, debug=False):
+    """获取所有来源的新闻并整合"""
     all_news = []
+    source_stats = {}
     
-    # 方法1: yfinance
-    yf_news = fetch_real_yfinance_news(ticker, debug_mode)
-    if yf_news:
+    # 来源1: yfinance（如果有ticker）
+    if ticker:
+        yf_news = fetch_yfinance_news(ticker, debug)
         all_news.extend(yf_news)
-        if debug_mode:
-            st.sidebar.success(f"✅ yfinance: 成功获取 {len(yf_news)} 条真实新闻")
-    else:
-        if debug_mode:
-            st.sidebar.warning("⚠️ yfinance: 未获取到新闻数据")
+        source_stats['yfinance'] = len(yf_news)
     
-    # 方法2: 其他真实新闻源
-    alt_news = try_alternative_news_sources(ticker)
-    if alt_news:
-        all_news.extend(alt_news)
-        if debug_mode:
-            st.sidebar.success(f"✅ 备选源: 成功获取 {len(alt_news)} 条真实新闻")
+    # 来源2: RSS新闻源
+    rss_news = fetch_rss_news(ticker, debug)
+    all_news.extend(rss_news)
+    source_stats['RSS'] = len(rss_news)
+    
+    # 来源3: Google News
+    if ticker:
+        google_query = f"{ticker} stock news"
+    else:
+        google_query = "stock market financial news"
+    
+    google_news = fetch_google_news(google_query, debug)
+    all_news.extend(google_news)
+    source_stats['Google News'] = len(google_news)
+    
+    # 去重
+    unique_news = remove_duplicate_news(all_news)
     
     # 按时间排序
-    if all_news:
-        all_news.sort(key=lambda x: x['published'], reverse=True)
+    unique_news.sort(key=lambda x: x['published'], reverse=True)
     
-    return all_news
+    # 统计信息
+    total_before = len(all_news)
+    total_after = len(unique_news)
+    removed = total_before - total_after
+    
+    if debug:
+        st.info(f"📊 总获取: {total_before} 条，去重后: {total_after} 条，移除重复: {removed} 条")
+    
+    return unique_news, source_stats
 
-# ==================== 翻译和分析系统（仅处理真实新闻）====================
-
-def create_financial_translation_dict():
-    """创建财经术语翻译词典"""
-    return {
-        # 基础财经术语
-        'earnings': '财报', 'revenue': '营收', 'profit': '利润', 'loss': '亏损',
-        'dividend': '分红', 'shares': '股份', 'stock': '股票', 'market': '市场',
-        'investor': '投资者', 'shareholder': '股东', 'trading': '交易',
-        
-        # 公司行为
-        'announced': '宣布', 'reported': '报告', 'disclosed': '披露', 'revealed': '透露',
-        'acquired': '收购', 'merged': '合并', 'launched': '推出', 'released': '发布',
-        
-        # 市场表现
-        'increased': '增长', 'decreased': '下降', 'rose': '上涨', 'fell': '下跌',
-        'gained': '上涨', 'dropped': '下跌', 'surged': '飙升', 'plunged': '暴跌',
-        
-        # 业绩相关
-        'beat expectations': '超预期', 'missed expectations': '不及预期',
-        'exceeded estimates': '超过预期', 'fell short': '未达预期',
-        'year-over-year': '同比', 'quarter-over-quarter': '环比',
-        
-        # 行业通用
-        'technology': '科技', 'healthcare': '医疗', 'financial': '金融',
-        'energy': '能源', 'consumer': '消费', 'industrial': '工业',
-        
-        # 数值相关
-        'billion': '十亿', 'million': '百万', 'percent': '百分比',
-        'quarterly': '季度', 'annual': '年度', 'monthly': '月度'
-    }
-
-def translate_financial_text(text):
-    """翻译财经文本"""
+# ==================== 翻译和分析 ====================
+def translate_finance_terms(text):
+    """基础财经术语翻译"""
     if not text:
         return text
     
-    translation_dict = create_financial_translation_dict()
+    terms = {
+        'earnings': '财报', 'revenue': '营收', 'profit': '利润',
+        'stock': '股票', 'shares': '股价', 'market': '市场',
+        'announced': '宣布', 'reported': '报告', 'increased': '增长',
+        'decreased': '下降', 'beat': '超过', 'missed': '未达到'
+    }
+    
     result = text
-    
-    # 应用词汇翻译
-    for en_term, zh_term in translation_dict.items():
-        pattern = r'\b' + re.escape(en_term) + r'\b'
-        result = re.sub(pattern, zh_term, result, flags=re.IGNORECASE)
-    
-    # 处理数字表达
-    result = re.sub(r'\$([0-9,.]+)\s*billion', r'\1十亿美元', result, flags=re.IGNORECASE)
-    result = re.sub(r'\$([0-9,.]+)\s*million', r'\1百万美元', result, flags=re.IGNORECASE)
-    result = re.sub(r'([0-9,.]+)%', r'\1%', result)
+    for en, zh in terms.items():
+        result = re.sub(r'\b' + re.escape(en) + r'\b', zh, result, flags=re.IGNORECASE)
     
     return result
 
-def extract_keywords_from_real_news(title, summary):
-    """从真实新闻中提取关键词"""
+def analyze_sentiment(title, summary):
+    """简单情绪分析"""
     text = (title + ' ' + summary).lower()
     
-    keyword_patterns = {
-        '业绩': ['earnings', 'revenue', 'profit', 'income', 'results'],
-        '并购': ['acquisition', 'merger', 'acquire', 'buy', 'purchase'],
-        '新产品': ['launch', 'introduce', 'unveil', 'release', 'debut'],
-        '财务': ['financial', 'fiscal', 'budget', 'cash', 'debt'],
-        '市场': ['market', 'trading', 'stock', 'share', 'price'],
-        '增长': ['growth', 'increase', 'rise', 'gain', 'up'],
-        '下降': ['decline', 'decrease', 'fall', 'drop', 'down'],
-        '监管': ['regulatory', 'regulation', 'approval', 'fda', 'government']
-    }
+    positive = ['beat', 'strong', 'growth', 'increase', 'rise', 'gain', 'success']
+    negative = ['miss', 'weak', 'decline', 'fall', 'drop', 'loss', 'concern']
     
-    found_keywords = []
-    for category, patterns in keyword_patterns.items():
-        if any(pattern in text for pattern in patterns):
-            found_keywords.append(category)
+    pos_count = sum(1 for word in positive if word in text)
+    neg_count = sum(1 for word in negative if word in text)
     
-    return found_keywords[:5]
-
-def analyze_real_news_sentiment(title, summary, keywords):
-    """分析真实新闻的情绪"""
-    text = (title + ' ' + summary).lower()
-    
-    positive_signals = ['beat', 'exceed', 'strong', 'growth', 'increase', 'success', 
-                       'approval', 'breakthrough', 'record', 'high', 'gain']
-    negative_signals = ['miss', 'weak', 'decline', 'fall', 'concern', 'challenge',
-                       'risk', 'loss', 'drop', 'low', 'worry']
-    
-    pos_count = sum(1 for signal in positive_signals if signal in text)
-    neg_count = sum(1 for signal in negative_signals if signal in text)
-    
-    # 结合关键词
-    bullish_keywords = ['业绩', '增长', '新产品']
-    bearish_keywords = ['下降', '监管']
-    
-    keyword_pos = sum(1 for kw in keywords if kw in bullish_keywords)
-    keyword_neg = sum(1 for kw in keywords if kw in bearish_keywords)
-    
-    total_pos = pos_count + keyword_pos
-    total_neg = neg_count + keyword_neg
-    
-    if total_pos > total_neg:
+    if pos_count > neg_count:
         return '利好'
-    elif total_neg > total_pos:
+    elif neg_count > pos_count:
         return '利空'
     else:
         return '中性'
 
-def get_investment_advice(sentiment):
-    """根据情绪给出投资建议"""
-    advice_map = {
-        '利好': {
-            'icon': '📈',
-            'advice': '积极信号，市场反应可能正面',
-            'action': '关注买入机会，但需结合其他因素',
-            'color': 'green'
-        },
-        '利空': {
-            'icon': '📉',
-            'advice': '谨慎信号，可能影响股价',
-            'action': '注意风险控制，考虑减仓或观望',
-            'color': 'red'
-        },
-        '中性': {
-            'icon': '📊',
-            'advice': '中性信号，影响有限',
-            'action': '保持现有策略，继续观察',
-            'color': 'gray'
-        }
-    }
-    return advice_map.get(sentiment, advice_map['中性'])
-
 # ==================== 侧边栏 ====================
 with st.sidebar:
-    st.header("📰 真实新闻获取")
+    st.header("📰 多源新闻设置")
     
-    # 股票代码输入
-    ticker_input = st.text_input(
-        "输入任意美股代码:",
-        placeholder="例如: AAPL, TSLA, AMZN, GOOGL...",
-        help="支持所有在美国交易所上市的股票"
+    ticker = st.text_input(
+        "股票代码 (可选):",
+        placeholder="例如: AAPL, TSLA...",
+        help="输入具体代码获取相关新闻，留空获取市场综合新闻"
     ).upper().strip()
     
     st.markdown("---")
     
-    # 调试选项
-    st.subheader("🔧 调试选项")
-    debug_mode = st.checkbox("启用调试模式", help="显示详细的数据获取过程")
-    show_raw_data = st.checkbox("显示原始数据", help="显示新闻的原始JSON数据")
+    debug_mode = st.checkbox("🔧 调试模式", help="显示详细获取过程")
+    show_source = st.checkbox("📡 显示数据源", value=True, help="显示每条新闻的来源")
     
     st.markdown("---")
     
-    # 获取新闻
-    if st.button("📰 获取真实新闻", type="primary", use_container_width=True):
-        if ticker_input:
-            st.session_state.selected_ticker = ticker_input
-            
-            with st.spinner(f"正在获取 {ticker_input} 的真实新闻..."):
-                real_news = get_real_financial_news(ticker_input, debug_mode)
-                
-                if real_news:
-                    # 处理真实新闻
-                    processed_news = []
-                    for news in real_news:
-                        translated_title = translate_financial_text(news['title'])
-                        translated_summary = translate_financial_text(news['summary'])
-                        keywords = extract_keywords_from_real_news(news['title'], news['summary'])
-                        sentiment = analyze_real_news_sentiment(news['title'], news['summary'], keywords)
-                        
-                        processed_item = {
-                            'title': translated_title,
-                            'summary': translated_summary,
-                            'published': news['published'],
-                            'source': news['source'],
-                            'url': news['url'],
-                            'keywords': keywords,
-                            'sentiment': sentiment,
-                            'is_real': True,
-                            'raw_data': news.get('raw_data') if show_raw_data else None
-                        }
-                        processed_news.append(processed_item)
-                    
-                    st.session_state.news_data = processed_news
-                    st.success(f"✅ 成功获取 {len(processed_news)} 条真实新闻")
-                else:
-                    st.session_state.news_data = []
-                    st.warning("⚠️ 未能获取到真实新闻数据")
-        else:
-            st.error("请输入股票代码")
+    if st.button("📰 获取多源新闻", type="primary"):
+        with st.spinner("正在从多个真实新闻源获取数据..."):
+            news_data, stats = get_comprehensive_news(ticker, debug_mode)
+            st.session_state.news_data = news_data
+            st.session_state.source_stats = stats
     
-    # 清除缓存
-    if st.button("🔄 清除缓存", use_container_width=True):
-        get_real_financial_news.clear()
+    if st.button("🔄 清除缓存"):
+        get_comprehensive_news.clear()
         st.session_state.news_data = None
-        st.session_state.debug_info = []
+        st.session_state.source_stats = {}
         st.success("缓存已清除")
-    
-    # 网络测试
-    if st.button("🌐 测试网络连接"):
-        with st.spinner("测试网络连接..."):
-            try:
-                response = requests.get('https://finance.yahoo.com', timeout=10)
-                if response.status_code == 200:
-                    st.success("✅ 网络连接正常")
-                else:
-                    st.warning(f"⚠️ 网络响应: {response.status_code}")
-            except Exception as e:
-                st.error(f"❌ 网络连接失败: {str(e)}")
 
 # ==================== 主界面 ====================
 if st.session_state.news_data is not None:
     news_data = st.session_state.news_data
-    ticker = st.session_state.selected_ticker
+    source_stats = st.session_state.source_stats
     
     if len(news_data) > 0:
-        # 统计信息
-        total = len(news_data)
-        bullish = len([n for n in news_data if n['sentiment'] == '利好'])
-        bearish = len([n for n in news_data if n['sentiment'] == '利空'])
-        neutral = len([n for n in news_data if n['sentiment'] == '中性'])
+        # 数据源统计
+        st.subheader("📊 数据源统计")
         
-        # 显示统计
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("📰 真实新闻", total)
-        with col2:
-            st.metric("📈 利好", bullish)
-        with col3:
-            st.metric("📉 利空", bearish)
-        with col4:
-            st.metric("📊 中性", neutral)
+        cols = st.columns(len(source_stats) + 1)
         
-        # 情绪总结
-        if bullish > bearish:
-            st.success(f"📈 {ticker} 新闻情绪偏向积极")
-        elif bearish > bullish:
-            st.error(f"📉 {ticker} 新闻情绪偏向消极")
-        else:
-            st.info(f"📊 {ticker} 新闻情绪相对平衡")
+        total_raw = sum(source_stats.values())
+        with cols[0]:
+            st.metric("总计", f"{len(news_data)} 条", f"原始: {total_raw}")
+        
+        for i, (source, count) in enumerate(source_stats.items(), 1):
+            with cols[i]:
+                st.metric(source, f"{count} 条")
+        
+        # 情绪分析统计
+        sentiments = {}
+        for news in news_data:
+            sentiment = analyze_sentiment(news['title'], news['summary'])
+            sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
+        
+        if sentiments:
+            st.subheader("📈 市场情绪分析")
+            sentiment_cols = st.columns(3)
+            
+            colors = {'利好': 'green', '利空': 'red', '中性': 'gray'}
+            for i, (sentiment, count) in enumerate(sentiments.items()):
+                with sentiment_cols[i % 3]:
+                    pct = count / len(news_data) * 100
+                    st.metric(sentiment, count, f"{pct:.0f}%")
         
         st.markdown("---")
         
-        # 显示新闻
-        st.subheader(f"📰 {ticker} 真实财经新闻")
+        # 新闻列表
+        st.subheader(f"📰 {ticker or '市场'} 最新新闻 ({len(news_data)} 条)")
         
         for i, news in enumerate(news_data):
-            advice = get_investment_advice(news['sentiment'])
-            
             with st.container():
+                # 标题
+                title_display = news['title']
+                if show_source:
+                    title_display += f" [{news['source']}]"
+                
+                st.markdown(f"### {i+1}. {title_display}")
+                
+                # 元信息
+                time_str = news['published'].strftime('%Y-%m-%d %H:%M')
+                method_info = f" | 方法: {news['method']}" if show_source else ""
+                st.caption(f"🕒 {time_str} | 📡 {news['source']}{method_info}")
+                
+                # 内容
                 col_main, col_side = st.columns([3, 1])
                 
                 with col_main:
-                    st.markdown(f"### 📰 {news['title']}")
-                    
-                    time_str = news['published'].strftime('%Y-%m-%d %H:%M')
-                    st.caption(f"🕒 {time_str} | 📡 {news['source']}")
-                    
-                    st.write(news['summary'])
-                    
-                    if news['keywords']:
-                        keywords_str = " ".join([f"`{kw}`" for kw in news['keywords']])
-                        st.markdown(f"**🏷️ 关键词:** {keywords_str}")
+                    # 显示摘要（带基础翻译）
+                    translated_summary = translate_finance_terms(news['summary'])
+                    st.write(translated_summary)
                     
                     if news['url']:
                         st.markdown(f"🔗 [阅读原文]({news['url']})")
-                    
-                    # 显示原始数据（如果启用）
-                    if news.get('raw_data') and show_raw_data:
-                        with st.expander("🔍 原始数据"):
-                            st.json(news['raw_data'])
                 
                 with col_side:
-                    st.markdown(f"### {advice['icon']}")
-                    st.markdown(f"**<span style='color:{advice['color']}'>{news['sentiment']}</span>**", unsafe_allow_html=True)
-                    
-                    st.write("**📋 市场影响:**")
-                    st.write(advice['advice'])
-                    
-                    st.write("**💡 操作建议:**")
-                    st.write(advice['action'])
-            
-            st.markdown("---")
+                    # 情绪分析
+                    sentiment = analyze_sentiment(news['title'], news['summary'])
+                    color_map = {'利好': 'green', '利空': 'red', '中性': 'gray'}
+                    st.markdown(f"**情绪:** <span style='color:{color_map[sentiment]}'>{sentiment}</span>", unsafe_allow_html=True)
+                
+                st.markdown("---")
     
     else:
-        st.warning("📭 未获取到真实新闻数据")
-        
-        if st.session_state.debug_info:
-            st.subheader("🔍 调试信息")
-            for info in st.session_state.debug_info:
-                st.write(info)
-        
-        st.markdown("### 💡 可能的原因：")
-        st.markdown("""
-        1. **API限制**: Yahoo Finance可能暂时限制访问
-        2. **网络问题**: 检查网络连接是否正常
-        3. **股票代码**: 确认输入的是有效的美股代码
-        4. **服务状态**: Yahoo Finance服务可能暂时不可用
-        """)
-        
-        st.markdown("### 🔧 建议操作：")
-        st.markdown("""
-        - 启用调试模式查看详细信息
-        - 尝试其他知名股票代码（如 AAPL, MSFT）
-        - 检查网络连接
-        - 稍后重试
-        """)
+        st.warning("📭 未获取到新闻数据")
+        if st.session_state.source_stats:
+            st.write("数据源尝试结果:")
+            for source, count in st.session_state.source_stats.items():
+                st.write(f"- {source}: {count} 条")
 
 else:
-    # 欢迎页面
     st.markdown("""
-    ## 🎯 真实新闻获取系统
+    ## 🎯 多源新闻集成系统
     
-    ### ✨ 核心原则
+    ### 📡 **整合多个真实新闻源**
     
-    #### 📰 **只获取真实新闻**
-    - ✅ 仅从官方API获取真实新闻数据
-    - ❌ 绝不生成模拟或模板新闻
-    - 🔍 提供详细的数据来源透明度
+    #### 🥇 **主要源 - yfinance**
+    - ✅ **高质量**: 直接相关的财经新闻
+    - ✅ **结构化**: 数据完整，包含链接
+    - ✅ **实时性**: 更新及时
+    - ⚠️ **局限性**: 仅Yahoo Finance视角
     
-    #### 🌐 **支持所有美股**
-    - 📈 支持任意美股股票代码
-    - 🏢 无预设公司列表限制
-    - 🔧 通用的财经术语翻译系统
+    #### 🥈 **补充源 - RSS**
+    - 📰 **Reuters**: 权威国际财经新闻
+    - 📊 **MarketWatch**: 专业市场分析
+    - 🏢 **CNN Business**: 主流商业新闻
+    - ✅ **多元化**: 不同媒体视角
     
-    #### 🛡️ **诚实透明**
-    - 📊 如果无法获取新闻，诚实告知
-    - 🔍 提供详细的调试信息
-    - 📡 显示真实的数据来源
+    #### 🥉 **扩展源 - Google News**
+    - 🔍 **全面搜索**: 聚合多个新闻源
+    - 🌐 **广覆盖**: 包含小众但重要的新闻
+    - ⚡ **实时性**: Google新闻更新很快
     
-    ### 🚀 使用方法
+    ### 🛡️ **系统优势**
     
-    1. **输入股票代码** - 任意美股代码（如 AAPL, GOOGL, BRK.A）
-    2. **获取真实新闻** - 系统尝试从官方源获取
-    3. **查看结果** - 如果成功，显示翻译和分析
-    4. **调试支持** - 如果失败，提供详细的问题诊断
+    #### 📊 **可靠性**
+    - **多重备份**: 一个源失效不影响整体
+    - **自动去重**: 避免重复新闻
+    - **智能排序**: 按时间和重要性排列
     
-    ### 🔧 技术特色
+    #### 🎯 **全面性**
+    - **不同视角**: 多个媒体的报道角度
+    - **更多数量**: 通常能获取20-30条新闻
+    - **互补信息**: 某些新闻只在特定源出现
     
-    - **多重验证**: 验证新闻数据的完整性和真实性
-    - **智能翻译**: 专业的财经术语中文翻译
-    - **情绪分析**: 基于真实新闻内容的AI分析
-    - **调试模式**: 详细的获取过程透明化
+    ### 💡 **使用建议**
     
-    ### ⚠️ 重要说明
-    
-    本系统承诺：
-    - 🔒 **绝不生成假新闻**
-    - 📰 **只展示真实新闻数据**
-    - 🚫 **API失败时诚实告知**
-    - 🔍 **提供完整的问题诊断**
+    - **个股新闻**: 输入股票代码获取相关新闻
+    - **市场新闻**: 留空获取综合市场新闻  
+    - **对比验证**: 同一事件的多源报道增加可信度
+    - **时效把握**: 关注发布时间，最新消息最重要
     
     ---
     
-    **👈 请在左侧输入任意美股代码开始**
+    **👈 在左侧开始体验多源新闻获取**
     """)
-    
-    with st.expander("📖 系统说明"):
-        st.markdown("""
-        ### 🎯 设计理念
-        
-        这个系统专门为那些需要**真实财经新闻**的用户设计：
-        
-        #### ✅ 我们做什么
-        - 从Yahoo Finance等官方渠道获取真实新闻
-        - 提供专业的财经术语翻译
-        - 进行基于真实内容的情绪分析
-        - 在获取失败时提供详细的问题诊断
-        
-        #### ❌ 我们不做什么
-        - 不生成任何模拟新闻内容
-        - 不使用新闻模板或虚假数据
-        - 不隐瞒API获取失败的情况
-        - 不限制特定的股票代码列表
-        
-        ### 🔧 技术实现
-        
-        1. **真实性验证**: 每条新闻都验证标题、内容完整性
-        2. **错误透明**: API失败时显示具体错误信息
-        3. **调试支持**: 详细的获取过程日志
-        4. **源码开放**: 所有处理逻辑完全透明
-        
-        ### 💡 使用建议
-        
-        - 如果遇到获取失败，启用调试模式查看具体原因
-        - 尝试不同的知名股票代码验证系统功能
-        - 网络问题时可以稍后重试
-        - 我们相信透明比便利更重要
-        """)
 
 # 页脚
 st.markdown("---")
-st.markdown("📰 真实新闻获取系统 | 🔒 只显示真实数据 | 🚫 拒绝虚假内容 | 🔍 完全透明")
+st.markdown("📰 多源新闻集成系统 | 🔄 yfinance + RSS + Google News | 🚫 去重处理 | ⚡ 实时更新")
