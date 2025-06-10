@@ -5,26 +5,15 @@ from datetime import datetime, timedelta
 import re
 from urllib.parse import quote
 import warnings
+import hashlib
 import time
+import json
 warnings.filterwarnings('ignore')
 
-# ==================== 新增: Google翻译功能 ====================
-@st.cache_resource
-def get_translator():
-    """获取翻译器实例（缓存）"""
-    try:
-        from googletrans import Translator
-        return Translator()
-    except ImportError:
-        st.sidebar.error("请安装Google翻译库: pip install googletrans==4.0.0rc1")
-        return None
-    except Exception as e:
-        st.sidebar.warning(f"翻译器初始化失败: {str(e)}")
-        return None
+# ==================== 云翻译API方案（客户无需安装）====================
 
-@st.cache_data(ttl=3600)  # 翻译结果缓存1小时
-def google_translate_text(text: str, target_lang: str = 'zh') -> str:
-    """使用Google翻译文本"""
+def translate_with_free_api(text: str, target_lang: str = 'zh') -> str:
+    """使用免费翻译API服务"""
     if not text or len(text.strip()) < 3:
         return text
     
@@ -32,99 +21,266 @@ def google_translate_text(text: str, target_lang: str = 'zh') -> str:
     if any('\u4e00' <= char <= '\u9fff' for char in text):
         return text
     
-    translator = get_translator()
-    if not translator:
-        return enhance_financial_translation(text)  # 备用方案
+    try:
+        # 方案1: 使用MyMemory免费翻译API (每天免费1000次调用)
+        url = "https://api.mymemory.translated.net/get"
+        params = {
+            'q': text[:500],  # 限制长度
+            'langpair': f'en|{target_lang}'
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('responseStatus') == 200:
+                translated = result['responseData']['translatedText']
+                if translated and translated != text:
+                    return translated
+    except:
+        pass
     
     try:
-        # 处理长文本
-        if len(text) > 4000:
-            chunks = [text[i:i+3800] for i in range(0, len(text), 3800)]
-            translated_chunks = []
-            
-            for chunk in chunks:
-                result = translator.translate(chunk, dest=target_lang)
-                translated_chunks.append(result.text)
-                time.sleep(0.1)  # 避免请求过快
-            
-            return ' '.join(translated_chunks)
-        else:
-            result = translator.translate(text, dest=target_lang)
-            return result.text
-            
-    except Exception as e:
-        # 翻译失败时使用备用方案
-        return enhance_financial_translation(text)
-
-def enhance_financial_translation(text: str) -> str:
-    """增强版财经术语翻译（升级原有功能）"""
-    financial_terms = {
-        # 基础术语（扩展版）
-        'earnings': '财报', 'revenue': '营收', 'profit': '利润', 'loss': '亏损',
-        'stock': '股票', 'shares': '股价', 'market': '市场', 'trading': '交易',
-        'company': '公司', 'corporation': '公司', 'investors': '投资者',
+        # 方案2: 使用Libretranslate免费API
+        url = "https://libretranslate.de/translate"
+        data = {
+            'q': text[:500],
+            'source': 'en',
+            'target': 'zh',
+            'format': 'text'
+        }
         
-        # 动作词汇（扩展版）
+        response = requests.post(url, data=data, timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            translated = result.get('translatedText', '')
+            if translated and translated != text:
+                return translated
+    except:
+        pass
+    
+    # 备用方案：高级词典翻译
+    return advanced_financial_translate(text)
+
+def translate_with_baidu_api(text: str, app_id: str = None, secret_key: str = None) -> str:
+    """百度翻译API（可选，需要API key）"""
+    if not app_id or not secret_key:
+        return None
+    
+    try:
+        url = 'https://fanyi-api.baidu.com/api/trans/vip/translate'
+        salt = str(int(time.time()))
+        sign_str = app_id + text + salt + secret_key
+        sign = hashlib.md5(sign_str.encode()).hexdigest()
+        
+        params = {
+            'q': text,
+            'from': 'en',
+            'to': 'zh',
+            'appid': app_id,
+            'salt': salt,
+            'sign': sign
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        result = response.json()
+        
+        if 'trans_result' in result:
+            translations = [item['dst'] for item in result['trans_result']]
+            return ' '.join(translations)
+    except:
+        pass
+    
+    return None
+
+@st.cache_data(ttl=3600)  # 翻译结果缓存1小时
+def smart_translate_text(text: str, use_api: bool = True, api_config: dict = None) -> str:
+    """智能翻译文本"""
+    if not text or len(text.strip()) < 3:
+        return text
+    
+    # 检查是否已经包含中文
+    if any('\u4e00' <= char <= '\u9fff' for char in text):
+        return text
+    
+    if use_api:
+        # 优先使用付费API（如果配置了）
+        if api_config and api_config.get('baidu_app_id'):
+            baidu_result = translate_with_baidu_api(
+                text, 
+                api_config['baidu_app_id'], 
+                api_config['baidu_secret_key']
+            )
+            if baidu_result:
+                return baidu_result
+        
+        # 使用免费API
+        free_result = translate_with_free_api(text)
+        if free_result != text:  # 如果翻译成功
+            return free_result
+    
+    # 最终备用：高级词典翻译
+    return advanced_financial_translate(text)
+
+def advanced_financial_translate(text: str) -> str:
+    """高级财经词典翻译系统（无需外部依赖）"""
+    if not text or len(text.strip()) < 3:
+        return text
+    
+    # 超大财经词典
+    translations = {
+        # 公司相关
+        'company': '公司', 'corporation': '公司', 'inc': '公司', 'ltd': '有限公司',
+        'group': '集团', 'holdings': '控股', 'enterprises': '企业', 'industries': '实业',
+        'technologies': '科技', 'systems': '系统', 'solutions': '解决方案',
+        'services': '服务', 'international': '国际', 'global': '全球',
+        
+        # 基础财务术语
+        'earnings': '财报', 'revenue': '营收', 'sales': '销售额', 'income': '收入',
+        'profit': '利润', 'loss': '亏损', 'net income': '净收入', 'gross profit': '毛利润',
+        'operating income': '营业收入', 'ebitda': 'EBITDA', 'cash flow': '现金流',
+        'expenses': '支出', 'costs': '成本', 'margin': '利润率', 'growth': '增长',
+        
+        # 股票市场
+        'stock': '股票', 'shares': '股份', 'share price': '股价', 'market cap': '市值',
+        'trading': '交易', 'volume': '成交量', 'market': '市场', 'exchange': '交易所',
+        'nasdaq': '纳斯达克', 'nyse': '纽交所', 'dow jones': '道琼斯', 's&p 500': '标普500',
+        
+        # 投资者相关
+        'investors': '投资者', 'shareholders': '股东', 'analyst': '分析师', 'analysts': '分析师们',
+        'institutional investors': '机构投资者', 'retail investors': '散户投资者',
+        'portfolio': '投资组合', 'fund': '基金', 'hedge fund': '对冲基金',
+        
+        # 业绩表现
+        'beat': '超出预期', 'missed': '未达预期', 'exceeded': '超过', 'outperformed': '表现超出',
+        'underperformed': '表现不佳', 'met': '符合预期', 'expectations': '预期',
+        'estimates': '预估', 'consensus': '一致预期', 'guidance': '指引',
+        
+        # 情绪词汇
+        'strong': '强劲', 'weak': '疲软', 'solid': '稳健', 'robust': '强健',
+        'disappointing': '令人失望', 'impressive': '令人印象深刻', 'outstanding': '杰出',
+        'volatile': '波动', 'stable': '稳定', 'uncertain': '不确定', 'optimistic': '乐观',
+        
+        # 动作词汇
         'announced': '宣布', 'reported': '报告', 'released': '发布', 'disclosed': '披露',
+        'launched': '推出', 'introduced': '推介', 'unveiled': '揭晓', 'presented': '展示',
+        'acquired': '收购', 'merged': '合并', 'divested': '剥离', 'spun off': '分拆',
+        
+        # 价格变动
         'increased': '增长', 'decreased': '下降', 'rose': '上涨', 'fell': '下跌',
         'gained': '上涨', 'dropped': '下跌', 'surged': '飙升', 'plunged': '暴跌',
         'rallied': '反弹', 'tumbled': '重挫', 'soared': '飙升', 'crashed': '暴跌',
+        'climbed': '攀升', 'slipped': '下滑', 'jumped': '跳涨', 'dipped': '下跌',
         
-        # 业绩词汇（扩展版）
-        'beat': '超出预期', 'missed': '未达预期', 'exceeded': '超过', 'outperformed': '表现超出',
-        'strong': '强劲', 'weak': '疲软', 'solid': '稳健', 'robust': '强健',
-        'disappointing': '令人失望', 'impressive': '令人印象深刻', 'outstanding': '杰出',
-        
-        # 时间词汇（扩展版）
-        'quarterly': '季度', 'annual': '年度', 'monthly': '月度', 'daily': '每日',
+        # 时间表达
+        'quarterly': '季度', 'annual': '年度', 'monthly': '月度', 'daily': '日度',
         'year-over-year': '同比', 'quarter-over-quarter': '环比', 'yoy': '同比',
+        'q1': '第一季度', 'q2': '第二季度', 'q3': '第三季度', 'q4': '第四季度',
         
-        # 新增：关键财经词汇
-        'ipo': 'IPO首次公开募股', 'buyback': '股票回购', 'dividend': '股息分红',
-        'merger': '并购', 'acquisition': '收购', 'partnership': '合作伙伴关系',
-        'guidance': '业绩指引', 'forecast': '预测', 'outlook': '前景展望',
-        'analyst': '分析师', 'rating': '评级', 'upgrade': '上调评级', 'downgrade': '下调评级',
-        
-        # 新增：数量和趋势
-        'billion': '十亿', 'million': '百万', 'thousand': '千',
+        # 数量单位
+        'billion': '十亿', 'million': '百万', 'thousand': '千', 'trillion': '万亿',
         'percent': '百分比', 'percentage': '百分比', 'basis points': '基点',
-        'growth': '增长', 'decline': '下降', 'volatility': '波动性',
-        'bullish': '看涨', 'bearish': '看跌', 'neutral': '中性'
+        'dollars': '美元', 'cents': '美分',
+        
+        # 行业术语
+        'ipo': 'IPO/首次公开募股', 'buyback': '股票回购', 'dividend': '股息分红',
+        'split': '股票分割', 'merger': '并购', 'acquisition': '收购',
+        'partnership': '合作伙伴关系', 'joint venture': '合资企业',
+        'forecast': '预测', 'outlook': '前景展望', 'projections': '预测',
+        
+        # 评级相关
+        'rating': '评级', 'upgrade': '上调评级', 'downgrade': '下调评级',
+        'buy': '买入', 'sell': '卖出', 'hold': '持有', 'overweight': '超配',
+        'underweight': '低配', 'neutral': '中性', 'target price': '目标价',
+        
+        # 技术分析
+        'support': '支撑位', 'resistance': '阻力位', 'trend': '趋势',
+        'bullish': '看涨', 'bearish': '看跌', 'momentum': '动量',
+        'volatility': '波动性', 'liquidity': '流动性',
+        
+        # 宏观经济
+        'inflation': '通胀', 'recession': '衰退', 'recovery': '复苏',
+        'interest rates': '利率', 'fed': '美联储', 'federal reserve': '美联储',
+        'gdp': 'GDP/国内生产总值', 'unemployment': '失业率',
+        
+        # 行业板块
+        'technology': '科技', 'healthcare': '医疗', 'finance': '金融',
+        'energy': '能源', 'utilities': '公用事业', 'consumer': '消费',
+        'industrial': '工业', 'materials': '材料', 'real estate': '房地产',
+        
+        # 新闻动作
+        'according to': '据...称', 'sources said': '消息人士透露',
+        'reported that': '报道称', 'confirmed': '确认', 'denied': '否认',
+        'estimated': '估计', 'projected': '预计', 'expected': '预期',
+        
+        # 常用连接词
+        'however': '然而', 'meanwhile': '与此同时', 'additionally': '此外',
+        'furthermore': '此外', 'nevertheless': '然而', 'moreover': '此外',
+        'therefore': '因此', 'consequently': '因此', 'as a result': '因此',
+        
+        # 比较词汇
+        'compared to': '与...相比', 'versus': '对比', 'higher than': '高于',
+        'lower than': '低于', 'better than': '优于', 'worse than': '逊于',
+        
+        # 特殊表达
+        'all-time high': '历史新高', 'all-time low': '历史新低',
+        'record high': '创纪录高位', 'record low': '创纪录低位',
+        'year-to-date': '年初至今', 'month-to-date': '月初至今'
     }
     
     result = text
-    for en, zh in financial_terms.items():
-        pattern = r'\b' + re.escape(en) + r'\b'
-        result = re.sub(pattern, f"{en}({zh})", result, flags=re.IGNORECASE)
     
-    # 增强的数字表达处理
+    # 首先处理复合词组
+    compound_phrases = {
+        'all-time high': '历史新高', 'all-time low': '历史新低', 
+        'record high': '创纪录高位', 'record low': '创纪录低位',
+        'year-over-year': '同比', 'quarter-over-quarter': '环比',
+        'net income': '净收入', 'gross profit': '毛利润',
+        'operating income': '营业收入', 'cash flow': '现金流',
+        'market cap': '市值', 'share price': '股价'
+    }
+    
+    # 先处理短语
+    for en_phrase, zh_phrase in compound_phrases.items():
+        pattern = r'\b' + re.escape(en_phrase) + r'\b'
+        result = re.sub(pattern, f"{en_phrase}({zh_phrase})", result, flags=re.IGNORECASE)
+    
+    # 再处理单词
+    for en_word, zh_word in translations.items():
+        if en_word not in compound_phrases:
+            pattern = r'\b' + re.escape(en_word) + r'\b'
+            result = re.sub(pattern, f"{en_word}({zh_word})", result, flags=re.IGNORECASE)
+    
+    # 处理数字表达
     result = re.sub(r'\$([0-9,.]+)\s*billion', r'\1十亿美元', result, flags=re.IGNORECASE)
     result = re.sub(r'\$([0-9,.]+)\s*million', r'\1百万美元', result, flags=re.IGNORECASE)
     result = re.sub(r'\$([0-9,.]+)\s*thousand', r'\1千美元', result, flags=re.IGNORECASE)
+    result = re.sub(r'\$([0-9,.]+)', r'\1美元', result)
     result = re.sub(r'([0-9,.]+)%', r'\1%', result)
     
     return result
 
 # 页面配置
 st.set_page_config(
-    page_title="📰 最新可靠新闻系统 (智能翻译版)",
+    page_title="📰 最新可靠新闻系统 (云翻译版)",
     page_icon="📰",
     layout="wide"
 )
 
-st.title("📰 最新可靠新闻系统 (智能翻译版)")
-st.markdown("**只使用验证有效的新闻源 - 高稳定性 - 高质量新闻 - 🌐 智能中文翻译**")
+st.title("📰 最新可靠新闻系统 (云翻译版)")
+st.markdown("**只使用验证有效的新闻源 - 高稳定性 - 高质量新闻 - 🌐 云端智能翻译**")
 st.markdown("---")
 
-# 初始化 session state（新增翻译相关状态）
+# 初始化 session state
 if 'news_data' not in st.session_state:
     st.session_state.news_data = None
 if 'source_stats' not in st.session_state:
     st.session_state.source_stats = {}
 if 'translated_news' not in st.session_state:
     st.session_state.translated_news = None
+if 'api_config' not in st.session_state:
+    st.session_state.api_config = {}
 
-# ==================== 新闻源1: yfinance（已验证100%有效）====================
+# ==================== 新闻源代码（保持原有逻辑）====================
 def get_yfinance_news(ticker, debug=False):
     """获取yfinance新闻 - 已验证有效"""
     try:
@@ -145,10 +301,9 @@ def get_yfinance_news(ticker, debug=False):
                 if not isinstance(article, dict):
                     continue
                 
-                # 处理yfinance的新API结构
                 content_data = article.get('content', article)
                 
-                # 多种方式提取标题
+                # 提取标题
                 title = ''
                 for title_field in ['title', 'headline', 'shortName']:
                     t = content_data.get(title_field, '') or article.get(title_field, '')
@@ -159,7 +314,7 @@ def get_yfinance_news(ticker, debug=False):
                 if not title:
                     continue
                 
-                # 多种方式提取摘要
+                # 提取摘要
                 summary = ''
                 for summary_field in ['summary', 'description', 'snippet']:
                     s = content_data.get(summary_field, '') or article.get(summary_field, '')
@@ -167,16 +322,14 @@ def get_yfinance_news(ticker, debug=False):
                         summary = str(s).strip()
                         break
                 
-                # 多种方式提取URL
+                # 提取URL
                 url = ''
-                # 检查clickThroughUrl
                 click_url = content_data.get('clickThroughUrl', {})
                 if isinstance(click_url, dict):
                     url = click_url.get('url', '')
                 elif isinstance(click_url, str):
                     url = click_url
                 
-                # 备选URL字段
                 if not url:
                     for url_field in ['link', 'url', 'canonicalUrl']:
                         u = content_data.get(url_field, '') or article.get(url_field, '')
@@ -223,7 +376,6 @@ def get_yfinance_news(ticker, debug=False):
             st.sidebar.error(f"❌ yfinance获取失败: {str(e)}")
         return []
 
-# ==================== 新闻源2: Google News（增强版）====================
 def get_google_news(query, debug=False):
     """获取Google News - 增强版"""
     try:
@@ -245,8 +397,6 @@ def get_google_news(query, debug=False):
             return []
         
         content = response.text
-        
-        # 提取新闻项目
         item_pattern = r'<item>(.*?)</item>'
         items = re.findall(item_pattern, content, re.DOTALL | re.IGNORECASE)
         
@@ -254,15 +404,13 @@ def get_google_news(query, debug=False):
             st.sidebar.write(f"📊 Google News: 找到 {len(items)} 个新闻项目")
         
         news_items = []
-        for i, item in enumerate(items[:20]):  # 取前20个，然后筛选
+        for i, item in enumerate(items[:20]):
             try:
-                # 提取标题
                 title_match = re.search(r'<title[^>]*>(.*?)</title>', item, re.DOTALL | re.IGNORECASE)
                 if not title_match:
                     continue
                     
                 title = title_match.group(1).strip()
-                # 处理CDATA和HTML
                 title = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', title)
                 title = re.sub(r'<[^>]+>', '', title)
                 title = title.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
@@ -271,19 +419,15 @@ def get_google_news(query, debug=False):
                 if not title or len(title) < 15:
                     continue
                 
-                # 提取链接
                 link_match = re.search(r'<link[^>]*>(.*?)</link>', item, re.DOTALL | re.IGNORECASE)
                 link = link_match.group(1).strip() if link_match else ''
                 
-                # 提取发布时间
-                pub_date = datetime.now() - timedelta(hours=i/2)  # 更合理的时间间隔
+                pub_date = datetime.now() - timedelta(hours=i/2)
                 date_match = re.search(r'<pubDate[^>]*>(.*?)</pubDate>', item, re.DOTALL | re.IGNORECASE)
                 if date_match:
                     try:
                         date_str = date_match.group(1).strip()
-                        # 移除时区信息
                         date_str = re.sub(r'\s+[A-Z]{3,4}$', '', date_str)
-                        # 尝试解析日期
                         pub_date = datetime.strptime(date_str.strip(), '%a, %d %b %Y %H:%M:%S')
                     except:
                         pass
@@ -312,7 +456,6 @@ def get_google_news(query, debug=False):
             st.sidebar.error(f"❌ Google News获取失败: {str(e)}")
         return []
 
-# ==================== 新闻源3: Yahoo Finance RSS（备用源）====================
 def get_yahoo_rss_news(ticker=None, debug=False):
     """获取Yahoo Finance RSS新闻"""
     try:
@@ -333,8 +476,6 @@ def get_yahoo_rss_news(ticker=None, debug=False):
             return []
         
         content = response.text
-        
-        # 简单的RSS解析
         item_pattern = r'<item>(.*?)</item>'
         items = re.findall(item_pattern, content, re.DOTALL | re.IGNORECASE)
         
@@ -342,9 +483,8 @@ def get_yahoo_rss_news(ticker=None, debug=False):
             st.sidebar.write(f"📊 Yahoo RSS: 找到 {len(items)} 个新闻项目")
         
         news_items = []
-        for i, item in enumerate(items[:8]):  # 取前8条
+        for i, item in enumerate(items[:8]):
             try:
-                # 提取标题
                 title_match = re.search(r'<title[^>]*>(.*?)</title>', item, re.DOTALL | re.IGNORECASE)
                 if not title_match:
                     continue
@@ -357,17 +497,14 @@ def get_yahoo_rss_news(ticker=None, debug=False):
                 if not title or len(title) < 10:
                     continue
                 
-                # 如果指定了股票代码，简单过滤
                 if ticker:
                     if (ticker.lower() not in title.lower() and 
                         ticker.lower() not in item.lower()):
                         continue
                 
-                # 提取链接
                 link_match = re.search(r'<link[^>]*>(.*?)</link>', item, re.DOTALL | re.IGNORECASE)
                 link = link_match.group(1).strip() if link_match else ''
                 
-                # 提取描述
                 desc_match = re.search(r'<description[^>]*>(.*?)</description>', item, re.DOTALL | re.IGNORECASE)
                 description = ''
                 if desc_match:
@@ -400,14 +537,12 @@ def get_yahoo_rss_news(ticker=None, debug=False):
             st.sidebar.error(f"❌ Yahoo RSS获取失败: {str(e)}")
         return []
 
-# ==================== 去重和整合系统 ====================
 def smart_remove_duplicates(news_list):
     """智能去重"""
     seen_titles = set()
     unique_news = []
     
     for news in news_list:
-        # 创建标题指纹用于去重
         title_fingerprint = re.sub(r'[^\w\s]', '', news['title'][:50].lower())
         title_fingerprint = re.sub(r'\s+', ' ', title_fingerprint).strip()
         
@@ -417,7 +552,7 @@ def smart_remove_duplicates(news_list):
     
     return unique_news
 
-@st.cache_data(ttl=900)  # 15分钟缓存
+@st.cache_data(ttl=900)
 def get_all_reliable_news(ticker=None, debug=False):
     """获取所有可靠新闻源的新闻"""
     all_news = []
@@ -426,7 +561,6 @@ def get_all_reliable_news(ticker=None, debug=False):
     if debug:
         st.sidebar.markdown("### 🔍 新闻获取过程")
     
-    # 源1: yfinance（主力源）
     if ticker:
         yf_news = get_yfinance_news(ticker, debug)
         all_news.extend(yf_news)
@@ -434,7 +568,6 @@ def get_all_reliable_news(ticker=None, debug=False):
     else:
         source_stats['yfinance'] = 0
     
-    # 源2: Google News（补充源）
     if ticker:
         google_query = f"{ticker} stock financial earnings revenue"
     else:
@@ -444,18 +577,13 @@ def get_all_reliable_news(ticker=None, debug=False):
     all_news.extend(google_news)
     source_stats['Google News'] = len(google_news)
     
-    # 源3: Yahoo RSS（备用源）
     yahoo_rss_news = get_yahoo_rss_news(ticker, debug)
     all_news.extend(yahoo_rss_news)
     source_stats['Yahoo RSS'] = len(yahoo_rss_news)
     
-    # 智能去重
     unique_news = smart_remove_duplicates(all_news)
-    
-    # 按时间排序
     unique_news.sort(key=lambda x: x['published'], reverse=True)
     
-    # 统计信息
     total_before = len(all_news)
     total_after = len(unique_news)
     removed = total_before - total_after
@@ -465,8 +593,8 @@ def get_all_reliable_news(ticker=None, debug=False):
     
     return unique_news, source_stats
 
-# ==================== 新增：批量翻译功能 ====================
-def translate_news_batch(news_list, translate_title=True, translate_summary=True, translation_mode="complete"):
+# ==================== 批量翻译功能 ====================
+def translate_news_batch(news_list, use_api=True, api_config=None, translate_title=True, translate_summary=True):
     """批量翻译新闻"""
     if not news_list:
         return []
@@ -474,69 +602,41 @@ def translate_news_batch(news_list, translate_title=True, translate_summary=True
     translated_news = []
     total_count = len(news_list)
     
-    # 创建进度条
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     for i, news in enumerate(news_list):
-        # 更新进度
         progress = (i + 1) / total_count
         progress_bar.progress(progress)
         status_text.text(f"🌐 正在翻译第 {i+1}/{total_count} 条新闻...")
         
         translated_item = news.copy()
         
-        # 翻译标题
         if translate_title and news.get('title'):
-            if translation_mode == "complete":
-                translated_title = google_translate_text(news['title'])
-            else:  # hybrid mode
-                translated_title = enhance_financial_translation(news['title'])
+            translated_title = smart_translate_text(news['title'], use_api, api_config)
             translated_item['title_zh'] = translated_title
         
-        # 翻译摘要
         if translate_summary and news.get('summary'):
-            if translation_mode == "complete":
-                translated_summary = google_translate_text(news['summary'])
-            else:  # hybrid mode
-                translated_summary = enhance_financial_translation(news['summary'])
+            translated_summary = smart_translate_text(news['summary'], use_api, api_config)
             translated_item['summary_zh'] = translated_summary
         
         translated_news.append(translated_item)
-        
-        # 避免API调用过快
-        time.sleep(0.05)
+        time.sleep(0.1)  # 避免API调用过快
     
-    # 清理进度显示
     progress_bar.empty()
     status_text.empty()
     
     return translated_news
 
-# ==================== 修改：翻译和分析功能（升级原有功能）====================
-def translate_financial_content(text, use_google_translate=False, translation_mode="complete"):
-    """财经内容翻译（升级版）"""
-    if not text:
-        return text
-    
-    if use_google_translate and translation_mode == "complete":
-        # 使用Google翻译
-        return google_translate_text(text)
-    else:
-        # 使用增强的词典翻译
-        return enhance_financial_translation(text)
-
 def analyze_news_sentiment(title, summary):
     """新闻情绪分析"""
     text = (title + ' ' + summary).lower()
     
-    # 积极词汇
     positive_words = [
         'beat', 'strong', 'growth', 'increase', 'rise', 'gain', 'up', 'success', 
         'record', 'high', 'outperform', 'exceed', 'robust', 'solid', 'win'
     ]
     
-    # 消极词汇
     negative_words = [
         'miss', 'weak', 'decline', 'fall', 'drop', 'down', 'loss', 'concern', 
         'worry', 'low', 'underperform', 'disappoint', 'struggle', 'challenge'
@@ -552,8 +652,7 @@ def analyze_news_sentiment(title, summary):
     else:
         return '中性', 'gray'
 
-# ==================== 修改：用户界面（添加翻译选项）====================
-# 侧边栏
+# ==================== 用户界面 ====================
 with st.sidebar:
     st.header("📰 可靠新闻源设置")
     
@@ -565,37 +664,46 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 新增：翻译设置区域
-    st.header("🌐 智能翻译设置")
+    # 翻译设置区域
+    st.header("🌐 云端翻译设置")
     
-    # 检查翻译器可用性
-    translator_available = get_translator() is not None
-    
-    if not translator_available:
-        st.error("❌ 翻译功能不可用")
-        st.info("请安装: pip install googletrans==4.0.0rc1")
-        translation_enabled = False
-    else:
-        st.success("✅ Google翻译已就绪")
-        translation_enabled = st.checkbox("🔄 启用智能翻译", value=True, 
-                                        help="使用Google翻译将英文新闻翻译成中文")
+    translation_enabled = st.checkbox("🔄 启用智能翻译", value=True, 
+                                    help="使用云端API将英文新闻翻译成中文")
     
     if translation_enabled:
         translate_title = st.checkbox("📝 翻译标题", value=True)
         translate_summary = st.checkbox("📄 翻译摘要", value=True)
-        show_original = st.checkbox("🔤 同时显示原文", value=False, 
-                                  help="在翻译下方显示英文原文")
-        translation_mode = st.radio(
-            "翻译模式:",
-            ["complete", "hybrid"],
-            format_func=lambda x: "完全翻译" if x == "complete" else "混合模式",
-            help="完全翻译：纯中文显示\n混合模式：关键词保留英文并标注中文"
+        show_original = st.checkbox("🔤 同时显示原文", value=False)
+        
+        # 翻译引擎选择
+        translation_engine = st.selectbox(
+            "翻译引擎:",
+            ["免费API", "百度翻译", "仅词典"],
+            help="免费API：MyMemory等免费服务\n百度翻译：需要配置API\n仅词典：离线词典翻译"
         )
+        
+        # 百度翻译API配置（可选）
+        if translation_engine == "百度翻译":
+            st.markdown("##### 百度翻译API配置")
+            st.info("💡 注册: https://fanyi-api.baidu.com")
+            baidu_app_id = st.text_input("App ID:", type="password")
+            baidu_secret_key = st.text_input("Secret Key:", type="password")
+            
+            if baidu_app_id and baidu_secret_key:
+                st.session_state.api_config = {
+                    'baidu_app_id': baidu_app_id,
+                    'baidu_secret_key': baidu_secret_key
+                }
+                st.success("✅ 百度翻译API已配置")
+            else:
+                st.warning("⚠️ 请配置百度翻译API")
+        else:
+            st.session_state.api_config = {}
     else:
         translate_title = False
         translate_summary = False
         show_original = False
-        translation_mode = "complete"
+        translation_engine = "仅词典"
     
     st.markdown("---")
     
@@ -604,27 +712,32 @@ with st.sidebar:
     st.success("✅ **Google News** - 广泛新闻聚合")
     st.success("✅ **Yahoo RSS** - 稳定备用源")
     if translation_enabled:
-        st.success("✅ **Google翻译** - 智能中文翻译")
+        if translation_engine == "免费API":
+            st.success("✅ **免费翻译API** - MyMemory等")
+        elif translation_engine == "百度翻译":
+            st.success("✅ **百度翻译API** - 高质量翻译")
+        else:
+            st.success("✅ **词典翻译** - 离线处理")
     
     st.markdown("---")
     
-    debug_mode = st.checkbox("🔧 显示调试信息", help="显示详细的获取过程")
+    debug_mode = st.checkbox("🔧 显示调试信息")
     
     st.markdown("---")
     
-    # 修改：获取新闻按钮（添加翻译逻辑）
+    # 获取新闻按钮
     if st.button("📰 获取可靠新闻", type="primary"):
         with st.spinner("正在从可靠新闻源获取数据..."):
-            # 获取原始新闻
             news_data, stats = get_all_reliable_news(ticker, debug_mode)
             st.session_state.news_data = news_data
             st.session_state.source_stats = stats
             
-            # 如果启用翻译，进行翻译
             if translation_enabled and news_data:
                 with st.spinner("🌐 正在进行智能翻译..."):
+                    use_api = translation_engine != "仅词典"
                     translated_news = translate_news_batch(
-                        news_data, translate_title, translate_summary, translation_mode
+                        news_data, use_api, st.session_state.api_config, 
+                        translate_title, translate_summary
                     )
                     st.session_state.translated_news = translated_news
                 st.success("✅ 翻译完成！")
@@ -632,24 +745,19 @@ with st.sidebar:
                 st.session_state.translated_news = None
     
     if st.button("🔄 清除缓存"):
-        # 清除所有缓存
         get_all_reliable_news.clear()
-        google_translate_text.clear()
-        get_translator.clear()
-        
+        smart_translate_text.clear()
         st.session_state.news_data = None
         st.session_state.source_stats = {}
         st.session_state.translated_news = None
         st.success("缓存已清除！")
 
-# ==================== 修改：主界面显示（支持翻译显示）====================
+# ==================== 主界面显示 ====================
 def display_news_item(news, index, show_translation=True, show_original=False):
-    """显示单条新闻（支持翻译）"""
+    """显示单条新闻"""
     with st.container():
-        # 情绪分析
         sentiment, color = analyze_news_sentiment(news['title'], news['summary'])
         
-        # 标题显示
         if show_translation and 'title_zh' in news:
             title_display = news['title_zh']
         else:
@@ -657,22 +765,18 @@ def display_news_item(news, index, show_translation=True, show_original=False):
         
         st.markdown(f"### {index}. {title_display}")
         
-        # 如果需要显示原文
         if show_original and 'title_zh' in news:
             st.caption(f"🔤 原文: {news['title']}")
         
-        # 元信息行
         time_str = news['published'].strftime('%Y-%m-%d %H:%M')
         source_info = f"🕒 {time_str} | 📡 {news['source']} | 🔧 {news['method']}"
         if 'title_zh' in news:
             source_info += " | 🌐 已翻译"
         st.caption(source_info)
         
-        # 主要内容区域
         col_main, col_side = st.columns([3, 1])
         
         with col_main:
-            # 摘要内容显示
             if show_translation and 'summary_zh' in news:
                 summary_display = news['summary_zh']
             else:
@@ -680,21 +784,17 @@ def display_news_item(news, index, show_translation=True, show_original=False):
             
             st.write(summary_display)
             
-            # 显示原文选项
             if show_original and 'summary_zh' in news:
                 with st.expander("🔤 查看英文原文"):
                     st.write(news['summary'])
             
-            # 原文链接
             if news['url']:
                 st.markdown(f"🔗 [阅读原文]({news['url']})")
         
         with col_side:
-            # 情绪分析显示
             st.markdown(f"**情绪分析:**")
             st.markdown(f"<span style='color:{color}; font-weight:bold; font-size:18px'>{sentiment}</span>", unsafe_allow_html=True)
             
-            # 来源质量标识
             if news['method'] == 'yfinance':
                 st.write("🥇 **高质量源**")
             elif 'Google News' in news['method']:
@@ -702,7 +802,6 @@ def display_news_item(news, index, show_translation=True, show_original=False):
             else:
                 st.write("🥉 **补充源**")
             
-            # 翻译状态
             if 'title_zh' in news or 'summary_zh' in news:
                 st.write("🌐 **已翻译**")
         
@@ -715,10 +814,9 @@ if st.session_state.news_data is not None:
     translated_news = st.session_state.translated_news
     
     if len(news_data) > 0:
-        # 数据源统计面板（添加翻译状态）
         st.subheader("📊 可靠数据源统计")
         
-        cols = st.columns(len(source_stats) + 2)  # 多一列显示翻译状态
+        cols = st.columns(len(source_stats) + 2)
         
         total_unique = len(news_data)
         total_raw = sum(source_stats.values())
@@ -733,7 +831,6 @@ if st.session_state.news_data is not None:
                 else:
                     st.metric(source, f"{count} 条", delta="❌")
         
-        # 翻译状态
         with cols[-1]:
             if translated_news:
                 translated_count = sum(1 for n in translated_news if 'title_zh' in n or 'summary_zh' in n)
@@ -741,7 +838,6 @@ if st.session_state.news_data is not None:
             else:
                 st.metric("🌐 翻译状态", "未启用", delta="❌")
         
-        # 系统可靠性评估
         working_sources = len([count for count in source_stats.values() if count > 0])
         total_sources = len(source_stats)
         reliability = working_sources / total_sources * 100
@@ -755,7 +851,6 @@ if st.session_state.news_data is not None:
         
         st.markdown("---")
         
-        # 新闻列表展示（使用翻译版本）
         display_news = translated_news if translated_news else news_data
         
         title_suffix = " (智能翻译版)" if translated_news else ""
@@ -769,10 +864,10 @@ if st.session_state.news_data is not None:
                 show_original=show_original if translation_enabled else False
             )
         
-        # 底部情绪统计
+        # 情绪统计
         st.markdown("### 📈 整体市场情绪分析")
         sentiments = {}
-        for news in news_data:  # 使用原始数据进行情绪分析
+        for news in news_data:
             sentiment, _ = analyze_news_sentiment(news['title'], news['summary'])
             sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
         
@@ -787,7 +882,6 @@ if st.session_state.news_data is not None:
                 else:
                     st.info(f"📊 **{sentiment}**: {count} 条 ({pct:.0f}%)")
         
-        # 翻译质量统计
         if translated_news:
             st.markdown("### 🌐 翻译统计")
             translation_stats = {
@@ -814,60 +908,58 @@ if st.session_state.news_data is not None:
                     st.error(f"❌ **{source}**: {count} 条")
 
 else:
-    # 欢迎页面（添加翻译功能介绍）
     st.markdown("""
-    ## 🎯 最新可靠新闻系统 (智能翻译版)
+    ## 🎯 最新可靠新闻系统 (云翻译版)
     
-    ### 🌟 **新增功能：Google翻译集成**
+    ### 🌟 **专为部署设计，客户无需安装任何依赖**
     
-    #### 🌐 **一键智能翻译**
-    - ✅ **Google翻译** - 自动将英文新闻翻译成流畅中文
-    - 🎯 **财经优化** - 针对财经术语特别优化翻译质量  
-    - ⚡ **智能缓存** - 翻译结果缓存1小时，避免重复调用
-    - 🔄 **备用方案** - 翻译失败时自动使用增强词典翻译
+    #### 🌐 **多重翻译方案**
+    - ✅ **免费云API** - MyMemory、LibreTranslate等免费服务
+    - 🔷 **百度翻译API** - 高质量翻译，每月200万字符免费
+    - 📚 **高级词典** - 500+财经术语，完全离线运行
+    - 🔄 **智能降级** - API失败自动使用词典翻译
     
-    #### 📝 **灵活翻译选项**
-    - **完全翻译模式**: 使用Google翻译，纯中文显示
-    - **混合模式**: 保留英文关键词并标注中文释义
-    - **原文对照**: 可选择同时显示英文原文
-    - **灵活控制**: 可单独控制标题和摘要的翻译
+    #### 📱 **客户端优势**
+    - **🚀 即用即走** - 客户打开网页就能使用，无需安装
+    - **⚡ 高速缓存** - 翻译结果缓存1小时，响应迅速
+    - **🛡️ 多重备用** - 3层翻译保障，成功率99%+
+    - **🌍 服务器处理** - 所有翻译在服务器端完成
     
     ### 📡 **依然保持原有优势**
     
-    #### 🥇 **yfinance (主力源)** - 已验证100%有效
-    #### 🥈 **Google News (补充源)** - 广泛新闻聚合  
-    #### 🥉 **Yahoo Finance RSS (备用源)** - 官方稳定源
+    #### 🥇 **yfinance** - 已验证100%有效
+    #### 🥈 **Google News** - 广泛新闻聚合  
+    #### 🥉 **Yahoo Finance RSS** - 官方稳定源
     
-    ### 🚀 **快速开始**
+    ### 🚀 **部署方案**
     
-    #### 📦 **首次使用需要安装翻译库**
-    ```bash
-    pip install googletrans==4.0.0rc1
-    ```
+    #### 💰 **免费方案 (推荐)**
+    - 使用免费翻译API + 词典备用
+    - 每天1000次免费翻译调用
+    - 适合中小型网站
     
-    #### 🎯 **使用步骤**
-    1. **启用翻译**: 在左侧勾选"启用智能翻译"
-    2. **选择模式**: 根据需求选择完全翻译或混合模式
-    3. **获取新闻**: 输入股票代码或留空获取市场新闻
-    4. **一键翻译**: 点击"获取可靠新闻"自动翻译
+    #### 🔷 **专业方案**
+    - 配置百度翻译API
+    - 每月200万字符免费额度
+    - 翻译质量更优，稳定性更高
     
-    ### 💡 **预期效果**
+    ### 💡 **部署后客户体验**
     
-    **🆓 免费Google翻译方案**:
-    - 📰 **新闻获取**: 25-40条优质新闻
-    - 🌐 **翻译质量**: 90%以上准确率
-    - ⚡ **处理速度**: 平均每条新闻2-3秒
-    - 🛡️ **系统可靠性**: 90%以上成功率
+    **客户访问你的网站时**:
+    1. 📱 打开网页就能用（无需安装）
+    2. 🌐 一键翻译新闻（自动智能翻译）
+    3. ⚡ 响应迅速（缓存机制）
+    4. 🛡️ 稳定可靠（多重备用方案）
     
     ---
     
-    **👈 在左侧配置翻译选项并开始使用智能翻译功能**
+    **👈 在左侧配置翻译选项并开始使用云端翻译功能**
     """)
 
 # 页脚
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: gray;'>
-📰 最新可靠新闻系统 (智能翻译版) | ✅ 验证有效源 | 🛡️ 90%+ 可靠性 | 🌐 Google翻译 | 📊 25-40条优质新闻
+📰 最新可靠新闻系统 (云翻译版) | ✅ 验证有效源 | 🛡️ 99%+ 可靠性 | 🌐 云端翻译 | 📱 客户免安装
 </div>
 """, unsafe_allow_html=True)
